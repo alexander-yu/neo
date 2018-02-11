@@ -15,5 +15,5 @@
 *.o
 
 # ocamlbuild
-_build/
+src/_build/
 
