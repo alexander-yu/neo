@@ -3,7 +3,10 @@
 { open Parser }
 
 let digit = ['0' - '9']
+let letter = ['a'-'z' 'A'-'Z']
 let digits = digit+
+let simple_char = digit | letter | '_' | ' '
+let escape_char = ['t' 'r' 'n' '\'' '\"' '\\']
 
 rule token = parse
   [' ' '\t' '\r' '\n'] { token lexbuf } (* Whitespace *)
@@ -42,6 +45,7 @@ rule token = parse
 | digits as lxm { LITERAL(int_of_string lxm) }
 | digits '.'  digit* ( ['e' 'E'] ['+' '-']? digits )? as lxm { FLIT(lxm) }
 | ['a'-'z' 'A'-'Z']['a'-'z' 'A'-'Z' '0'-'9' '_']*     as lxm { ID(lxm) }
+| '\"' (simple_char | '\\' escape_char)* '\"' as lxm { SLIT(lxm) }
 | eof { EOF }
 | _ as char { raise (Failure("illegal character " ^ Char.escaped char)) }
 
