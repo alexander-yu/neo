@@ -6,10 +6,10 @@ open Ast
 
 %token SEMI LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET COMMA
 %token PLUS MINUS TIMES DIVIDE ASSIGN
-%token NOT EQ NEQ LT LEQ GT GEQ AND OR
+%token NOT EQ NEQ LEQ GEQ AND OR
+%token LANGLE RANGLE
 %token RETURN IF ELSE FOR WHILE
 %token INT BOOL FLOAT VOID STRING ARRAY MATRIX
-%token LANGLE RANGLE
 %token <int> INT_LIT
 %token <bool> BOOL_LIT
 %token <string> ID FLOAT_LIT
@@ -103,9 +103,9 @@ expr:
   | expr DIVIDE expr { Binop($1, Div,   $3)   }
   | expr EQ     expr { Binop($1, Equal, $3)   }
   | expr NEQ    expr { Binop($1, Neq,   $3)   }
-  | expr LT     expr { Binop($1, Less,  $3)   }
+  | expr LANGLE expr { Binop($1, Less,  $3)   }
   | expr LEQ    expr { Binop($1, Leq,   $3)   }
-  | expr GT     expr { Binop($1, Greater, $3) }
+  | expr RANGLE expr { Binop($1, Greater, $3) }
   | expr GEQ    expr { Binop($1, Geq,   $3)   }
   | expr AND    expr { Binop($1, And,   $3)   }
   | expr OR     expr { Binop($1, Or,    $3)   }

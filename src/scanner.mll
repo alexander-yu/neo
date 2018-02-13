@@ -30,9 +30,9 @@ rule token = parse
 | '='      { ASSIGN }
 | "=="     { EQ }
 | "!="     { NEQ }
-| '<'      { LT }
+| '<'      { LANGLE }
 | "<="     { LEQ }
-| ">"      { GT }
+| ">"      { RANGLE }
 | ">="     { GEQ }
 | "&"      { AND }
 | "|"      { OR }
@@ -42,9 +42,13 @@ rule token = parse
 | "for"    { FOR }
 | "while"  { WHILE }
 | "return" { RETURN }
-| types as t { typ t }
-| "array<" { ARRAY; LANGLE; container 1 lexbuf }
-| "matrix<" { MATRIX; LANGLE; container 1 lexbuf }
+| "int"    { INT }
+| "bool"   { BOOL }
+| "float"  { FLOAT }
+| "string" { STRING }
+| "void"   { VOID }
+| "array"  { ARRAY }
+| "matrix" { MATRIX }
 | "true"   { BOOL_LIT(true)  }
 | "false"  { BOOL_LIT(false) }
 | digits as lxm { INT_LIT(int_of_string lxm) }
@@ -54,22 +58,6 @@ rule token = parse
 | eof { EOF }
 | _ as ch { fail ch }
 
-and typ = parse
-  "int"    { INT; token lexbuf }
-| "bool"   { BOOL; token lexbuf }
-| "float"  { FLOAT; token lexbuf }
-| "string" { STRING; token lexbuf }
-| "void"   { VOID; token lexbuf }
-| "array"  { ARRAY; token lexbuf }
-| "matrix" { MATRIX; token lexbuf }
-| _ as ch  { fail ch }
-
 and comment = parse
   "*/" { token lexbuf }
 | _    { comment lexbuf }
-
-and container n = parse
-  "<" { LANGLE; container (n + 1) lexbuf }
-| ">" { RANGLE; if n > 0 then container (n - 1) lexbuf else token lexbuf }
-| types as t { typ t; container n lexbuf }
-| _ as ch { fail ch }
