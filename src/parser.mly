@@ -4,13 +4,16 @@
 open Ast
 %}
 
-%token SEMI LPAREN RPAREN LBRACE RBRACE COMMA PLUS MINUS TIMES DIVIDE ASSIGN
+%token SEMI LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET COMMA
+%token PLUS MINUS TIMES DIVIDE ASSIGN
 %token NOT EQ NEQ LT LEQ GT GEQ AND OR
-%token RETURN IF ELSE FOR WHILE INT BOOL FLOAT VOID STRING
-%token <int> LITERAL
-%token <bool> BLIT
-%token <string> ID FLIT
-%token <string> SLIT
+%token RETURN IF ELSE FOR WHILE
+%token INT BOOL FLOAT VOID STRING ARRAY MATRIX
+%token LANGLE RANGLE
+%token <int> INT_LIT
+%token <bool> BOOL_LIT
+%token <string> ID FLOAT_LIT
+%token <string> STRING_LIT
 %token EOF
 
 %start program
@@ -55,11 +58,13 @@ formal_list:
   | formal_list COMMA typ ID { ($3,$4) :: $1 }
 
 typ:
-    INT    { Int    }
-  | BOOL   { Bool   }
-  | FLOAT  { Float  }
-  | STRING { String }
-  | VOID   { Void   }
+    INT                      { Int    }
+  | BOOL                     { Bool   }
+  | FLOAT                    { Float  }
+  | STRING                   { String }
+  | VOID                     { Void   }
+  | ARRAY LANGLE typ RANGLE  { Array($3) }
+  | MATRIX LANGLE typ RANGLE { Matrix($3) }
 
 vdecl_list:
     /* nothing */    { [] }
@@ -87,10 +92,10 @@ expr_opt:
   | expr          { $1 }
 
 expr:
-    LITERAL          { Literal($1)            }
-  | FLIT	     { Fliteral($1)           }
-  | BLIT             { BoolLit($1)            }
-  | SLIT             { StringLit($1)          }
+    INT_LIT          { Int_Lit($1)            }
+  | FLOAT_LIT	       { Float_Lit($1)          }
+  | BOOL_LIT         { Bool_Lit($1)           }
+  | STRING_LIT       { String_Lit($1)         }
   | ID               { Id($1)                 }
   | expr PLUS   expr { Binop($1, Add,   $3)   }
   | expr MINUS  expr { Binop($1, Sub,   $3)   }
