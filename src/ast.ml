@@ -6,7 +6,7 @@ type op = Add | Sub | Mult | Div | Equal | Neq | Less | Leq | Greater | Geq |
 type uop = Neg | Not
 
 type typ = Int | Bool | Float | String | Void |
-           Array of typ * int | Matrix of typ * int * int
+           Array of typ | Matrix of typ
 
 type bind = typ * string
 
@@ -107,9 +107,8 @@ let rec string_of_typ = function
   | Float -> "float"
   | String -> "string"
   | Void -> "void"
-  | Array(t, n) -> "array<" ^ string_of_typ t ^ ">[" ^ string_of_int n ^ "]"
-  | Matrix(t, r, c) -> "matrix<"  ^ string_of_typ t ^ ">[" ^
-      string_of_int r ^ ", " ^ string_of_int c ^ "]"
+  | Array(t) -> "array<" ^ string_of_typ t ^ ">"
+  | Matrix(t) -> "matrix<"  ^ string_of_typ t ^ ">"
 
 let string_of_vdecl (t, id) = string_of_typ t ^ " " ^ id ^ ";\n"
 

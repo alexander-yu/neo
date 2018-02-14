@@ -58,14 +58,13 @@ formal_list:
   | formal_list COMMA typ ID { ($3, $4) :: $1 }
 
 typ:
-    INT                                               { Int }
-  | BOOL                                              { Bool }
-  | FLOAT                                             { Float }
-  | STRING                                            { String }
-  | VOID                                              { Void  }
-  | ARRAY LANGLE typ RANGLE LBRACKET INT_LIT RBRACKET { Array($3, $6) }
-  | MATRIX LANGLE typ RANGLE LBRACKET INT_LIT RBRACKET LBRACKET INT_LIT RBRACKET
-                                                      { Matrix($3, $6, $9) }
+    INT                      { Int }
+  | BOOL                     { Bool }
+  | FLOAT                    { Float }
+  | STRING                   { String }
+  | VOID                     { Void  }
+  | ARRAY LANGLE typ RANGLE  { Array($3) }
+  | MATRIX LANGLE typ RANGLE { Matrix($3) }
 
 vdecl_list:
     /* nothing */    { [] }
