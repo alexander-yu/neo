@@ -5,7 +5,8 @@ type op = Add | Sub | Mult | Div | Equal | Neq | Less | Leq | Greater | Geq |
 
 type uop = Neg | Not
 
-type typ = Int | Bool | Float | String | Void | Array of typ | Matrix of typ
+type typ = Int | Bool | Float | String | Void |
+           Array of typ | Matrix of typ
 
 type bind = typ * string
 
@@ -15,8 +16,8 @@ type expr =
   | Float_Lit of string
   | Bool_Lit of bool
   | String_Lit of string
-  | Array_Lit of typ * expr list
-  | Matrix_Lit of typ * int * int * expr list
+  | Array_Lit of expr list
+  | Matrix_Lit of expr list
   | Binop of expr * op * expr
   | Unop of uop * expr
   | Assign of string * expr
@@ -67,8 +68,8 @@ let rec string_of_expr = function
   | Bool_Lit(true) -> "true"
   | Bool_Lit(false) -> "false"
   | String_Lit(l) -> l
-  | Array_Lit(t, n, l) -> "[" ^ string_of_exprs l ^ "]"
-  | Matrix_Lit(t, n1, n2, l) -> "[" ^ string_of_exprs l ^ "]"
+  | Array_Lit(l) -> "{" ^ string_of_exprs l ^ "}"
+  | Matrix_Lit(l) -> "[" ^ string_of_rows l ^ "]"
   | Id(s) -> s
   | Binop(e1, o, e2) ->
       string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
@@ -80,6 +81,12 @@ let rec string_of_expr = function
 
 and string_of_exprs exprs =
   String.concat ", " (List.map string_of_expr exprs)
+
+and string_of_row row =
+  "[" ^ string_of_exprs ^ "]"
+
+and string_of_rows rows =
+  String.concat ", " (List.map string_of_row rows)
 
 let rec string_of_stmt = function
     Block(stmts) ->

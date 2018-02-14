@@ -10,7 +10,6 @@ let letter = ['a'-'z' 'A'-'Z']
 let digits = digit+
 let simple_char = [' '-'!' '#'-'&' '('-'[' ']'-'~']
 let escape_char = ['t' 'r' 'n' '\'' '\"' '\\']
-let types = "int" | "bool" | "float" | "string" | "void" | "array" | "matrix"
 
 rule token = parse
   [' ' '\t' '\r' '\n'] { token lexbuf } (* Whitespace *)
@@ -34,8 +33,8 @@ rule token = parse
 | "<="     { LEQ }
 | ">"      { RANGLE }
 | ">="     { GEQ }
-| "&"      { AND }
-| "|"      { OR }
+| "&&"      { AND }
+| "||"      { OR }
 | "!"      { NOT }
 | "if"     { IF }
 | "else"   { ELSE }
