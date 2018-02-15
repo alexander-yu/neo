@@ -2,7 +2,7 @@
 
 {
   open Parser
-  let fail ch = raise (Failure("illegal character " ^ Char.escaped char))
+  let fail ch = raise (Failure("illegal character " ^ Char.escaped ch))
 }
 
 let digit = ['0' - '9']
@@ -20,6 +20,8 @@ rule token = parse
 | '}'      { RBRACE }
 | '['      { LBRACKET }
 | ']'      { RBRACKET }
+| "{|"     { LARRAY }
+| "|}"     { RARRAY }
 | ';'      { SEMI }
 | ','      { COMMA }
 | '+'      { PLUS }
@@ -33,8 +35,8 @@ rule token = parse
 | "<="     { LEQ }
 | ">"      { RANGLE }
 | ">="     { GEQ }
-| "&&"      { AND }
-| "||"      { OR }
+| "&&"     { AND }
+| "||"     { OR }
 | "!"      { NOT }
 | "if"     { IF }
 | "else"   { ELSE }

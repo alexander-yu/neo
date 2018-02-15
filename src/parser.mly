@@ -4,7 +4,7 @@
 open Ast
 %}
 
-%token SEMI LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET COMMA
+%token SEMI LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET LARRAY RARRAY COMMA
 %token PLUS MINUS TIMES DIVIDE ASSIGN
 %token NOT EQ NEQ LEQ GEQ AND OR
 %token LANGLE RANGLE
@@ -22,6 +22,7 @@ open Ast
 %nonassoc NOELSE
 %nonassoc ELSE
 %right ASSIGN
+%nonassoc LANGLE RANGLE
 %left OR
 %left AND
 %left EQ NEQ
@@ -42,12 +43,12 @@ decls:
  | decls fdecl   { (fst $1, ($2 :: snd $1)) }
 
 fdecl:
-   typ ID LPAREN formals_opt RPAREN LBRACE vdecl_list stmt_list RBRACE
+   typ ID LPAREN formals_opt RPAREN LBRACE vdecl_list stmts_opt RBRACE
      { { typ = $1;
 	 fname = $2;
 	 formals = $4;
 	 locals = List.rev $7;
-	 body = List.rev $8 } }
+	 body = $8 } }
 
 formals_opt:
     /* nothing */ { [] }
@@ -73,14 +74,18 @@ vdecl_list:
 vdecl:
    typ ID SEMI { ($1, $2) }
 
-stmt_list:
+stmts_opt:
     /* nothing */  { [] }
+  | stmt_list { List.rev $1 }
+
+stmt_list:
+    stmt      { [$1] }
   | stmt_list stmt { $2 :: $1 }
 
 stmt:
     expr SEMI                               { Expr $1 }
   | RETURN expr_opt SEMI                    { Return $2 }
-  | LBRACE stmt_list RBRACE                 { Block(List.rev $2) }
+  | LBRACE stmts_opt RBRACE                 { Block($2) }
   | IF LPAREN expr RPAREN stmt %prec NOELSE { If($3, $5, Block([])) }
   | IF LPAREN expr RPAREN stmt ELSE stmt    { If($3, $5, $7) }
   | FOR LPAREN expr_opt SEMI expr SEMI expr_opt RPAREN stmt
@@ -97,8 +102,8 @@ expr:
   | BOOL_LIT                   { Bool_Lit($1) }
   | STRING_LIT                 { String_Lit($1) }
   | ID                         { Id($1) }
-  | LBRACE args_opt RBRACE     { Array_Lit($2) }
-  | LBRACKET rows_opt RBRACKET { Matrix_Lit($2) }
+  | LARRAY args_opt RARRAY     { Array_Lit(Array.of_list $2) }
+  | LBRACKET rows_opt RBRACKET { Matrix_Lit(Array.of_list $2) }
   | expr PLUS   expr           { Binop($1, Add, $3) }
   | expr MINUS  expr           { Binop($1, Sub, $3) }
   | expr TIMES  expr           { Binop($1, Mult, $3) }
@@ -122,8 +127,8 @@ rows_opt:
   | rows_list     { List.rev $1 }
 
 rows_list:
-    LBRACKET args_opt RBRACKET                 { [$2] }
-  | rows_list COMMA LBRACKET args_opt RBRACKET { $4 :: $1 }
+    LBRACKET args_opt RBRACKET                 { [Array.of_list $2] }
+  | rows_list COMMA LBRACKET args_opt RBRACKET { (Array.of_list $4) :: $1 }
 
 args_opt:
     /* nothing */ { [] }

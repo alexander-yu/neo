@@ -16,8 +16,8 @@ type expr =
   | Float_Lit of string
   | Bool_Lit of bool
   | String_Lit of string
-  | Array_Lit of expr list
-  | Matrix_Lit of expr list
+  | Array_Lit of expr array
+  | Matrix_Lit of expr array array
   | Binop of expr * op * expr
   | Unop of uop * expr
   | Assign of string * expr
@@ -68,8 +68,8 @@ let rec string_of_expr = function
   | Bool_Lit(true) -> "true"
   | Bool_Lit(false) -> "false"
   | String_Lit(l) -> l
-  | Array_Lit(l) -> "{" ^ string_of_exprs l ^ "}"
-  | Matrix_Lit(l) -> "[" ^ string_of_rows l ^ "]"
+  | Array_Lit(l) -> string_of_array l
+  | Matrix_Lit(l) -> string_of_matrix l
   | Id(s) -> s
   | Binop(e1, o, e2) ->
       string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
@@ -79,14 +79,17 @@ let rec string_of_expr = function
       f ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
   | Noexpr -> ""
 
+and string_of_array arr =
+  "{|" ^ String.concat ", " (Array.to_list (Array.map string_of_expr arr)) ^ "|}"
+
 and string_of_exprs exprs =
   String.concat ", " (List.map string_of_expr exprs)
 
 and string_of_row row =
-  "[" ^ string_of_exprs ^ "]"
+  "[" ^ String.concat ", " (Array.to_list (Array.map string_of_expr row)) ^ "]"
 
-and string_of_rows rows =
-  String.concat ", " (List.map string_of_row rows)
+and string_of_matrix matrix =
+  "[" ^ String.concat ", " (Array.to_list (Array.map string_of_row matrix)) ^ "]"
 
 let rec string_of_stmt = function
     Block(stmts) ->
