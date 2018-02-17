@@ -1,0 +1,8 @@
+array<matrix<float>> a;
+
+int foo() {
+    array<matrix<float>> b;
+    a = {| [[1., 2.], [3., 4.]] |};
+    b = {| [[1., 0.], [0., 1.]] |};
+    return a < b;
+}

@@ -1,0 +1,8 @@
+matrix<int> a;
+
+int foo() {
+    matrix<int> b;
+    a = [[1, 2, 3], [4, 5, 6]];
+    b = [[4, 5, 6], [1, 2, 3]];
+    print(a + b);
+}
