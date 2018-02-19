@@ -7,6 +7,12 @@
 *.out
 *.swp
 
+# Neo
+*.native
+parser.ml
+parser.mli
+scanner.ml
+
 # OCaml
 *.cmi
 *.cmo
@@ -15,5 +21,4 @@
 *.o
 
 # ocamlbuild
-src/_build/
-
+*_build/
