@@ -4,16 +4,33 @@
 open Ast
 %}
 
+/* Brackets and punctuation */
 %token SEMI LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET LARRAY RARRAY COMMA
-%token PLUS MINUS TIMES DIVIDE ASSIGN
-%token NOT EQ NEQ LEQ GEQ AND OR
-%token LANGLE RANGLE
+
+/* Binary ops */
+%token PLUS MINUS TIMES DIVIDE
+
+/* Assignment ops */
+%token ASSIGN
+
+/* Relational ops */
+%token EQ NEQ LEQ GEQ LANGLE RANGLE
+
+/* Logical ops */
+%token NOT AND OR
+
+/* Control flow */
 %token RETURN IF ELSE FOR WHILE
+
+/* Types */
 %token INT BOOL FLOAT VOID STRING ARRAY MATRIX
+
+/* Literals */
 %token <int> INT_LIT
 %token <bool> BOOL_LIT
-%token <string> ID FLOAT_LIT
-%token <string> STRING_LIT
+%token <string> ID FLOAT_LIT STRING_LIT
+
+/* Misc */
 %token EOF
 
 %start program
