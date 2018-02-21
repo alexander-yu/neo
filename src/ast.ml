@@ -1,7 +1,7 @@
 (* Abstract Syntax Tree and functions for printing it *)
 
 type op = Add | Sub | Mult | Div | Equal | Neq | Less | Leq | Greater | Geq |
-          And | Or
+          And | Or | MatMult | Mod | Exp | Noop
 
 type uop = Neg | Not
 
@@ -9,6 +9,10 @@ type typ = Int | Bool | Float | String | Void |
            Array of typ | Matrix of typ
 
 type bind = typ * string
+
+type decl_kw = Var | Create
+
+type decl = decl_kw * typ * string
 
 type expr =
     Id of string
@@ -20,8 +24,9 @@ type expr =
   | Matrix_Lit of expr array array
   | Binop of expr * op * expr
   | Unop of uop * expr
-  | Assign of string * expr
+  | Assign of string * op * expr
   | Call of string * expr list
+  | One
   | Noexpr
 
 type stmt =
@@ -36,11 +41,11 @@ type func_decl = {
     typ : typ;
     fname : string;
     formals : bind list;
-    locals : bind list;
+    locals : decl list;
     body : stmt list;
   }
 
-type program = bind list * func_decl list
+type program = decl list * func_decl list
 
 (* Pretty-printing functions *)
 
@@ -49,6 +54,9 @@ let string_of_op = function
   | Sub -> "-"
   | Mult -> "*"
   | Div -> "/"
+  | MatMult -> "@"
+  | Mod -> "%"
+  | Exp -> "^"
   | Equal -> "=="
   | Neq -> "!="
   | Less -> "<"
@@ -57,26 +65,32 @@ let string_of_op = function
   | Geq -> ">="
   | And -> "&"
   | Or -> "|"
+  | Noop -> ""
 
 let string_of_uop = function
     Neg -> "-"
   | Not -> "!"
+
+let string_of_decl_kw = function
+    Var -> "var"
+  | Create -> "create"
 
 let rec string_of_expr = function
     Int_Lit(l) -> string_of_int l
   | Float_Lit(l) -> l
   | Bool_Lit(true) -> "true"
   | Bool_Lit(false) -> "false"
-  | String_Lit(l) -> l
+  | String_Lit(l) -> "\"" ^ l ^ "\""
   | Array_Lit(l) -> string_of_array l
   | Matrix_Lit(l) -> string_of_matrix l
   | Id(s) -> s
   | Binop(e1, o, e2) ->
       string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
   | Unop(o, e) -> string_of_uop o ^ string_of_expr e
-  | Assign(v, e) -> v ^ " = " ^ string_of_expr e
+  | Assign(v, o, e) -> v ^ " " ^ string_of_op o ^ "= " ^ string_of_expr e
   | Call(f, el) ->
       f ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
+  | One -> "[1]"
   | Noexpr -> ""
 
 and string_of_array arr =
@@ -113,7 +127,8 @@ let rec string_of_typ = function
   | Array(t) -> "array<" ^ string_of_typ t ^ ">"
   | Matrix(t) -> "matrix<"  ^ string_of_typ t ^ ">"
 
-let string_of_vdecl (t, id) = string_of_typ t ^ " " ^ id ^ ";\n"
+let string_of_vdecl (kw, t, id) =
+  string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
 
 let string_of_fdecl fdecl =
   string_of_typ fdecl.typ ^ " " ^
