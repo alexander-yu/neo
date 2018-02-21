@@ -1,0 +1,17 @@
+var int a;
+var int b;
+
+
+void foo() {
+    a = 1;
+    b = 2;
+
+    a++;
+    a += 1;
+    a -= 1;
+    a + b++;
+    a ^= b;
+    if (a == 4) {
+        print("Mommy");
+    }
+}

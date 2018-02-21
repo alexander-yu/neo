@@ -92,8 +92,8 @@ vdecl_list:
   | vdecl_list vdecl { $2 :: $1 }
 
 vdecl:
-    VAR typ ID SEMI { ($2, $3) }
-  | CREATE typ ID SEMI { ($2, $3) }
+    VAR typ ID SEMI { (Var, $2, $3) }
+  | CREATE typ ID SEMI { (Create, $2, $3) }
 
 stmts_opt:
     /* nothing */  { [] }
