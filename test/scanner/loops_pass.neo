@@ -1,0 +1,19 @@
+void foo() {
+
+    var int a;
+
+    print("Blast off in ");
+    for(a=3;a>0;a--) {
+
+      print(a);
+      print("... ");
+
+    }
+
+    print("BLAST OFF");
+
+    while(a<10) {
+      a++;
+    }
+
+}

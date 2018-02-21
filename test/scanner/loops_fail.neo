@@ -1,0 +1,9 @@
+void foo() {
+
+    var int a;
+
+    for(a=0; ;a++) {
+      print("missing something?")
+    }
+
+}
