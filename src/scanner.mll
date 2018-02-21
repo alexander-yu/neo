@@ -34,9 +34,21 @@ rule token = parse
 | '-'      { MINUS }
 | '*'      { TIMES }
 | '/'      { DIVIDE }
+| '@'      { MATTIMES }
+| '^'      { EXP }
+| '%'      { MOD }
 
 (* Assignment ops *)
 | '='      { ASSIGN }
+| "+="     { PLUSASSIGN }
+| "-="     { MINUSASSIGN }
+| "*="     { TIMESASSIGN }
+| "/="     { DIVIDEASSIGN }
+| "@="     { MATTIMESASSIGN }
+| "^="     { EXPASSIGN }
+| "%="     { MODASSIGN }
+| "++"     { INC }
+| "--"     { DEC }
 
 (* Relational ops *)
 | "=="     { EQ }

@@ -1,7 +1,7 @@
 (* Abstract Syntax Tree and functions for printing it *)
 
 type op = Add | Sub | Mult | Div | Equal | Neq | Less | Leq | Greater | Geq |
-          And | Or
+          And | Or | MatMult | Mod | Exp | Noop
 
 type uop = Neg | Not
 
@@ -20,8 +20,9 @@ type expr =
   | Matrix_Lit of expr array array
   | Binop of expr * op * expr
   | Unop of uop * expr
-  | Assign of string * expr
+  | Assign of string * op * expr
   | Call of string * expr list
+  | One
   | Noexpr
 
 type stmt =
@@ -49,6 +50,9 @@ let string_of_op = function
   | Sub -> "-"
   | Mult -> "*"
   | Div -> "/"
+  | MatMult -> "@"
+  | Mod -> "%"
+  | Exp -> "^"
   | Equal -> "=="
   | Neq -> "!="
   | Less -> "<"
@@ -57,6 +61,7 @@ let string_of_op = function
   | Geq -> ">="
   | And -> "&"
   | Or -> "|"
+  | Noop -> ""
 
 let string_of_uop = function
     Neg -> "-"
@@ -74,9 +79,10 @@ let rec string_of_expr = function
   | Binop(e1, o, e2) ->
       string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
   | Unop(o, e) -> string_of_uop o ^ string_of_expr e
-  | Assign(v, e) -> v ^ " = " ^ string_of_expr e
+  | Assign(v, o, e) -> v ^ " " ^ string_of_op o ^ "= " ^ string_of_expr e
   | Call(f, el) ->
       f ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
+  | One -> "[1]"
   | Noexpr -> ""
 
 and string_of_array arr =
