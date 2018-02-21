@@ -23,9 +23,10 @@ color_echo() {
 }
 
 test_pass() {
-    test_status=$1
+    test_path=$1
+    test_status=$2
 
-    if [[ "$1" == *_fail.neo ]] ; then
+    if [[ $test_path == *_fail.neo ]] ; then
         [ $test_status -gt 0 ] ; echo $?
     else
         [ $test_status -eq 0 ] ; echo $?
@@ -60,9 +61,9 @@ test_scanner() {
             ./toplevel.native $file >> $program_output 2>&1
 
             status=$?
-            pass=$(test_pass $status)
+            pass=$(test_pass $file $status)
 
-            if [ $pass ]; then
+            if [ $pass -eq 0 ]; then
                 color_echo $PASS_C "PASS: $file"
                 ((passed++))
             else
