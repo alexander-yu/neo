@@ -70,6 +70,10 @@ rule token = parse
 | "while"  { WHILE }
 | "return" { RETURN }
 
+(* Declaration *)
+| "var"    { VAR }
+| "create" { CREATE }
+
 (* Types *)
 | "int"    { INT }
 | "bool"   { BOOL }

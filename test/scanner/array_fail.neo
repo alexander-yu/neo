@@ -1,1 +1,1 @@
-array<matrix<>> a;
+create array<matrix<>> a;

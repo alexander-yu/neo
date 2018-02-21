@@ -22,6 +22,9 @@ open Ast
 /* Control flow */
 %token RETURN IF ELSE FOR WHILE
 
+/* Declaration */
+%token VAR CREATE
+
 /* Types */
 %token INT BOOL FLOAT VOID STRING ARRAY MATRIX
 
@@ -89,7 +92,8 @@ vdecl_list:
   | vdecl_list vdecl { $2 :: $1 }
 
 vdecl:
-   typ ID SEMI { ($1, $2) }
+    VAR typ ID SEMI { ($2, $3) }
+  | CREATE typ ID SEMI { ($2, $3) }
 
 stmts_opt:
     /* nothing */  { [] }
