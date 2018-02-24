@@ -84,8 +84,8 @@ rule token = parse
 | "matrix" { MATRIX }
 
 (* Literals *)
-| "true"   { BOOL_LIT(true)  }
-| "false"  { BOOL_LIT(false) }
+| "True"   { BOOL_LIT(true)  }
+| "False"  { BOOL_LIT(false) }
 | digits as lxm { INT_LIT(int_of_string lxm) }
 | digits '.'  digit* ( ['e' 'E'] ['+' '-']? digits )? as lxm { FLOAT_LIT(lxm) }
 | letter (letter | digit | '_')* as lxm { ID(lxm) }
