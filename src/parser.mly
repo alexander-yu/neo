@@ -5,7 +5,7 @@ open Ast
 %}
 
 /* Brackets and punctuation */
-%token SEMI LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET LARRAY RARRAY COMMA
+%token SEMI LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET LARRAY RARRAY COMMA COLON
 
 /* Binary ops */
 %token PLUS MINUS TIMES DIVIDE MATTIMES MOD EXP
@@ -26,7 +26,7 @@ open Ast
 %token VAR CREATE
 
 /* Types */
-%token INT BOOL FLOAT VOID STRING ARRAY MATRIX
+%token INT BOOL FLOAT VOID STRING ARRAY MATRIX FUNC
 
 /* Literals */
 %token <int> INT_LIT
@@ -85,6 +85,16 @@ typ:
   | VOID                     { Void  }
   | ARRAY LANGLE typ RANGLE  { Array($3) }
   | MATRIX LANGLE typ RANGLE { Matrix($3) }
+  | FUNC LANGLE LPAREN typ_opt RPAREN COLON typ RANGLE
+                             { Func($4, $7) }
+
+typ_opt:
+    /* nothing */ { [] }
+  | typ_list      { List.rev $1 }
+
+typ_list:
+    typ                { [$1] }
+  | typ_list COMMA typ { $3 :: $1 }
 
 stmts_opt:
     /* nothing */  { [] }

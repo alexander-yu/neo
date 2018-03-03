@@ -28,6 +28,7 @@ rule token = parse
 (* Punctuation *)
 | ';'      { SEMI }
 | ','      { COMMA }
+| ':'      { COLON }
 
 (* Binary ops *)
 | '+'      { PLUS }
@@ -82,6 +83,7 @@ rule token = parse
 | "void"   { VOID }
 | "array"  { ARRAY }
 | "matrix" { MATRIX }
+| "func"   { FUNC }
 
 (* Literals *)
 | "True"   { BOOL_LIT(true)  }

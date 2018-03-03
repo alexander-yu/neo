@@ -6,7 +6,7 @@ type op = Add | Sub | Mult | Div | Equal | Neq | Less | Leq | Greater | Geq |
 type uop = Neg | Not
 
 type typ = Int | Bool | Float | String | Void |
-           Array of typ | Matrix of typ
+           Array of typ | Matrix of typ | Func of typ list * typ
 
 type bind = typ * string
 
@@ -65,8 +65,8 @@ let string_of_op = function
   | Leq -> "<="
   | Greater -> ">"
   | Geq -> ">="
-  | And -> "&"
-  | Or -> "|"
+  | And -> "&&"
+  | Or -> "||"
   | Noop -> ""
 
 let string_of_uop = function
@@ -85,6 +85,8 @@ let rec string_of_typ = function
 | Void -> "void"
 | Array(t) -> "array<" ^ string_of_typ t ^ ">"
 | Matrix(t) -> "matrix<"  ^ string_of_typ t ^ ">"
+| Func(args, ret) -> "func<(" ^ String.concat ", " (List.map string_of_typ args) ^
+    "):" ^ string_of_typ ret ^ ">"
 
 let rec string_of_expr = function
     Int_Lit(l) -> string_of_int l
