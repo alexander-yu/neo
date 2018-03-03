@@ -27,16 +27,18 @@ type expr =
   | One
   | Noexpr
 
+type decl = decl_kw * typ * string * expr
+
+type for_initializer = I_Expr of expr | I_Decl of decl
+
 type stmt =
     Block of stmt list
   | Expr of expr
   | Return of expr
   | If of expr * stmt * stmt
-  | For of expr * expr * expr * stmt
+  | For of for_initializer * expr * expr * stmt
   | While of expr * stmt
-  | Decl of decl_kw * typ * string * expr
-
-  type global = decl_kw * typ * string * expr
+  | Decl of decl
 
 type func_decl = {
     typ : typ;
@@ -45,7 +47,7 @@ type func_decl = {
     body : stmt list;
   }
 
-type program = global list * func_decl list
+type program = decl list * func_decl list
 
 (* Pretty-printing functions *)
 
@@ -114,7 +116,11 @@ and string_of_row row =
 and string_of_matrix matrix =
   "[" ^ String.concat ", " (Array.to_list (Array.map string_of_row matrix)) ^ "]"
 
-let rec string_of_stmt = function
+and string_of_for_initializer = function
+  I_Expr(expr) -> string_of_expr expr
+| I_Decl(decl) -> string_of_vdecl decl
+
+and string_of_stmt = function
     Block(stmts) ->
       "{\n" ^ String.concat "" (List.map string_of_stmt stmts) ^ "}\n"
   | Expr(expr) -> string_of_expr expr ^ ";\n";
@@ -123,24 +129,21 @@ let rec string_of_stmt = function
   | If(e, s1, s2) ->  "if (" ^ string_of_expr e ^ ")\n" ^
       string_of_stmt s1 ^ "else\n" ^ string_of_stmt s2
   | For(e1, e2, e3, s) ->
-      "for (" ^ string_of_expr e1  ^ " ; " ^ string_of_expr e2 ^ " ; " ^
+      "for (" ^ string_of_for_initializer e1  ^ " ; " ^ string_of_expr e2 ^ " ; " ^
       string_of_expr e3  ^ ") " ^ string_of_stmt s
   | While(e, s) -> "while (" ^ string_of_expr e ^ ") " ^ string_of_stmt s
-  | Decl(kw, t, id, expr) -> match expr with
-    Noexpr -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
-    | _ -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
-        string_of_expr expr ^ ";\n"
+  | Decl(decl) -> string_of_vdecl decl
 
-let string_of_global (kw, t, id, expr) = match expr with
+and string_of_vdecl (kw, t, id, expr) = match expr with
     Noexpr -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
   | _ -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
       string_of_expr expr ^ ";\n"
 
-let string_of_fdecl fdecl =
+and string_of_fdecl fdecl =
   string_of_typ fdecl.typ ^ " " ^
   fdecl.fname ^ "(" ^ String.concat ", " (List.map snd fdecl.formals) ^
   ")\n{\n" ^ String.concat "" (List.map string_of_stmt fdecl.body) ^ "}\n"
 
-let string_of_program (globals, funcs) =
-  String.concat "" (List.map string_of_global globals) ^ "\n" ^
+let string_of_program (vars, funcs) =
+  String.concat "" (List.map string_of_vdecl vars) ^ "\n" ^
   String.concat "\n" (List.map string_of_fdecl funcs)

@@ -58,15 +58,9 @@ program:
   decls EOF { $1 }
 
 decls:
-   /* nothing */ { ([], []) }
- | decls global  { (($2 :: fst $1), snd $1) }
- | decls fdecl   { (fst $1, ($2 :: snd $1)) }
-
-global:
-    VAR typ ID SEMI { (Var, $2, $3, Noexpr) }
-  | VAR typ ID ASSIGN expr SEMI { (Var, $2, $3, $5) }
-  | CREATE typ ID SEMI { (Create, $2, $3, Noexpr) }
-  | CREATE typ ID ASSIGN expr SEMI { (Create, $2, $3, $5) }
+   /* nothing */   { ([], []) }
+ | decls decl SEMI { (($2 :: fst $1), snd $1) }
+ | decls fdecl     { (fst $1, ($2 :: snd $1)) }
 
 fdecl:
    typ ID LPAREN formals_opt RPAREN LBRACE stmts_opt RBRACE
@@ -106,16 +100,20 @@ stmt:
   | LBRACE stmts_opt RBRACE                 { Block($2) }
   | IF LPAREN expr RPAREN stmt %prec NOELSE { If($3, $5, Block([])) }
   | IF LPAREN expr RPAREN stmt ELSE stmt    { If($3, $5, $7) }
-  | FOR LPAREN expr_opt SEMI expr SEMI expr_opt RPAREN stmt
+  | FOR LPAREN initializer_opt SEMI expr SEMI expr_opt RPAREN stmt
                                             { For($3, $5, $7, $9) }
   | WHILE LPAREN expr RPAREN stmt           { While($3, $5) }
-  | decl                                   { $1 }
+  | decl SEMI                               { Decl($1) }
 
 decl:
-    VAR typ ID SEMI { Decl(Var, $2, $3, Noexpr) }
-  | VAR typ ID ASSIGN expr SEMI { Decl(Var, $2, $3, $5) }
-  | CREATE typ ID SEMI { Decl(Create, $2, $3, Noexpr) }
-  | CREATE typ ID ASSIGN expr SEMI { Decl(Create, $2, $3, $5) }
+    VAR typ ID { (Var, $2, $3, Noexpr) }
+  | VAR typ ID ASSIGN expr { (Var, $2, $3, $5) }
+  | CREATE typ ID { (Create, $2, $3, Noexpr) }
+  | CREATE typ ID ASSIGN expr { (Create, $2, $3, $5) }
+
+initializer_opt:
+    expr_opt { I_Expr($1) }
+  | decl     { I_Decl($1) }
 
 expr_opt:
     /* nothing */ { Noexpr }
