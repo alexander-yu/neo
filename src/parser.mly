@@ -55,7 +55,7 @@ open Ast
 %%
 
 program:
-  decls EOF { $1 }
+  decls EOF { (List.rev (fst $1), List.rev (snd $1)) }
 
 decls:
    /* nothing */   { ([], []) }
@@ -116,10 +116,13 @@ stmt:
   | decl SEMI                               { Decl($1) }
 
 decl:
-    VAR typ ID { (Var, $2, $3, Noexpr) }
-  | VAR typ ID ASSIGN expr { (Var, $2, $3, $5) }
-  | CREATE typ ID { (Create, $2, $3, Noexpr) }
-  | CREATE typ ID ASSIGN expr { (Create, $2, $3, $5) }
+    VAR typ ID                           { (Var, $2, $3, Noexpr) }
+  | VAR typ ID ASSIGN expr               { (Var, $2, $3, $5) }
+  | CREATE typ ID                        { (Create, $2, $3, Noexpr) }
+  | CREATE typ ID ASSIGN expr            { (Create, $2, $3, $5) }
+  | CREATE typ ID LBRACKET expr RBRACKET { (Create, $2, $3, Empty_Array_Lit($5)) }
+  | CREATE typ ID LBRACKET expr RBRACKET LBRACKET expr RBRACKET
+                                         { (Create, $2, $3, Empty_Matrix_Lit($5, $8)) }
 
 initializer_opt:
     expr_opt { I_Expr($1) }

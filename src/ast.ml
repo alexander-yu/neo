@@ -19,7 +19,9 @@ type expr =
   | Bool_Lit of bool
   | String_Lit of string
   | Array_Lit of expr array
+  | Empty_Array_Lit of expr
   | Matrix_Lit of expr array array
+  | Empty_Matrix_Lit of expr * expr
   | Binop of expr * op * expr
   | Unop of uop * expr
   | Assign of string * op * expr
@@ -95,7 +97,10 @@ let rec string_of_expr = function
   | Bool_Lit(false) -> "false"
   | String_Lit(l) -> "\"" ^ l ^ "\""
   | Array_Lit(l) -> string_of_array l
+  | Empty_Array_Lit(n) -> "{|size: " ^ string_of_expr n ^ "|}"
   | Matrix_Lit(l) -> string_of_matrix l
+  | Empty_Matrix_Lit(r, c) -> "[dims: " ^ string_of_expr r ^ " x " ^
+      string_of_expr c ^ "]"
   | Id(s) -> s
   | Binop(e1, o, e2) ->
       string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
