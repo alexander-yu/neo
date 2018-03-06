@@ -22,12 +22,18 @@ type expr =
   | Empty_Array_Lit of expr
   | Matrix_Lit of expr array array
   | Empty_Matrix_Lit of expr * expr
+  | Index_Expr of index_expr
   | Binop of expr * op * expr
   | Unop of uop * expr
-  | Assign of string * op * expr
+  | Assign of expr * op * expr
   | Call of string * expr list
   | One
+  | End
   | Noexpr
+
+and index = Index of expr | Slice of expr * expr
+
+and index_expr = Sgl_Index of expr * index | Dbl_Index of expr * index * index
 
 type decl = decl_kw * typ * string * expr
 
@@ -101,15 +107,25 @@ let rec string_of_expr = function
   | Matrix_Lit(l) -> string_of_matrix l
   | Empty_Matrix_Lit(r, c) -> "[dims: " ^ string_of_expr r ^ " x " ^
       string_of_expr c ^ "]"
+  | Index_Expr(e) -> string_of_index_expr e
   | Id(s) -> s
   | Binop(e1, o, e2) ->
       string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
   | Unop(o, e) -> string_of_uop o ^ string_of_expr e
-  | Assign(v, o, e) -> v ^ " " ^ string_of_op o ^ "= " ^ string_of_expr e
+  | Assign(e1, o, e2) -> string_of_expr e1 ^ " " ^ string_of_op o ^ "= " ^ string_of_expr e2
   | Call(f, el) ->
       f ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
   | One -> "[1]"
+  | End -> "END"
   | Noexpr -> ""
+
+and string_of_index = function
+    Index(e) -> string_of_expr e
+  | Slice(e1, e2) -> string_of_expr e1 ^ ":" ^ string_of_expr e2
+
+and string_of_index_expr = function
+    Sgl_Index(e, i) -> string_of_expr e ^ "[" ^ string_of_index i ^ "]"
+  | Dbl_Index(e, i1, i2) -> string_of_expr e ^ "[" ^ string_of_index i1 ^ ", " ^ string_of_index i2 ^ "]"
 
 and string_of_array arr =
   "{|" ^ String.concat ", " (Array.to_list (Array.map string_of_expr arr)) ^ "|}"

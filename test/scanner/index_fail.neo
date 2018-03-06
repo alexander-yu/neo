@@ -1,0 +1,4 @@
+int foo() {
+    create matrix<int> m = [[1, 2]];
+    print(m[0:, ]);
+}

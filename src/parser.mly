@@ -49,8 +49,8 @@ open Ast
 %left PLUS MINUS
 %left TIMES DIVIDE MOD MATTIMES
 %right EXP
-%right NOT NEG
-%nonassoc INC DEC
+%right NOT
+%left INC DEC
 
 %%
 
@@ -97,11 +97,11 @@ typ_list:
   | typ_list COMMA typ { $3 :: $1 }
 
 stmts_opt:
-    /* nothing */  { [] }
-  | stmt_list { List.rev $1 }
+    /* nothing */ { [] }
+  | stmt_list     { List.rev $1 }
 
 stmt_list:
-    stmt      { [$1] }
+    stmt           { [$1] }
   | stmt_list stmt { $2 :: $1 }
 
 stmt:
@@ -132,7 +132,7 @@ expr_opt:
     /* nothing */ { Noexpr }
   | expr          { $1 }
 
-expr:
+primary_expr:
   /* Literals */
     INT_LIT                    { Int_Lit($1) }
   | FLOAT_LIT	                 { Float_Lit($1) }
@@ -144,42 +144,67 @@ expr:
   | LARRAY args_opt RARRAY     { Array_Lit(Array.of_list $2) }
   | LBRACKET rows_opt RBRACKET { Matrix_Lit(Array.of_list $2) }
 
-  /* Binary ops */
-  | expr PLUS   expr           { Binop($1, Add, $3) }
-  | expr MINUS  expr           { Binop($1, Sub, $3) }
-  | expr TIMES  expr           { Binop($1, Mult, $3) }
-  | expr DIVIDE expr           { Binop($1, Div, $3) }
-  | expr MATTIMES expr         { Binop($1, MatMult, $3) }
-  | expr MOD expr              { Binop($1, Mod, $3) }
-  | expr EXP expr              { Binop($1, Exp, $3) }
-  | expr EQ     expr           { Binop($1, Equal, $3) }
-  | expr NEQ    expr           { Binop($1, Neq, $3) }
-  | expr LANGLE expr           { Binop($1, Less, $3) }
-  | expr LEQ    expr           { Binop($1, Leq, $3) }
-  | expr RANGLE expr           { Binop($1, Greater, $3) }
-  | expr GEQ    expr           { Binop($1, Geq, $3) }
-  | expr AND    expr           { Binop($1, And, $3) }
-  | expr OR     expr           { Binop($1, Or, $3) }
+  /* Parentheses */
+  | LPAREN expr RPAREN         { $2 }
+
+postfix_expr:
+    primary_expr              { $1 }
+
+  /* Array/Matrix Indexing */
+  | postfix_expr LBRACKET index RBRACKET
+                             { Index_Expr(Sgl_Index($1, $3)) }
+  | postfix_expr LBRACKET index COMMA index RBRACKET
+                             { Index_Expr(Dbl_Index($1, $3, $5)) }
+
+  /* Function Call */
+  | ID LPAREN args_opt RPAREN { Call($1, $3) }
+
+prefix_expr:
+    postfix_expr       { $1 }
 
   /* Unary ops */
-  | MINUS expr %prec NEG       { Unop(Neg, $2) }
-  | NOT expr                   { Unop(Not, $2) }
+  | MINUS prefix_expr { Unop(Neg, $2) }
+  | NOT prefix_expr   { Unop(Not, $2) }
+
+expr:
+    prefix_expr              { $1 }
+
+  /* Binary ops */
+  | expr PLUS   expr         { Binop($1, Add, $3) }
+  | expr MINUS  expr         { Binop($1, Sub, $3) }
+  | expr TIMES  expr         { Binop($1, Mult, $3) }
+  | expr DIVIDE expr         { Binop($1, Div, $3) }
+  | expr MATTIMES expr       { Binop($1, MatMult, $3) }
+  | expr MOD expr            { Binop($1, Mod, $3) }
+  | expr EXP expr            { Binop($1, Exp, $3) }
+  | expr EQ     expr         { Binop($1, Equal, $3) }
+  | expr NEQ    expr         { Binop($1, Neq, $3) }
+  | expr LANGLE expr         { Binop($1, Less, $3) }
+  | expr LEQ    expr         { Binop($1, Leq, $3) }
+  | expr RANGLE expr         { Binop($1, Greater, $3) }
+  | expr GEQ    expr         { Binop($1, Geq, $3) }
+  | expr AND    expr         { Binop($1, And, $3) }
+  | expr OR     expr         { Binop($1, Or, $3) }
 
   /* Assignment ops */
-  | ID ASSIGN expr         { Assign($1, Noop, $3) }
-  | ID PLUSASSIGN expr     { Assign($1, Add, $3) }
-  | ID MINUSASSIGN expr    { Assign($1, Sub, $3) }
-  | ID TIMESASSIGN expr    { Assign($1, Mult, $3) }
-  | ID DIVIDEASSIGN expr   { Assign($1, Div, $3) }
-  | ID MATTIMESASSIGN expr { Assign($1, MatMult, $3) }
-  | ID MODASSIGN expr      { Assign($1, Mod, $3) }
-  | ID EXPASSIGN expr      { Assign($1, Exp, $3) }
-  | ID INC                 { Assign($1, Add, One) }
-  | ID DEC                 { Assign($1, Sub, One) }
+  | expr ASSIGN expr         { Assign($1, Noop, $3) }
+  | expr PLUSASSIGN expr     { Assign($1, Add, $3) }
+  | expr MINUSASSIGN expr    { Assign($1, Sub, $3) }
+  | expr TIMESASSIGN expr    { Assign($1, Mult, $3) }
+  | expr DIVIDEASSIGN expr   { Assign($1, Div, $3) }
+  | expr MATTIMESASSIGN expr { Assign($1, MatMult, $3) }
+  | expr MODASSIGN expr      { Assign($1, Mod, $3) }
+  | expr EXPASSIGN expr      { Assign($1, Exp, $3) }
+  | expr INC                 { Assign($1, Add, One) }
+  | expr DEC                 { Assign($1, Sub, One) }
+  /* Semantics: check that only IDs/index exprs can be assigned values */
 
-  /* Parentheses */
-  | ID LPAREN args_opt RPAREN  { Call($1, $3) }
-  | LPAREN expr RPAREN         { $2 }
+index:
+    expr            { Index($1) }
+  | expr COLON expr { Slice($1, $3) }
+  | COLON expr      { Slice(Int_Lit(0), $2) }
+  | expr COLON      { Slice($1, End) }
+  | COLON           { Slice(Int_Lit(0), End) }
 
 rows_opt:
     /* nothing */ { [] }

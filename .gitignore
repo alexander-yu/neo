@@ -11,6 +11,7 @@
 *.native
 parser.ml
 parser.mli
+parser.output
 scanner.ml
 
 # OCaml
