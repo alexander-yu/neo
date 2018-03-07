@@ -1,0 +1,16 @@
+void main() {
+    exception BadException;
+
+    try {
+        print("Hello World!");
+        protest BadException("Wah!");
+    } catch BadException(m) {
+        print(m);
+    }
+
+    try {
+
+    } catch BadException(m) {
+
+    }
+}

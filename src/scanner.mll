@@ -65,15 +65,19 @@ rule token = parse
 | "!"      { NOT }
 
 (* Control flow *)
-| "if"     { IF }
-| "else"   { ELSE }
-| "for"    { FOR }
-| "while"  { WHILE }
-| "return" { RETURN }
+| "if"      { IF }
+| "else"    { ELSE }
+| "for"     { FOR }
+| "while"   { WHILE }
+| "return"  { RETURN }
+| "try"     { TRY }
+| "catch"   { CATCH }
+| "protest" { PROTEST }
 
 (* Declaration *)
-| "var"    { VAR }
-| "create" { CREATE }
+| "var"       { VAR }
+| "create"    { CREATE }
+| "exception" { EXCEPTION }
 
 (* Types *)
 | "int"    { INT }

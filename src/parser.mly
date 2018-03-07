@@ -20,10 +20,10 @@ open Ast
 %token NOT AND OR
 
 /* Control flow */
-%token RETURN IF ELSE FOR WHILE
+%token RETURN IF ELSE FOR WHILE TRY CATCH PROTEST
 
 /* Declaration */
-%token VAR CREATE
+%token VAR CREATE EXCEPTION
 
 /* Types */
 %token INT BOOL FLOAT VOID STRING ARRAY MATRIX FUNC
@@ -114,6 +114,14 @@ stmt:
                                             { For($3, $5, $7, $9) }
   | WHILE LPAREN expr RPAREN stmt           { While($3, $5) }
   | decl SEMI                               { Decl($1) }
+  | TRY LBRACE stmts_opt RBRACE CATCH ID LPAREN ID RPAREN LBRACE stmts_opt RBRACE
+                                            { Try_Catch({
+                                              try_block = $3;
+                                              exc_type = $6;
+                                              exc_var = $8;
+                                              catch_block = $11;
+                                            }) }
+  | PROTEST ID LPAREN expr_opt RPAREN SEMI  { Protest($2, $4) }
 
 decl:
     VAR typ ID                           { (Var, $2, $3, Noexpr) }
@@ -123,6 +131,7 @@ decl:
   | CREATE typ ID LBRACKET expr RBRACKET { (Create, $2, $3, Empty_Array_Lit($5)) }
   | CREATE typ ID LBRACKET expr RBRACKET LBRACKET expr RBRACKET
                                          { (Create, $2, $3, Empty_Matrix_Lit($5, $8)) }
+  | EXCEPTION ID                         { (Exception, Exc, $2, Noexpr) }
 
 initializer_opt:
     expr_opt { I_Expr($1) }
