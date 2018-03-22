@@ -110,8 +110,8 @@ let rec string_of_typ = function
 let rec string_of_expr = function
     Int_Lit(l) -> string_of_int l
   | Float_Lit(l) -> l
-  | Bool_Lit(true) -> "true"
-  | Bool_Lit(false) -> "false"
+  | Bool_Lit(true) -> "True"
+  | Bool_Lit(false) -> "False"
   | String_Lit(l) -> "\"" ^ l ^ "\""
   | Array_Lit(l) -> string_of_array l
   | Empty_Array_Lit(n) -> "{|size: " ^ string_of_expr n ^ "|}"

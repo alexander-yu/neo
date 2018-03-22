@@ -8,7 +8,7 @@ NO_C='\033[0m'
 setup() {
     # We're assuming this script is being run from the project directory.
     echo "Setting up..."
-    ocamlbuild src/toplevel.native
+    ocamlbuild src/neo.native
 }
 
 clean() {
@@ -58,7 +58,7 @@ test_scanner() {
         for file in $test_pattern ; do
             echo "------$file------" >> $program_output
             echo "" >> $program_output
-            ./toplevel.native $file >> $program_output 2>&1
+            ./neo.native $file >> $program_output 2>&1
 
             status=$?
             pass=$(test_pass $file $status)

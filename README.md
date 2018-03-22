@@ -6,8 +6,8 @@ by Alex Yu, Andrés Aguayo, Ani Bezjian, Dominique Gordon, and Mohamed Abedelmal
 ## Installation
 
 - Navigate to root directory of project
-- Compile using the command `ocamlbuild src/toplevel.native`
-- Execute a program using the command `./toplevel.native file_name`
+- Compile using the command `ocamlbuild src/neo.native`
+- Execute a program using the command `./neo.native file_name`
 
 ## Testing
 
