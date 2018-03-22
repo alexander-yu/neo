@@ -1,0 +1,14 @@
+var int i = 0;
+var int j;
+
+int foo() {
+    var int i = 0;
+    var int j;
+
+    print(1 + 2);
+
+    var int k = 0;
+    var int l;
+
+    print("Hello World");
+}

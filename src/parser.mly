@@ -5,7 +5,7 @@ open Ast
 %}
 
 /* Brackets and punctuation */
-%token SEMI LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET LARRAY RARRAY COMMA
+%token SEMI LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET LARRAY RARRAY COMMA COLON
 
 /* Binary ops */
 %token PLUS MINUS TIMES DIVIDE MATTIMES MOD EXP
@@ -20,13 +20,13 @@ open Ast
 %token NOT AND OR
 
 /* Control flow */
-%token RETURN IF ELSE FOR WHILE
+%token RETURN IF ELSE FOR WHILE TRY CATCH PROTEST
 
 /* Declaration */
-%token VAR CREATE
+%token VAR CREATE EXCEPTION
 
 /* Types */
-%token INT BOOL FLOAT VOID STRING ARRAY MATRIX
+%token INT BOOL FLOAT VOID STRING ARRAY MATRIX FUNC
 
 /* Literals */
 %token <int> INT_LIT
@@ -41,7 +41,7 @@ open Ast
 
 %nonassoc NOELSE
 %nonassoc ELSE
-%right ASSIGN PLUSASSIGN MINUSASSIGN TIMESASSIGN DIVIDEASSIGN MATTIMESASSIGN EXPASSIGN MODASSIGN INC DEC
+%right ASSIGN PLUSASSIGN MINUSASSIGN TIMESASSIGN DIVIDEASSIGN MATTIMESASSIGN EXPASSIGN MODASSIGN
 %left OR
 %left AND
 %left EQ NEQ
@@ -49,26 +49,25 @@ open Ast
 %left PLUS MINUS
 %left TIMES DIVIDE MOD MATTIMES
 %right EXP
-%right NOT NEG
-
+%right NOT
+%left INC DEC
 
 %%
 
 program:
-  decls EOF { $1 }
+  decls EOF { (List.rev (fst $1), List.rev (snd $1)) }
 
 decls:
-   /* nothing */ { ([], []) }
- | decls vdecl   { (($2 :: fst $1), snd $1) }
- | decls fdecl   { (fst $1, ($2 :: snd $1)) }
+   /* nothing */   { ([], []) }
+ | decls decl SEMI { (($2 :: fst $1), snd $1) }
+ | decls fdecl     { (fst $1, ($2 :: snd $1)) }
 
 fdecl:
-   typ ID LPAREN formals_opt RPAREN LBRACE vdecl_list stmts_opt RBRACE
+   typ ID LPAREN formals_opt RPAREN LBRACE stmts_opt RBRACE
      { { typ = $1;
 	 fname = $2;
 	 formals = $4;
-	 locals = List.rev $7;
-	 body = $8 } }
+	 body = $7 } }
 
 formals_opt:
     /* nothing */ { [] }
@@ -86,21 +85,23 @@ typ:
   | VOID                     { Void  }
   | ARRAY LANGLE typ RANGLE  { Array($3) }
   | MATRIX LANGLE typ RANGLE { Matrix($3) }
+  | FUNC LANGLE LPAREN typ_opt RPAREN COLON typ RANGLE
+                             { Func($4, $7) }
 
-vdecl_list:
-    /* nothing */    { [] }
-  | vdecl_list vdecl { $2 :: $1 }
+typ_opt:
+    /* nothing */ { [] }
+  | typ_list      { List.rev $1 }
 
-vdecl:
-    VAR typ ID SEMI { (Var, $2, $3) }
-  | CREATE typ ID SEMI { (Create, $2, $3) }
+typ_list:
+    typ                { [$1] }
+  | typ_list COMMA typ { $3 :: $1 }
 
 stmts_opt:
-    /* nothing */  { [] }
-  | stmt_list { List.rev $1 }
+    /* nothing */ { [] }
+  | stmt_list     { List.rev $1 }
 
 stmt_list:
-    stmt      { [$1] }
+    stmt           { [$1] }
   | stmt_list stmt { $2 :: $1 }
 
 stmt:
@@ -109,15 +110,38 @@ stmt:
   | LBRACE stmts_opt RBRACE                 { Block($2) }
   | IF LPAREN expr RPAREN stmt %prec NOELSE { If($3, $5, Block([])) }
   | IF LPAREN expr RPAREN stmt ELSE stmt    { If($3, $5, $7) }
-  | FOR LPAREN expr_opt SEMI expr SEMI expr_opt RPAREN stmt
+  | FOR LPAREN initializer_opt SEMI expr SEMI expr_opt RPAREN stmt
                                             { For($3, $5, $7, $9) }
   | WHILE LPAREN expr RPAREN stmt           { While($3, $5) }
+  | decl SEMI                               { Decl($1) }
+  | TRY LBRACE stmts_opt RBRACE CATCH ID LPAREN ID RPAREN LBRACE stmts_opt RBRACE
+                                            { Try_Catch({
+                                              try_block = $3;
+                                              exc_type = $6;
+                                              exc_var = $8;
+                                              catch_block = $11;
+                                            }) }
+  | PROTEST ID LPAREN expr_opt RPAREN SEMI  { Protest($2, $4) }
+
+decl:
+    VAR typ ID                           { (Var, $2, $3, Noexpr) }
+  | VAR typ ID ASSIGN expr               { (Var, $2, $3, $5) }
+  | CREATE typ ID                        { (Create, $2, $3, Noexpr) }
+  | CREATE typ ID ASSIGN expr            { (Create, $2, $3, $5) }
+  | CREATE typ ID LBRACKET expr RBRACKET { (Create, $2, $3, Empty_Array_Lit($5)) }
+  | CREATE typ ID LBRACKET expr RBRACKET LBRACKET expr RBRACKET
+                                         { (Create, $2, $3, Empty_Matrix_Lit($5, $8)) }
+  | EXCEPTION ID                         { (Exception, Exc, $2, Noexpr) }
+
+initializer_opt:
+    expr_opt { I_Expr($1) }
+  | decl     { I_Decl($1) }
 
 expr_opt:
     /* nothing */ { Noexpr }
   | expr          { $1 }
 
-expr:
+primary_expr:
   /* Literals */
     INT_LIT                    { Int_Lit($1) }
   | FLOAT_LIT	                 { Float_Lit($1) }
@@ -129,42 +153,67 @@ expr:
   | LARRAY args_opt RARRAY     { Array_Lit(Array.of_list $2) }
   | LBRACKET rows_opt RBRACKET { Matrix_Lit(Array.of_list $2) }
 
-  /* Binary ops */
-  | expr PLUS   expr           { Binop($1, Add, $3) }
-  | expr MINUS  expr           { Binop($1, Sub, $3) }
-  | expr TIMES  expr           { Binop($1, Mult, $3) }
-  | expr DIVIDE expr           { Binop($1, Div, $3) }
-  | expr MATTIMES expr         { Binop($1, MatMult, $3) }
-  | expr MOD expr              { Binop($1, Mod, $3) }
-  | expr EXP expr              { Binop($1, Exp, $3) }
-  | expr EQ     expr           { Binop($1, Equal, $3) }
-  | expr NEQ    expr           { Binop($1, Neq, $3) }
-  | expr LANGLE expr           { Binop($1, Less, $3) }
-  | expr LEQ    expr           { Binop($1, Leq, $3) }
-  | expr RANGLE expr           { Binop($1, Greater, $3) }
-  | expr GEQ    expr           { Binop($1, Geq, $3) }
-  | expr AND    expr           { Binop($1, And, $3) }
-  | expr OR     expr           { Binop($1, Or, $3) }
+  /* Parentheses */
+  | LPAREN expr RPAREN         { $2 }
+
+postfix_expr:
+    primary_expr              { $1 }
+
+  /* Array/Matrix Indexing */
+  | postfix_expr LBRACKET index RBRACKET
+                             { Index_Expr(Sgl_Index($1, $3)) }
+  | postfix_expr LBRACKET index COMMA index RBRACKET
+                             { Index_Expr(Dbl_Index($1, $3, $5)) }
+
+  /* Function Call */
+  | ID LPAREN args_opt RPAREN { Call($1, $3) }
+
+prefix_expr:
+    postfix_expr       { $1 }
 
   /* Unary ops */
-  | MINUS expr %prec NEG       { Unop(Neg, $2) }
-  | NOT expr                   { Unop(Not, $2) }
+  | MINUS prefix_expr { Unop(Neg, $2) }
+  | NOT prefix_expr   { Unop(Not, $2) }
+
+expr:
+    prefix_expr              { $1 }
+
+  /* Binary ops */
+  | expr PLUS   expr         { Binop($1, Add, $3) }
+  | expr MINUS  expr         { Binop($1, Sub, $3) }
+  | expr TIMES  expr         { Binop($1, Mult, $3) }
+  | expr DIVIDE expr         { Binop($1, Div, $3) }
+  | expr MATTIMES expr       { Binop($1, MatMult, $3) }
+  | expr MOD expr            { Binop($1, Mod, $3) }
+  | expr EXP expr            { Binop($1, Exp, $3) }
+  | expr EQ     expr         { Binop($1, Equal, $3) }
+  | expr NEQ    expr         { Binop($1, Neq, $3) }
+  | expr LANGLE expr         { Binop($1, Less, $3) }
+  | expr LEQ    expr         { Binop($1, Leq, $3) }
+  | expr RANGLE expr         { Binop($1, Greater, $3) }
+  | expr GEQ    expr         { Binop($1, Geq, $3) }
+  | expr AND    expr         { Binop($1, And, $3) }
+  | expr OR     expr         { Binop($1, Or, $3) }
 
   /* Assignment ops */
-  | ID ASSIGN expr         { Assign($1, Noop, $3) }
-  | ID PLUSASSIGN expr     { Assign($1, Add, $3) }
-  | ID MINUSASSIGN expr    { Assign($1, Sub, $3) }
-  | ID TIMESASSIGN expr    { Assign($1, Mult, $3) }
-  | ID DIVIDEASSIGN expr   { Assign($1, Div, $3) }
-  | ID MATTIMESASSIGN expr { Assign($1, MatMult, $3) }
-  | ID MODASSIGN expr      { Assign($1, Mod, $3) }
-  | ID EXPASSIGN expr      { Assign($1, Exp, $3) }
-  | ID INC                 { Assign($1, Add, One) }
-  | ID DEC                 { Assign($1, Sub, One) }
+  | expr ASSIGN expr         { Assign($1, Noop, $3) }
+  | expr PLUSASSIGN expr     { Assign($1, Add, $3) }
+  | expr MINUSASSIGN expr    { Assign($1, Sub, $3) }
+  | expr TIMESASSIGN expr    { Assign($1, Mult, $3) }
+  | expr DIVIDEASSIGN expr   { Assign($1, Div, $3) }
+  | expr MATTIMESASSIGN expr { Assign($1, MatMult, $3) }
+  | expr MODASSIGN expr      { Assign($1, Mod, $3) }
+  | expr EXPASSIGN expr      { Assign($1, Exp, $3) }
+  | expr INC                 { Assign($1, Add, One) }
+  | expr DEC                 { Assign($1, Sub, One) }
+  /* Semantics: check that only IDs/index exprs can be assigned values */
 
-  /* Parentheses */
-  | ID LPAREN args_opt RPAREN  { Call($1, $3) }
-  | LPAREN expr RPAREN         { $2 }
+index:
+    expr            { Index($1) }
+  | expr COLON expr { Slice($1, $3) }
+  | COLON expr      { Slice(Int_Lit(0), $2) }
+  | expr COLON      { Slice($1, End) }
+  | COLON           { Slice(Int_Lit(0), End) }
 
 rows_opt:
     /* nothing */ { [] }

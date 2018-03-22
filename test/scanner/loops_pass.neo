@@ -3,7 +3,7 @@ void foo() {
     var int a;
 
     print("Blast off in ");
-    for(a=3;a>0;a--) {
+    for (a = 3; a > 0; a--) {
 
       print(a);
       print("... ");
@@ -12,8 +12,11 @@ void foo() {
 
     print("BLAST OFF");
 
-    while(a<10) {
+    while (a < 10) {
       a++;
     }
 
+    for (var int i = 0; i < 10; i++) {
+      print(i);
+    }
 }

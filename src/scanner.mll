@@ -28,6 +28,7 @@ rule token = parse
 (* Punctuation *)
 | ';'      { SEMI }
 | ','      { COMMA }
+| ':'      { COLON }
 
 (* Binary ops *)
 | '+'      { PLUS }
@@ -64,15 +65,19 @@ rule token = parse
 | "!"      { NOT }
 
 (* Control flow *)
-| "if"     { IF }
-| "else"   { ELSE }
-| "for"    { FOR }
-| "while"  { WHILE }
-| "return" { RETURN }
+| "if"      { IF }
+| "else"    { ELSE }
+| "for"     { FOR }
+| "while"   { WHILE }
+| "return"  { RETURN }
+| "try"     { TRY }
+| "catch"   { CATCH }
+| "protest" { PROTEST }
 
 (* Declaration *)
-| "var"    { VAR }
-| "create" { CREATE }
+| "var"       { VAR }
+| "create"    { CREATE }
+| "exception" { EXCEPTION }
 
 (* Types *)
 | "int"    { INT }
@@ -82,10 +87,11 @@ rule token = parse
 | "void"   { VOID }
 | "array"  { ARRAY }
 | "matrix" { MATRIX }
+| "func"   { FUNC }
 
 (* Literals *)
-| "true"   { BOOL_LIT(true)  }
-| "false"  { BOOL_LIT(false) }
+| "True"   { BOOL_LIT(true)  }
+| "False"  { BOOL_LIT(false) }
 | digits as lxm { INT_LIT(int_of_string lxm) }
 | digits '.'  digit* ( ['e' 'E'] ['+' '-']? digits )? as lxm { FLOAT_LIT(lxm) }
 | letter (letter | digit | '_')* as lxm { ID(lxm) }
