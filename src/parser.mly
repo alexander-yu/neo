@@ -45,12 +45,12 @@ open Ast
 %left OR
 %left AND
 %left EQ NEQ
-%left LANGLE RANGLE LEQ GEQ
+%nonassoc LANGLE RANGLE LEQ GEQ
 %left PLUS MINUS
 %left TIMES DIVIDE MOD MATTIMES
 %right EXP
 %right NOT
-%left INC DEC
+%nonassoc INC DEC
 
 %%
 
