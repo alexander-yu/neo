@@ -1,6 +1,7 @@
 # Neo
 
 A matrix language
+by Alex Yu, Andrés Aguayo, Ani Bezjian, Dominique Gordon, and Mohamed Abedelmalik
 
 ## Installation
 
