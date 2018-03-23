@@ -8,9 +8,7 @@ type uop = Neg | Not
 type typ = Int | Bool | Float | String | Void | Exc |
            Array of typ | Matrix of typ | Func of typ list * typ
 
-type bind = typ * string
-
-type decl_kw = Var | Create | Exception
+type decl_kw = Var | Create | Exception | Nokw
 
 type expr =
     Id of string
@@ -60,11 +58,14 @@ and try_catch = {
 type func_decl = {
     typ : typ;
     fname : string;
-    formals : bind list;
+    formals : decl list;
     body : stmt list;
   }
 
 type program = decl list * func_decl list
+
+let get_id_of_decl = function
+  (_, _, s, _) -> s
 
 (* Pretty-printing functions *)
 
@@ -180,7 +181,7 @@ and string_of_vdecl (kw, t, id, expr) = match t, expr with
 
 and string_of_fdecl fdecl =
   string_of_typ fdecl.typ ^ " " ^
-  fdecl.fname ^ "(" ^ String.concat ", " (List.map snd fdecl.formals) ^
+  fdecl.fname ^ "(" ^ String.concat ", " (List.map get_id_of_decl fdecl.formals) ^
   ")\n{\n" ^ String.concat "" (List.map string_of_stmt fdecl.body) ^ "}\n"
 
 let string_of_program (vars, funcs) =

@@ -74,8 +74,8 @@ formals_opt:
   | formal_list   { List.rev $1 }
 
 formal_list:
-    typ ID                   { [($1, $2)] }
-  | formal_list COMMA typ ID { ($3, $4) :: $1 }
+    typ ID                   { [(Nokw, $1, $2, Noexpr)] }
+  | formal_list COMMA typ ID { (Nokw, $3, $4, Noexpr) :: $1 }
 
 typ:
     INT                      { Int }

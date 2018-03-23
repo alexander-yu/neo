@@ -43,7 +43,7 @@ let translate (globals, functions) =
 
   (* Declare each global variable; remember its value in a map *)
   let global_vars : L.llvalue StringMap.t =
-    let global_var m (t, n) =
+    let global_var m (_, t, n, _) =
       let init = match t with
           A.Float -> L.const_float (ltype_of_typ t) 0.0
         | _ -> L.const_int (ltype_of_typ t) 0
@@ -68,7 +68,7 @@ let translate (globals, functions) =
     let function_decl m fdecl =
       let name = fdecl.sfname
       and formal_types =
-        Array.of_list (List.map (fun (t,_) -> ltype_of_typ t) fdecl.sformals)
+        Array.of_list (List.map (fun (_, t, _, _) -> ltype_of_typ t) fdecl.sformals)
       in
       let ftype = L.function_type (ltype_of_typ fdecl.styp) formal_types in
       StringMap.add name (L.define_function name ftype the_module, fdecl) m
@@ -102,7 +102,14 @@ let translate (globals, functions) =
         StringMap.add n local_var m
       in
 
-      let formals = List.fold_left2 add_formal StringMap.empty fdecl.sformals
+      let filter_formals formals =
+        let filter_formal = function
+          (_, t, s, _) -> (t, s)
+        in
+        List.map filter_formal formals
+      in
+
+      let formals = List.fold_left2 add_formal StringMap.empty (filter_formals fdecl.sformals)
         (Array.to_list (L.params the_function))
       in
       List.fold_left add_local formals [] (* TODO: support all locals too *)
@@ -111,8 +118,9 @@ let translate (globals, functions) =
     (* Return the value for a variable or formal argument. First check
      * locals, then globals *)
     let lookup n = match n with
-      _, SId s -> try StringMap.find s local_vars
-        with Not_found -> StringMap.find s global_vars
+        _, SId s -> try StringMap.find s local_vars
+          with Not_found -> StringMap.find s global_vars
+      | _ -> raise (Failure "not supported yet")
     in
 
     (* Construct code for an expression; return its value *)
@@ -259,8 +267,12 @@ let translate (globals, functions) =
           L.builder_at_end context merge_bb
 
       (* Implement for loops as while loops! *)
-      | SFor (e1, e2, e3, body) -> stmt builder
-          ( SBlock [SExpr e1 ; SWhile (e2, SBlock [body ; SExpr e3]) ] )
+      | SFor (i, e1, e2, body) ->
+          let initial = match i with
+              SI_Expr e -> SExpr e
+            | SI_Decl d -> SDecl d
+          in
+          stmt builder ( SBlock [ initial ; SWhile (e1, SBlock [body ; SExpr e2]) ] )
     in
 
     (* Build the code for each statement in the function *)

@@ -14,6 +14,7 @@ let check (globals, functions) =
 
   (* Check if a certain kind of binding has void type or is a duplicate
      of another, previously checked binding *)
+  (*
   let check_binds (kind : string) (to_check : bind list) =
     let check_it checked binding =
       let void_err = "illegal void " ^ kind ^ " " ^ snd binding
@@ -29,10 +30,28 @@ let check (globals, functions) =
     let _ = List.fold_left check_it [] (List.sort compare to_check) in
     to_check
   in
+  *)
+
+  (* TODO: check expression and keyword *)
+  let check_decls (to_check: decl list) =
+    let check_it checked (kw, t, s, e) =
+      let void_err = "illegal void " ^ " " ^ s
+      and dup_err = "duplicate " ^ " " ^ s in
+      match (t, s) with
+          (* No void bindings *)
+          (Void, _) -> raise (Failure void_err)
+        | (_, n1) -> match checked with
+            (* No duplicate bindings *)
+              ((_, n2) :: _) when n1 = n2 -> raise (Failure dup_err)
+            | _ -> (t, s) :: checked
+    in
+    let _ = List.fold_left check_it [] (List.sort compare to_check) in
+    to_check
+  in
 
   (**** Checking Global Variables ****)
 
-  let globals' = check_binds "global" globals in
+  let globals' = check_decls globals in
 
   (**** Checking Functions ****)
 
@@ -41,7 +60,7 @@ let check (globals, functions) =
   let built_in_decls =
     let add_bind map (name, ty) = StringMap.add name {
       typ = Void; fname = name;
-      formals = [(ty, "x")];
+      formals = [(Nokw, ty, "x", Noexpr)];
       body = [] } map
     in
     List.fold_left add_bind StringMap.empty [
@@ -78,7 +97,7 @@ let check (globals, functions) =
 
   let check_function func =
     (* Make sure no formals or locals are void or duplicates *)
-    let formals' = check_binds "formal" func.formals in
+    let formals' = check_decls func.formals in
 
     (* TODO: check for void/duplicate locals in each block *)
 
@@ -89,7 +108,7 @@ let check (globals, functions) =
     in
 
     (* Build local symbol table of variables for this function *)
-    let symbols = List.fold_left (fun m (ty, name) -> StringMap.add name ty m)
+    let symbols = List.fold_left (fun m (_, ty, name, _) -> StringMap.add name ty m)
 	    StringMap.empty (globals' @ formals' )
     in
 
@@ -100,23 +119,25 @@ let check (globals, functions) =
     in
 
     (* Return a semantically-checked expression, i.e., with a type *)
-    let rec expr = function
-        Int_Lit  l -> (Int, SLiteral l)
+    let rec check_expr = function
+      | Int_Lit  l -> (Int, SLiteral l)
       | Float_Lit l -> (Float, SFliteral l)
       | Bool_Lit l  -> (Bool, SBoolLit l)
       | Noexpr     -> (Void, SNoexpr)
       | Id s       -> (type_of_identifier s, SId s)
+      (*
       | Assign(e1, op, e2) as ex -> (* TODO: check e1 for index/string, and op *)
           match e1 with
               Id s ->
                 let lt = type_of_identifier s
-                and (rt, e') = expr e2 in
+                and (rt, e') = check_expr e2 in
                 let err = "illegal assignment " ^ string_of_typ lt ^ " = " ^
                   string_of_typ rt ^ " in " ^ string_of_expr ex
                 in
-                (check_assign lt rt err, SAssign(expr e1, Noop, (rt, e')))
+                (check_assign lt rt err, SAssign(check_expr e1, Noop, (rt, e')))
+      *)
       | Unop(op, e) as ex ->
-          let (t, e') = expr e in
+          let (t, e') = check_expr e in
           let ty = match op with
               Neg when t = Int || t = Float -> t
             | Not when t = Bool -> Bool
@@ -126,8 +147,8 @@ let check (globals, functions) =
           in
           (ty, SUnop(op, (t, e')))
       | Binop(e1, op, e2) as e ->
-          let (t1, e1') = expr e1
-          and (t2, e2') = expr e2 in
+          let (t1, e1') = check_expr e1
+          and (t2, e2') = check_expr e2 in
           (* All binary operators require operands of the same type *)
           let same = t1 = t2 in
           (* Determine expression type based on operator and operand types *)
@@ -144,14 +165,14 @@ let check (globals, functions) =
                               string_of_typ t2 ^ " in " ^ string_of_expr e))
           in
           (ty, SBinop((t1, e1'), op, (t2, e2')))
-      | Call(fname, args) as call ->
+        | Call(fname, args) as call ->
           let fd = find_func fname in
           let param_length = List.length fd.formals in
             if List.length args != param_length then
               raise (Failure ("expecting " ^ string_of_int param_length ^
                               " arguments in " ^ string_of_expr call))
-            else let check_call (ft, _) e =
-              let (et, e') = expr e in
+            else let check_call (_, ft, _, _) e =
+              let (et, e') = check_expr e in
               let err = "illegal argument found " ^ string_of_typ et ^
                 " expected " ^ string_of_typ ft ^ " in " ^ string_of_expr e
               in
@@ -162,20 +183,25 @@ let check (globals, functions) =
     in
 
     let check_bool_expr e =
-      let (t', e') = expr e
+      let (t', e') = check_expr e
       and err = "expected Boolean expression in " ^ string_of_expr e
       in
       if t' != Bool then raise (Failure err) else (t', e')
     in
 
+    let check_for_initializer = function
+        I_Expr e -> SI_Expr (check_expr e)
+      | I_Decl d -> SI_Decl d
+    in
+
     (* Return a semantically-checked statement i.e. containing sexprs *)
     let rec check_stmt = function
-        Expr e -> SExpr (expr e)
+        Expr e -> SExpr (check_expr e)
       | If(p, b1, b2) -> SIf(check_bool_expr p, check_stmt b1, check_stmt b2)
-      | For(e1, e2, e3, st) ->
-	        SFor(expr e1, check_bool_expr e2, expr e3, check_stmt st)
+      | For(i, e1, e2, st) ->
+	        SFor(check_for_initializer i, check_bool_expr e1, check_expr e2, check_stmt st)
       | While(p, s) -> SWhile(check_bool_expr p, check_stmt s)
-      | Return e -> let (t, e') = expr e in
+      | Return e -> let (t, e') = check_expr e in
           if t = func.typ then SReturn (t, e')
           else raise (
             Failure ("return gives " ^ string_of_typ t ^ " expected " ^
