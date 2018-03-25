@@ -5,7 +5,7 @@
 # Easiest way to build: using ocamlbuild, which in turn uses ocamlfind
 
 .PHONY : all
-all : neo.native
+all : neo.native native.o
 
 .PHONY : neo.native
 neo.native :
@@ -18,7 +18,8 @@ neo.native :
 .PHONY : clean
 clean :
 	ocamlbuild -clean
-	rm -rf *.diff neo scanner.ml parser.ml parser.mli
+	rm -rf testall.log *.diff neo scanner.ml parser.ml parser.mli
+	rm -rf native
 	rm -rf *.cmx *.cmi *.cmo *.cmx *.o *.s *.ll *.out *.exe
 
 # More detailed: build using ocamlc/ocamlopt + ocamlfind to locate LLVM

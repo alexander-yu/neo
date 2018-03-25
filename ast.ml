@@ -95,6 +95,7 @@ let string_of_decl_kw = function
     Var -> "var"
   | Create -> "create"
   | Exception -> "exception"
+  | Nokw -> ""
 
 let rec string_of_typ = function
   Int -> "int"
@@ -141,9 +142,6 @@ and string_of_index_expr = function
 
 and string_of_array arr =
   "{|" ^ String.concat ", " (Array.to_list (Array.map string_of_expr arr)) ^ "|}"
-
-and string_of_exprs exprs =
-  String.concat ", " (List.map string_of_expr exprs)
 
 and string_of_row row =
   "[" ^ String.concat ", " (Array.to_list (Array.map string_of_expr row)) ^ "]"

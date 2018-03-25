@@ -23,15 +23,18 @@ module StringMap = Map.Make(String)
    throws an exception if something is wrong. *)
 let translate (globals, functions) =
   let context    = L.global_context () in
+  (* Create an LLVM module -- this is a "container" into which we'll
+    generate actual code *)
+  let the_module = L.create_module context "Neo" in
   (* Add types to the context so we can use them in our LLVM code *)
   let i32_t      = L.i32_type    context
   and i8_t       = L.i8_type     context
   and i1_t       = L.i1_type     context
   and float_t    = L.double_type context
-  and void_t     = L.void_type   context
-  (* Create an LLVM module -- this is a "container" into which we'll
-     generate actual code *)
-  and the_module = L.create_module context "Neo" in
+  and void_t     = L.void_type   context in
+
+  let matrix_t   = L.pointer_type i8_t
+  and array_t    = L.array_type in
 
   (* Convert Neo types to LLVM types *)
   let ltype_of_typ = function
@@ -39,6 +42,8 @@ let translate (globals, functions) =
     | A.Bool  -> i1_t
     | A.Float -> float_t
     | A.Void  -> void_t
+    | A.Matrix _ -> matrix_t
+    | _ -> raise (Failure "not supported yet in ltype_of_typ")
   in
 
   (* Declare each global variable; remember its value in a map *)
@@ -53,14 +58,11 @@ let translate (globals, functions) =
     List.fold_left global_var StringMap.empty globals
   in
 
-  let printf_t : L.lltype =
-    L.var_arg_function_type i32_t [| L.pointer_type i8_t |]
-  in
-  let printf_func : L.llvalue =
-    L.declare_function "printf" printf_t the_module
-  in
-  let printbig_t = L.function_type i32_t [| i32_t |] in
-  let printbig_func = L.declare_function "printbig" printbig_t the_module in
+  let printf_t : L.lltype = L.var_arg_function_type i32_t [| L.pointer_type i8_t |] in
+  let printf_func : L.llvalue = L.declare_function "printf" printf_t the_module in
+
+  let printm_int_t = L.function_type i32_t [| L.pointer_type i8_t ; i32_t ; i32_t |] in
+  let printm_int_func = L.declare_function "printm_int" printm_int_t the_module in
 
   (* Define each function (arguments and return type) so we can
    * define it's body and call it later *)
@@ -118,19 +120,31 @@ let translate (globals, functions) =
     (* Return the value for a variable or formal argument. First check
      * locals, then globals *)
     let lookup n = match n with
-        _, SId s -> try StringMap.find s local_vars
-          with Not_found -> StringMap.find s global_vars
-      | _ -> raise (Failure "not supported yet")
+        _, SId s -> (
+            try StringMap.find s local_vars
+            with Not_found -> StringMap.find s global_vars
+          )
+      | _ -> raise (Failure "not supported yet in lookup")
+    in
+
+    let get_mat_type = function
+        A.Matrix(t) -> t
+      | _ -> raise (Failure "internal error: matrix sexpr should have matrix type")
     in
 
     (* Construct code for an expression; return its value *)
     let rec expr builder ((t, e) : sexpr) = match e with
-        SLiteral i -> L.const_int i32_t i
-      | SBoolLit b -> L.const_int i1_t (if b then 1 else 0)
-      | SFliteral l -> L.const_float_of_string float_t l
+        SInt_Lit i -> L.const_int i32_t i
+      | SBool_Lit b -> L.const_int i1_t (if b then 1 else 0)
+      | SFloat_Lit l -> L.const_float_of_string float_t l
+      | SMatrix_Lit l ->
+          let typ = ltype_of_typ (get_mat_type t) in
+          let ll_m = Array.map (Array.map (expr builder)) l in
+          let ll_m = Array.map (L.const_array typ) ll_m in
+          L.const_array (array_t typ (Array.length l.(0))) ll_m
       | SNoexpr -> L.const_int i32_t 0
       | SId s -> L.build_load (lookup (t, e)) s builder
-      | SAssign (e1, op, e2) -> let e' = expr builder e2 in
+      | SAssign (e1, _, e2) -> let e' = expr builder e2 in (* TODO: handle ops *)
           let _  = L.build_store e' (lookup e1) builder in e'
       | SBinop (e1, op, e2) ->
           let (t, _) = e1
@@ -150,12 +164,13 @@ let translate (globals, functions) =
           | A.Geq     -> L.build_fcmp L.Fcmp.Oge
           | A.And | A.Or ->
               raise (Failure "internal error: semant should have rejected and/or on float")
+          | _ -> raise (Failure "binop not supported yet")
           ) e1' e2' "tmp" builder
           else (match op with
           | A.Add     -> L.build_add
           | A.Sub     -> L.build_sub
           | A.Mult    -> L.build_mul
-                | A.Div     -> L.build_sdiv
+          | A.Div     -> L.build_sdiv
           | A.And     -> L.build_and
           | A.Or      -> L.build_or
           | A.Equal   -> L.build_icmp L.Icmp.Eq
@@ -164,6 +179,7 @@ let translate (globals, functions) =
           | A.Leq     -> L.build_icmp L.Icmp.Sle
           | A.Greater -> L.build_icmp L.Icmp.Sgt
           | A.Geq     -> L.build_icmp L.Icmp.Sge
+          | _ -> raise (Failure "binop not supported yet")
           ) e1' e2' "tmp" builder
       | SUnop(op, e) ->
           let (t, _) = e in
@@ -172,11 +188,31 @@ let translate (globals, functions) =
             A.Neg when t = A.Float -> L.build_fneg
           | A.Neg                  -> L.build_neg
                 | A.Not                  -> L.build_not) e' "tmp" builder
-      | SCall ("print", [e]) | SCall ("printb", [e]) ->
-          L.build_call printf_func [| int_format_str ; (expr builder e) |]
-            "printf" builder
-      | SCall ("printbig", [e]) ->
-          L.build_call printbig_func [| (expr builder e) |] "printbig" builder
+      | SCall ("print", [e]) -> (
+            match t with
+                A.Int | A.Bool -> L.build_call printf_func
+                  [| int_format_str ; (expr builder e) |] "printf" builder
+              | A.Matrix(typ) -> (
+                    let m = match e with
+                        (_, SMatrix_Lit l) -> l
+                      | _ -> raise (Failure "internal error: matrix sx should match matrix type")
+                    in
+                    let rows = Array.length m in
+                    let cols = Array.length m.(0) in
+
+                    (* TODO: do something better than allocating a local var? *)
+                    let e = expr builder e in
+                    let m = L.build_alloca (array_t (array_t (ltype_of_typ typ) cols) rows) "tmp" builder in
+                    let _  = L.build_store e m builder in
+
+                    let mat_ptr = L.build_in_bounds_gep m [| L.const_int i32_t 0 ; L.const_int i32_t 0 |] "build_in_bounds_gep" builder in
+                    let mat_ptr = L.build_bitcast mat_ptr (L.pointer_type i8_t) "build_bitcast" builder in
+                    match typ with
+                        A.Int -> L.build_call printm_int_func [| mat_ptr ; L.const_int i32_t rows ; L.const_int i32_t cols |] "printm_int" builder
+                      | _ -> raise (Failure "not supported yet in print (matrix)")
+                  )
+              | _ -> raise (Failure "not supported yet in print")
+          )
       | SCall ("printf", [e]) ->
           L.build_call printf_func [| float_format_str ; (expr builder e) |]
           "printf" builder
@@ -273,6 +309,7 @@ let translate (globals, functions) =
             | SI_Decl d -> SDecl d
           in
           stmt builder ( SBlock [ initial ; SWhile (e1, SBlock [body ; SExpr e2]) ] )
+      | _ -> raise (Failure "not supported yet in stmt")
     in
 
     (* Build the code for each statement in the function *)

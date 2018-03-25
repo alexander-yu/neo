@@ -2,6 +2,7 @@
 .vscode/
 
 *~
+*.diff
 *.DS_Store
 *.log
 *.out
@@ -20,6 +21,7 @@ scanner.ml
 *.cmx
 *.ll
 *.o
+*.s
 
 # ocamlbuild
 *_build/
