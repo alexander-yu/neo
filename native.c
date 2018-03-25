@@ -1,7 +1,11 @@
 #include <stdio.h>
+#include "native.h"
 
-void printm_int(int* mat, int m, int n) {
+void printm_int(mat_int_t *matrix) {
     printf("[");
+    int m = matrix->rows;
+    int n = matrix->cols;
+    int *mat = matrix->mat;
     for (int i = 0; i < m; ++i) {
         if (i == 0) {
             printf("[");
