@@ -5,15 +5,9 @@ FAIL_C='\033[0;31m'
 PASS_C='\033[0;32m'
 NO_C='\033[0m'
 
-setup() {
-    # We're assuming this script is being run from the project directory.
-    echo "Setting up..."
-    ocamlbuild src/toplevel.native
-}
-
 clean() {
     echo "Cleaning up..."
-    ocamlbuild -clean
+    make clean
 }
 
 color_echo() {
@@ -58,7 +52,7 @@ test_scanner() {
         for file in $test_pattern ; do
             echo "------$file------" >> $program_output
             echo "" >> $program_output
-            ./toplevel.native $file >> $program_output 2>&1
+            ./neo.native $file >> $program_output 2>&1
 
             status=$?
             pass=$(test_pass $file $status)
@@ -88,7 +82,6 @@ else
     program_output=/dev/null
 fi
 
-setup
 test_scanner $program_output
 clean
 exit 0

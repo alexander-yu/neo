@@ -1,0 +1,6 @@
+var int a = 0;
+var int b = 0;
+
+void main() {
+    a + b + 0;
+}

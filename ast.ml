@@ -8,9 +8,7 @@ type uop = Neg | Not
 type typ = Int | Bool | Float | String | Void | Exc |
            Array of typ | Matrix of typ | Func of typ list * typ
 
-type bind = typ * string
-
-type decl_kw = Var | Create | Exception
+type decl_kw = Var | Create | Exception | Nokw
 
 type expr =
     Id of string
@@ -60,11 +58,14 @@ and try_catch = {
 type func_decl = {
     typ : typ;
     fname : string;
-    formals : bind list;
+    formals : decl list;
     body : stmt list;
   }
 
 type program = decl list * func_decl list
+
+let get_id_of_decl = function
+  (_, _, s, _) -> s
 
 (* Pretty-printing functions *)
 
@@ -94,6 +95,7 @@ let string_of_decl_kw = function
     Var -> "var"
   | Create -> "create"
   | Exception -> "exception"
+  | Nokw -> ""
 
 let rec string_of_typ = function
   Int -> "int"
@@ -110,8 +112,8 @@ let rec string_of_typ = function
 let rec string_of_expr = function
     Int_Lit(l) -> string_of_int l
   | Float_Lit(l) -> l
-  | Bool_Lit(true) -> "true"
-  | Bool_Lit(false) -> "false"
+  | Bool_Lit(true) -> "True"
+  | Bool_Lit(false) -> "False"
   | String_Lit(l) -> "\"" ^ l ^ "\""
   | Array_Lit(l) -> string_of_array l
   | Empty_Array_Lit(n) -> "{|size: " ^ string_of_expr n ^ "|}"
@@ -140,9 +142,6 @@ and string_of_index_expr = function
 
 and string_of_array arr =
   "{|" ^ String.concat ", " (Array.to_list (Array.map string_of_expr arr)) ^ "|}"
-
-and string_of_exprs exprs =
-  String.concat ", " (List.map string_of_expr exprs)
 
 and string_of_row row =
   "[" ^ String.concat ", " (Array.to_list (Array.map string_of_expr row)) ^ "]"
@@ -180,7 +179,7 @@ and string_of_vdecl (kw, t, id, expr) = match t, expr with
 
 and string_of_fdecl fdecl =
   string_of_typ fdecl.typ ^ " " ^
-  fdecl.fname ^ "(" ^ String.concat ", " (List.map snd fdecl.formals) ^
+  fdecl.fname ^ "(" ^ String.concat ", " (List.map get_id_of_decl fdecl.formals) ^
   ")\n{\n" ^ String.concat "" (List.map string_of_stmt fdecl.body) ^ "}\n"
 
 let string_of_program (vars, funcs) =
