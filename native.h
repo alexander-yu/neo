@@ -1,5 +1,5 @@
 typedef struct mat_int {
-    int *mat;
+    int **mat;
     int rows;
     int cols;
 } mat_int_t;
