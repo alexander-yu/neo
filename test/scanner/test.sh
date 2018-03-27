@@ -52,7 +52,7 @@ test_scanner() {
         for file in $test_pattern ; do
             echo "------$file------" >> $program_output
             echo "" >> $program_output
-            ./neo.native $file >> $program_output 2>&1
+            ./neo.native -a $file >> $program_output 2>&1
 
             status=$?
             pass=$(test_pass $file $status)

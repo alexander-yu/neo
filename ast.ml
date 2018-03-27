@@ -35,14 +35,12 @@ and index_expr = Sgl_Index of expr * index | Dbl_Index of expr * index * index
 
 type decl = decl_kw * typ * string * expr
 
-type for_initializer = I_Expr of expr | I_Decl of decl
-
 type stmt =
     Block of stmt list
   | Expr of expr
   | Return of expr
   | If of expr * stmt * stmt
-  | For of for_initializer * expr * expr * stmt
+  | For of expr * expr * expr * stmt
   | While of expr * stmt
   | Decl of decl
   | Try_Catch of try_catch
@@ -110,18 +108,18 @@ let rec string_of_typ = function
     "):" ^ string_of_typ ret ^ ">"
 
 let rec string_of_expr = function
-    Int_Lit(l) -> string_of_int l
-  | Float_Lit(l) -> l
-  | Bool_Lit(true) -> "True"
-  | Bool_Lit(false) -> "False"
-  | String_Lit(l) -> "\"" ^ l ^ "\""
-  | Array_Lit(l) -> string_of_array l
-  | Empty_Array_Lit(n) -> "{|size: " ^ string_of_expr n ^ "|}"
-  | Matrix_Lit(l) -> string_of_matrix l
+    Int_Lit l -> string_of_int l
+  | Float_Lit l -> l
+  | Bool_Lit true -> "True"
+  | Bool_Lit false -> "False"
+  | String_Lit l -> "\"" ^ l ^ "\""
+  | Array_Lit l -> string_of_array l
+  | Empty_Array_Lit n -> "{|size: " ^ string_of_expr n ^ "|}"
+  | Matrix_Lit l -> string_of_matrix l
   | Empty_Matrix_Lit(r, c) -> "[dims: " ^ string_of_expr r ^ " x " ^
       string_of_expr c ^ "]"
-  | Index_Expr(e) -> string_of_index_expr e
-  | Id(s) -> s
+  | Index_Expr e -> string_of_index_expr e
+  | Id s -> s
   | Binop(e1, o, e2) ->
       string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
   | Unop(o, e) -> string_of_uop o ^ string_of_expr e
@@ -133,7 +131,7 @@ let rec string_of_expr = function
   | Noexpr -> ""
 
 and string_of_index = function
-    Index(e) -> string_of_expr e
+    Index e -> string_of_expr e
   | Slice(e1, e2) -> string_of_expr e1 ^ ":" ^ string_of_expr e2
 
 and string_of_index_expr = function
@@ -149,24 +147,20 @@ and string_of_row row =
 and string_of_matrix matrix =
   "[" ^ String.concat ", " (Array.to_list (Array.map string_of_row matrix)) ^ "]"
 
-and string_of_for_initializer = function
-  I_Expr(expr) -> string_of_expr expr
-| I_Decl(decl) -> string_of_vdecl decl
-
 and string_of_stmt = function
-    Block(stmts) ->
+    Block stmts ->
       "{\n" ^ String.concat "" (List.map string_of_stmt stmts) ^ "}\n"
-  | Expr(expr) -> string_of_expr expr ^ ";\n";
-  | Return(expr) -> "return " ^ string_of_expr expr ^ ";\n";
-  | If(e, s, Block([])) -> "if (" ^ string_of_expr e ^ ")\n" ^ string_of_stmt s
+  | Expr expr -> string_of_expr expr ^ ";\n";
+  | Return expr -> "return " ^ string_of_expr expr ^ ";\n";
+  | If(e, s, Block []) -> "if (" ^ string_of_expr e ^ ")\n" ^ string_of_stmt s
   | If(e, s1, s2) ->  "if (" ^ string_of_expr e ^ ")\n" ^
       string_of_stmt s1 ^ "else\n" ^ string_of_stmt s2
   | For(e1, e2, e3, s) ->
-      "for (" ^ string_of_for_initializer e1  ^ " ; " ^ string_of_expr e2 ^ " ; " ^
+      "for (" ^ string_of_expr e1  ^ " ; " ^ string_of_expr e2 ^ " ; " ^
       string_of_expr e3  ^ ") " ^ string_of_stmt s
   | While(e, s) -> "while (" ^ string_of_expr e ^ ") " ^ string_of_stmt s
-  | Decl(decl) -> string_of_vdecl decl
-  | Try_Catch(tc) -> "try {\n" ^ String.concat "" (List.map string_of_stmt tc.try_block) ^
+  | Decl decl -> string_of_vdecl decl
+  | Try_Catch tc -> "try {\n" ^ String.concat "" (List.map string_of_stmt tc.try_block) ^
     "} catch " ^ tc.exc_type ^ "(" ^ tc.exc_var ^ ") {\n" ^
     String.concat "" (List.map string_of_stmt tc.catch_block) ^ "}\n"
   | Protest(t, e) -> "protest " ^ t ^ "(" ^ string_of_expr e ^ ");\n"

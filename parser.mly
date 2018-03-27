@@ -83,8 +83,8 @@ typ:
   | FLOAT                    { Float }
   | STRING                   { String }
   | VOID                     { Void  }
-  | ARRAY LANGLE typ RANGLE  { Array($3) }
-  | MATRIX LANGLE typ RANGLE { Matrix($3) }
+  | ARRAY LANGLE typ RANGLE  { Array $3 }
+  | MATRIX LANGLE typ RANGLE { Matrix $3 }
   | FUNC LANGLE LPAREN typ_opt RPAREN COLON typ RANGLE
                              { Func($4, $7) }
 
@@ -104,16 +104,23 @@ stmt_list:
     stmt           { [$1] }
   | stmt_list stmt { $2 :: $1 }
 
+for_loop:
+    FOR LPAREN expr_opt SEMI expr SEMI expr_opt RPAREN stmt
+      { For($3, $5, $7, $9) }
+  | FOR LPAREN decl SEMI expr SEMI expr_opt RPAREN stmt
+      /* Implement declaration initializer as declaration
+       * followed by for loop in a block */
+      { Block [Decl $3 ; For(Noexpr, $5, $7, $9)] }
+
 stmt:
     expr SEMI                               { Expr $1 }
   | RETURN expr_opt SEMI                    { Return $2 }
-  | LBRACE stmts_opt RBRACE                 { Block($2) }
-  | IF LPAREN expr RPAREN stmt %prec NOELSE { If($3, $5, Block([])) }
+  | LBRACE stmts_opt RBRACE                 { Block $2 }
+  | IF LPAREN expr RPAREN stmt %prec NOELSE { If($3, $5, Block []) }
   | IF LPAREN expr RPAREN stmt ELSE stmt    { If($3, $5, $7) }
-  | FOR LPAREN initializer_opt SEMI expr SEMI expr_opt RPAREN stmt
-                                            { For($3, $5, $7, $9) }
+  | for_loop                                { $1 }
   | WHILE LPAREN expr RPAREN stmt           { While($3, $5) }
-  | decl SEMI                               { Decl($1) }
+  | decl SEMI                               { Decl $1 }
   | TRY LBRACE stmts_opt RBRACE CATCH ID LPAREN ID RPAREN LBRACE stmts_opt RBRACE
                                             { Try_Catch({
                                               try_block = $3;
@@ -128,14 +135,10 @@ decl:
   | VAR typ ID ASSIGN expr               { (Var, $2, $3, $5) }
   | CREATE typ ID                        { (Create, $2, $3, Noexpr) }
   | CREATE typ ID ASSIGN expr            { (Create, $2, $3, $5) }
-  | CREATE typ ID LBRACKET expr RBRACKET { (Create, $2, $3, Empty_Array_Lit($5)) }
+  | CREATE typ ID LBRACKET expr RBRACKET { (Create, $2, $3, Empty_Array_Lit $5) }
   | CREATE typ ID LBRACKET expr RBRACKET LBRACKET expr RBRACKET
                                          { (Create, $2, $3, Empty_Matrix_Lit($5, $8)) }
   | EXCEPTION ID                         { (Exception, Exc, $2, Noexpr) }
-
-initializer_opt:
-    expr_opt { I_Expr($1) }
-  | decl     { I_Decl($1) }
 
 expr_opt:
     /* nothing */ { Noexpr }
@@ -143,11 +146,11 @@ expr_opt:
 
 primary_expr:
   /* Literals */
-    INT_LIT                    { Int_Lit($1) }
-  | FLOAT_LIT	                 { Float_Lit($1) }
-  | BOOL_LIT                   { Bool_Lit($1) }
-  | STRING_LIT                 { String_Lit($1) }
-  | ID                         { Id($1) }
+    INT_LIT                    { Int_Lit $1 }
+  | FLOAT_LIT	                 { Float_Lit $1 }
+  | BOOL_LIT                   { Bool_Lit $1 }
+  | STRING_LIT                 { String_Lit $1 }
+  | ID                         { Id $1 }
 
   /* Containers */
   | LARRAY args_opt RARRAY     { Array_Lit(Array.of_list $2) }
@@ -209,11 +212,11 @@ expr:
   /* Semantics: check that only IDs/index exprs can be assigned values */
 
 index:
-    expr            { Index($1) }
+    expr            { Index $1 }
   | expr COLON expr { Slice($1, $3) }
-  | COLON expr      { Slice(Int_Lit(0), $2) }
+  | COLON expr      { Slice(Int_Lit 0, $2) }
   | expr COLON      { Slice($1, End) }
-  | COLON           { Slice(Int_Lit(0), End) }
+  | COLON           { Slice(Int_Lit 0, End) }
 
 rows_opt:
     /* nothing */ { [] }

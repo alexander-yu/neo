@@ -203,9 +203,9 @@ let translate (globals, functions) =
           make_matrix typ raw_elements builder
       | SNoexpr -> L.const_int i32_t 0
       | SId s -> L.build_load (lookup (t, e)) s builder
-      | SAssign (e1, _, e2) -> let e' = expr builder e2 in (* TODO: handle ops *)
+      | SAssign(e1, _, e2) -> let e' = expr builder e2 in (* TODO: handle ops *)
           let _  = L.build_store e' (lookup e1) builder in e'
-      | SBinop (e1, op, e2) ->
+      | SBinop(e1, op, e2) ->
           let (t, _) = e1
           and e1' = expr builder e1
           and e2' = expr builder e2
@@ -247,11 +247,11 @@ let translate (globals, functions) =
               A.Neg when t = A.Float -> L.build_fneg
             | A.Neg                  -> L.build_neg
             | A.Not                  -> L.build_not) e' "tmp" builder
-      | SCall ("print", [e]) -> (
+      | SCall("print", [e]) -> (
             match t with
                 A.Int | A.Bool -> L.build_call printf_func
                   [| int_format_str ; (expr builder e) |] "printf" builder
-              | A.Matrix(typ) -> (
+              | A.Matrix typ -> (
                     let m = expr builder e in
                     match typ with
                         A.Int -> L.build_call printm_int_func [| m |] "printm_int" builder
@@ -259,10 +259,10 @@ let translate (globals, functions) =
                   )
               | _ -> raise (Failure "not supported yet in print")
           )
-      | SCall ("printf", [e]) ->
+      | SCall("printf", [e]) ->
           L.build_call printf_func [| float_format_str ; (expr builder e) |]
           "printf" builder
-      | SCall (f, args) ->
+      | SCall(f, args) ->
           let (fdef, fdecl) = StringMap.find f function_decls in
           let llargs = List.rev (List.map (expr builder) (List.rev args)) in
           let result = (match fdecl.styp with
@@ -304,7 +304,7 @@ let translate (globals, functions) =
       are the build_br functions used at the end of the then and else blocks (if
       they don't already have a terminator) and the build_cond_br function at
       the end, which adds jump instructions to the "then" and "else" basic blocks *)
-      | SIf (predicate, then_stmt, else_stmt) ->
+      | SIf(predicate, then_stmt, else_stmt) ->
           let bool_val = expr builder predicate in
           (* Add "merge" basic block to our function's list of blocks *)
           let merge_bb = L.append_block context "merge" the_function in
@@ -328,7 +328,7 @@ let translate (globals, functions) =
           (* Move to the merge block for further instruction building *)
           L.builder_at_end context merge_bb
 
-      | SWhile (predicate, body) ->
+      | SWhile(predicate, body) ->
           (* First create basic block for condition instructions -- this will
           serve as destination in the case of a loop *)
           let pred_bb = L.append_block context "while" the_function in
@@ -349,12 +349,8 @@ let translate (globals, functions) =
           L.builder_at_end context merge_bb
 
       (* Implement for loops as while loops! *)
-      | SFor (i, e1, e2, body) ->
-          let initial = match i with
-              SI_Expr e -> SExpr e
-            | SI_Decl d -> SDecl d
-          in
-          stmt builder ( SBlock [ initial ; SWhile (e1, SBlock [body ; SExpr e2]) ] )
+      | SFor(e1, e2, e3, body) ->
+          stmt builder (SBlock [SExpr e1 ; SWhile(e2, SBlock [body ; SExpr e3])])
       | _ -> raise (Failure "not supported yet in stmt")
     in
 

@@ -65,7 +65,7 @@ let check (globals, functions) =
     with Not_found ->
       match scope.parent with
           None -> make_err ("undeclared identifier " ^ name)
-        | Some(parent) -> type_of_identifier name parent
+        | Some parent -> type_of_identifier name parent
   in
 
   (* Collect globals and function names into a global symbol table *)
@@ -103,7 +103,7 @@ let check (globals, functions) =
       match e with
           Matrix_Lit l ->
             let t = fst (check_expr scope l.(0).(0)) in
-            (Matrix(t), SMatrix_Lit(Array.map (Array.map (check_equal_type t)) l))
+            (Matrix t, SMatrix_Lit(Array.map (Array.map (check_equal_type t)) l))
         | _ -> make_err "internal error: check_size should have rejected"
     in
 
@@ -239,7 +239,7 @@ let check (globals, functions) =
     let _ = List.iter check_formal_type func.formals in
 
     (* Build local symbol table of variables for this function *)
-    let scope = { variables = StringMap.empty; parent = Some(parent_scope) } in
+    let scope = { variables = StringMap.empty; parent = Some parent_scope } in
     let formals' = List.map (check_decl scope) func.formals in
     let scope = List.fold_left add_v_decl scope formals' in
 
@@ -254,28 +254,18 @@ let check (globals, functions) =
         if t' != Bool then make_err err else (t', e')
       in
       match stmt with
-          Expr e -> (SExpr (check_expr scope e), false)
+          Expr e -> (SExpr(check_expr scope e), false)
         | If(p, b1, b2) ->
             let p' = check_bool_expr p in
             let b1', ret1 = check_stmt scope b1 in
             let b2', ret2 = check_stmt scope b2 in
             (SIf(p', b1', b2'), ret1 || ret2)
-        | For(i, e1, e2, st) ->
-            (
-              match i with
-                  I_Expr e ->
-                    let e' = check_expr scope e in
-                    let e1' = check_bool_expr e1 in
-                    let e2' = check_expr scope e2 in
-                    let st', ret = check_stmt scope st in
-                    (SFor(SI_Expr(e'), e1', e2', st'), ret)
-                  (* with decl initializer, implement this as declaration followed
-                  * by for loop (with empty initializer) in its own block scope *)
-                | I_Decl d -> check_stmt scope (Block([
-                      Decl(d);
-                      For(I_Expr(Noexpr), e1, e2, st)
-                    ]))
-            )
+        | For(e1, e2, e3, st) ->
+            let e1' = check_expr scope e1 in
+            let e2' = check_bool_expr e2 in
+            let e3' = check_expr scope e3 in
+            let st', ret = check_stmt scope st in
+            (SFor(e1', e2', e3', st'), ret)
         | While(p, s) ->
             let p' = check_bool_expr p in
             let s', ret = check_stmt scope s in
@@ -289,7 +279,7 @@ let check (globals, functions) =
         (* A block is correct if each statement is correct and nothing
         * follows any return statement. Blocks define their own scope. *)
         | Block sl ->
-            let scope = { variables = StringMap.empty; parent = Some(scope) } in
+            let scope = { variables = StringMap.empty; parent = Some scope } in
             let rec check_stmt_list = function
                 [Return _ as s] ->
                   let s', ret = check_stmt scope s in
@@ -302,7 +292,7 @@ let check (globals, functions) =
               | [] -> ([], false)
             in
             let sl', ret = check_stmt_list sl in
-            (SBlock(sl'), ret)
+            (SBlock sl', ret)
         | _ -> make_err "not supported yet in check_stmt"
 
     in
@@ -311,8 +301,8 @@ let check (globals, functions) =
       sfname = func.fname;
       sformals = formals';
       sbody = match check_stmt scope (Block func.body) with
-          SBlock(sl), true -> sl
-        | SBlock(sl), false ->
+          SBlock sl, true -> sl
+        | SBlock sl, false ->
             let err = "function has return type " ^ string_of_typ func.typ
               ^ " but no return statement found"
             in
