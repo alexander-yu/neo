@@ -243,52 +243,82 @@ let check (globals, functions) =
     let formals' = List.map (check_decl scope) func.formals in
     let scope = List.fold_left add_v_decl scope formals' in
 
-    let check_bool_expr e =
-      let t', e' = check_expr scope e
-      and err = "expected Boolean expression in " ^ string_of_expr e
+    (* Return a semantically-checked statement, along with a bool
+     * indicating if there was at least one return statement
+     * (somewhere in the statement itself *)
+    let rec check_stmt scope stmt =
+      let check_bool_expr e =
+        let t', e' = check_expr scope e
+        and err = "expected Boolean expression in " ^ string_of_expr e
+        in
+        if t' != Bool then make_err err else (t', e')
       in
-      if t' != Bool then make_err err else (t', e')
-    in
+      match stmt with
+          Expr e -> (SExpr (check_expr scope e), false)
+        | If(p, b1, b2) ->
+            let p' = check_bool_expr p in
+            let b1', ret1 = check_stmt scope b1 in
+            let b2', ret2 = check_stmt scope b2 in
+            (SIf(p', b1', b2'), ret1 || ret2)
+        | For(i, e1, e2, st) ->
+            (
+              match i with
+                  I_Expr e ->
+                    let e' = check_expr scope e in
+                    let e1' = check_bool_expr e1 in
+                    let e2' = check_expr scope e2 in
+                    let st', ret = check_stmt scope st in
+                    (SFor(SI_Expr(e'), e1', e2', st'), ret)
+                  (* with decl initializer, implement this as declaration followed
+                  * by for loop (with empty initializer) in its own block scope *)
+                | I_Decl d -> check_stmt scope (Block([
+                      Decl(d);
+                      For(I_Expr(Noexpr), e1, e2, st)
+                    ]))
+            )
+        | While(p, s) ->
+            let p' = check_bool_expr p in
+            let s', ret = check_stmt scope s in
+            (SWhile(p', s'), ret)
+        | Return e ->
+            let t, e' = check_expr scope e in
+            if t = func.typ then (SReturn(t, e'), true)
+            else make_err ("return gives " ^ string_of_typ t ^ " expected " ^
+              string_of_typ func.typ ^ " in " ^ string_of_expr e)
 
-    let check_for_initializer = function
-        I_Expr e -> SI_Expr (check_expr scope e)
-      | I_Decl d -> SI_Decl (check_decl scope d)
-    in
-
-    (* Return a semantically-checked statement i.e. containing sexprs *)
-    let rec check_stmt = function
-        Expr e -> SExpr (check_expr scope e)
-      | If(p, b1, b2) -> SIf(check_bool_expr p, check_stmt b1, check_stmt b2)
-      | For(i, e1, e2, st) ->
-          SFor(check_for_initializer i, check_bool_expr e1, check_expr scope e2, check_stmt st)
-      | While(p, s) -> SWhile(check_bool_expr p, check_stmt s)
-      | Return e ->
-          let t, e' = check_expr scope e in
-          if t = func.typ then SReturn (t, e')
-          else make_err ("return gives " ^ string_of_typ t ^ " expected " ^
-            string_of_typ func.typ ^ " in " ^ string_of_expr e)
-
-      (* A block is correct if each statement is correct and nothing
-          follows any Return statement.  Nested blocks are flattened. *)
-      | Block sl ->
-          let rec check_stmt_list = function
-              [Return _ as s] -> [check_stmt s]
-            | Return _ :: _   -> make_err "nothing may follow a return"
-            | Block sl :: ss  -> check_stmt_list (sl @ ss) (* Flatten blocks *)
-            | s :: ss         -> check_stmt s :: check_stmt_list ss
-            | []              -> []
-          in
-          SBlock(check_stmt_list sl)
-      | _ -> make_err "not supported yet in check_stmt"
+        (* A block is correct if each statement is correct and nothing
+        * follows any return statement. Blocks define their own scope. *)
+        | Block sl ->
+            let scope = { variables = StringMap.empty; parent = Some(scope) } in
+            let rec check_stmt_list = function
+                [Return _ as s] ->
+                  let s', ret = check_stmt scope s in
+                  ([s'], ret)
+              | Return _ :: _ -> make_err "nothing may follow a return"
+              | s :: ss ->
+                  let s', ret1 = check_stmt scope s in
+                  let ss', ret2 = check_stmt_list ss in
+                  (s' :: ss', ret1 || ret2)
+              | [] -> ([], false)
+            in
+            let sl', ret = check_stmt_list sl in
+            (SBlock(sl'), ret)
+        | _ -> make_err "not supported yet in check_stmt"
 
     in
     (* body of check_function *)
     { styp = func.typ;
       sfname = func.fname;
       sformals = formals';
-      sbody = match check_stmt (Block func.body) with
-          SBlock(sl) -> sl
-        | _ -> let err = "internal error: block didn't become a block?" in
+      sbody = match check_stmt scope (Block func.body) with
+          SBlock(sl), true -> sl
+        | SBlock(sl), false ->
+            let err = "function has return type " ^ string_of_typ func.typ
+              ^ " but no return statement found"
+            in
+            if func.typ != Void then make_err err else sl
+        | _ ->
+            let err = "internal error: block didn't become a block?" in
             make_err err
     }
   in
