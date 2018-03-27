@@ -44,7 +44,7 @@ let translate (globals, functions) =
     with Not_found ->
       let matrix_type = L.named_struct_type context ("matrix_t_" ^ string_typ) in
       let ltype = ltype_of_typ typ in
-      let _ = L.struct_set_body matrix_type [| pointer_t ltype ; i32_t ; i32_t |] false in
+      let _ = L.struct_set_body matrix_type [| pointer_t (pointer_t ltype) ; i32_t ; i32_t |] false in
       matrix_types := StringMap.add string_typ matrix_type !matrix_types;
       matrix_type
   and ltype_of_typ = function
@@ -56,18 +56,22 @@ let translate (globals, functions) =
     | _ -> raise (Failure "not supported yet in ltype_of_typ")
   in
 
-  let get_mat_type = function
+  let typ_of_mat_typ = function
     A.Matrix(t) -> t
   | _ -> raise (Failure "internal error: matrix sexpr should have matrix type")
+  in
+
+  (* Returns tnitial value for an empty declaration of a given type *)
+  let init t = match t with
+      A.Float -> L.const_float float_t 0.0
+    | A.Int -> L.const_int i32_t 0
+    | _ -> raise (Failure "not supported yet in init")
   in
 
   (* Declare each global variable; remember its value in a map *)
   let global_vars : L.llvalue StringMap.t =
     let global_var m (_, t, n, _) =
-      let init = match t with
-          A.Float -> L.const_float (ltype_of_typ t) 0.0
-        | _ -> L.const_int (ltype_of_typ t) 0
-      in
+      let init = init t in
       StringMap.add n (L.define_global n init the_module) m
     in
     List.fold_left global_var StringMap.empty globals
@@ -91,6 +95,52 @@ let translate (globals, functions) =
       StringMap.add name (L.define_function name ftype the_module, fdecl) m
     in
     List.fold_left function_decl StringMap.empty functions
+  in
+
+  let make_matrix typ raw_elements builder =
+    let matrix_t = matrix_t typ in
+    let ltype = ltype_of_typ typ in
+    let rows = Array.length raw_elements in
+    let cols = Array.length raw_elements.(0) in
+
+    (* Allocate and fill matrix contents *)
+    let raw_rows = Array.map (L.const_array ltype) raw_elements in
+    let raw_matrix = L.const_array (array_t ltype cols) raw_rows in
+    let body = L.build_alloca (array_t (array_t ltype cols) rows) "body" builder in
+    let _ = L.build_store raw_matrix body builder in
+
+    (* Allocate array of pointers for each row of body *)
+    let row_ptrs = L.build_array_alloca (pointer_t ltype) (L.const_int i32_t rows) "row_ptrs" builder in
+    let store_row_ptr i _ =
+      let si = string_of_int i in
+      let row_ptr =
+        L.build_in_bounds_gep body [| L.const_int i32_t i ; L.const_int i32_t 0 |]
+          ("row_ptr_" ^ si) builder
+      in
+      let row_ptr =
+        L.build_bitcast row_ptr (pointer_t ltype) ("row_ptr_bitcast_" ^ si) builder
+      in
+      let row = L.build_in_bounds_gep row_ptrs [| L.const_int i32_t i |] ("row_" ^ si) builder in
+      let _ = L.build_store row_ptr row builder in
+      ()
+    in
+    let _ = Array.iteri store_row_ptr raw_rows in
+
+    (* Set body pointer as pointer to first row pointer *)
+    let body_ptr = L.build_in_bounds_gep row_ptrs [| L.const_int i32_t 0 |] "body_ptr" builder in
+    let body_ptr = L.build_bitcast body_ptr (pointer_t (pointer_t ltype)) "body_ptr_bitcast" builder in
+
+    (* Allocate matrix *)
+    let mat = L.build_alloca matrix_t "mat" builder in
+    let mat_body = L.build_struct_gep mat 0 "mat_body" builder in
+    let mat_rows = L.build_struct_gep mat 1 "mat_rows" builder in
+    let mat_cols = L.build_struct_gep mat 2 "mat_cols" builder in
+
+    (* Fill matrix fields *)
+    let _ = L.build_store body_ptr mat_body builder in
+    let _ = L.build_store (L.const_int i32_t rows) mat_rows builder in
+    let _ = L.build_store (L.const_int i32_t cols) mat_cols builder in
+    mat
   in
 
   (* Fill in the body of the given function *)
@@ -147,7 +197,10 @@ let translate (globals, functions) =
         SInt_Lit i -> L.const_int i32_t i
       | SBool_Lit b -> L.const_int i1_t (if b then 1 else 0)
       | SFloat_Lit l -> L.const_float_of_string float_t l
-      | SMatrix_Lit l -> build_matrix_lit l t builder
+      | SMatrix_Lit l ->
+          let raw_elements = Array.map (Array.map (expr builder)) l in
+          let typ = typ_of_mat_typ t in
+          make_matrix typ raw_elements builder
       | SNoexpr -> L.const_int i32_t 0
       | SId s -> L.build_load (lookup (t, e)) s builder
       | SAssign (e1, _, e2) -> let e' = expr builder e2 in (* TODO: handle ops *)
@@ -217,33 +270,6 @@ let translate (globals, functions) =
             | _ -> f ^ "_result")
           in
           L.build_call fdef (Array.of_list llargs) result builder
-    and build_matrix_lit m typ builder =
-      let mat_typ = get_mat_type typ in
-      let matrix_t = matrix_t mat_typ in
-      let ltype = ltype_of_typ mat_typ in
-      let rows = Array.length m in
-      let cols = Array.length m.(0) in
-
-      (* Allocate and fill matrix contents *)
-      let raw_body = Array.map (Array.map (expr builder)) m in
-      let raw_body = Array.map (L.const_array ltype) raw_body in
-      let raw_body = L.const_array (array_t ltype (Array.length m.(0))) raw_body in
-      let body = L.build_alloca (array_t (array_t ltype cols) rows) "body" builder in
-      let _ = L.build_store raw_body body builder in
-      let body_ptr = L.build_in_bounds_gep body [| L.const_int i32_t 0 ; L.const_int i32_t 0 |] "body_ptr" builder in
-      let body_ptr = L.build_bitcast body_ptr (pointer_t ltype) "body_ptr_bitcast" builder in
-
-      (* Allocate matrix *)
-      let mat = L.build_alloca matrix_t "mat" builder in
-      let mat_body = L.build_struct_gep mat 0 "mat_body" builder in
-      let mat_rows = L.build_struct_gep mat 1 "mat_rows" builder in
-      let mat_cols = L.build_struct_gep mat 2 "mat_cols" builder in
-
-      (* Fill matrix fields *)
-      let _ = L.build_store body_ptr mat_body builder in
-      let _ = L.build_store (L.const_int i32_t rows) mat_rows builder in
-      let _ = L.build_store (L.const_int i32_t cols) mat_cols builder in
-      mat
     in
 
     (* Each basic block in a program ends with a "terminator" instruction i.e.
