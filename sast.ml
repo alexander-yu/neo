@@ -31,7 +31,7 @@ type sfunc_decl = {
     sfname : string;
     sformals : sdecl list;
     sbody : sstmt list;
-  }
+}
 
 type sprogram = sdecl list * sfunc_decl list
 

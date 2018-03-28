@@ -30,10 +30,7 @@ let check (globals, functions) =
     ]
   in
 
-  (* TODO: allow for interweaving (i.e. change program structure)
-   * this means we need to make func_decl a declaration of its own;
-   * this will allow for nested functions too *)
-  let add_decl name typ scope =
+  let add_decl scope name typ =
     let built_in_err = "identifier " ^ name ^ " may not be defined" in
     let dup_err = "duplicate identifier " ^ name in
     (* Cannot redefine built-ins *)
@@ -52,12 +49,12 @@ let check (globals, functions) =
       Func(arg_types, f.typ)
     in
     let typ = typ_of_func f in
-    add_decl f.fname typ scope
+    add_decl scope f.fname typ
   in
 
   let add_v_decl scope decl =
     let _, t, s, _ = decl in
-    add_decl s t scope
+    add_decl scope s t
   in
 
   let rec type_of_identifier name scope =
@@ -66,19 +63,6 @@ let check (globals, functions) =
       match scope.parent with
           None -> make_err ("undeclared identifier " ^ name)
         | Some parent -> type_of_identifier name parent
-  in
-
-  (* Collect globals and function names into a global symbol table *)
-  let global_scope = { variables = built_in_decls; parent = None } in
-  let global_scope = List.fold_left add_v_decl global_scope globals in
-  let global_scope = List.fold_left add_func_decl global_scope functions in
-
-  (* Ensure "main" is defined *)
-  let _ =
-    let typ = type_of_identifier "main" global_scope in
-    match typ with
-        Func([], Void) -> typ
-      | _ -> make_err "must have a main function of type func<():void>"
   in
 
   (* Return a semantically-checked expression *)
@@ -225,7 +209,6 @@ let check (globals, functions) =
       " but initialized with type " ^ string_of_typ et
     in
     let _ = if expr != Noexpr && t != et then make_err typ_err in
-
     (kw, t, s, sexpr)
   in
 
@@ -275,7 +258,6 @@ let check (globals, functions) =
             if t = func.typ then (SReturn(t, e'), true)
             else make_err ("return gives " ^ string_of_typ t ^ " expected " ^
               string_of_typ func.typ ^ " in " ^ string_of_expr e)
-
         (* A block is correct if each statement is correct and nothing
         * follows any return statement. Blocks define their own scope. *)
         | Block sl ->
@@ -294,7 +276,6 @@ let check (globals, functions) =
             let sl', ret = check_stmt_list sl in
             (SBlock sl', ret)
         | _ -> make_err "not supported yet in check_stmt"
-
     in
     (* body of check_function *)
     { styp = func.typ;
@@ -311,6 +292,19 @@ let check (globals, functions) =
             let err = "internal error: block didn't become a block?" in
             make_err err
     }
+  in
+
+  (* Collect globals and function names into a global symbol table *)
+  let global_scope = { variables = built_in_decls; parent = None } in
+  let global_scope = List.fold_left add_v_decl global_scope globals in
+  let global_scope = List.fold_left add_func_decl global_scope functions in
+
+  (* Ensure "main" is defined *)
+  let _ =
+    let typ = type_of_identifier "main" global_scope in
+    match typ with
+        Func([], Void) -> typ
+      | _ -> make_err "must have a main function of type func<():void>"
   in
 
   let globals' = List.map (check_decl global_scope) globals in
