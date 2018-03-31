@@ -42,6 +42,14 @@ let translate (globals, functions) =
   and array_t    = L.array_type
   and pointer_t  = L.pointer_type in
 
+  (* We wrap the program's main function call inside of another
+   * true system main function; we rename the program's main function
+   * as "prog_main" when generating the LLVM code. The system main
+   * will also be responsible for initializing any global variables.
+   * See semant for this in action. *)
+  let sys_main = "main" in
+  let prog_main = "prog_main" in
+
   (* Convert Neo types to LLVM types *)
   let matrix_types = ref StringMap.empty in
   let rec matrix_t typ =
@@ -67,8 +75,11 @@ let translate (globals, functions) =
   let printf_t : L.lltype = L.var_arg_function_type i32_t [| pointer_t i8_t |] in
   let printf_func : L.llvalue = L.declare_function "printf" printf_t the_module in
 
-  let printm_int_t = L.function_type i32_t [| pointer_t (matrix_t A.Int) |] in
+  let printm_int_t = L.function_type void_t [| pointer_t (matrix_t A.Int) |] in
   let printm_int_func = L.declare_function "printm_int" printm_int_t the_module in
+
+  let makem_int_t = L.function_type (pointer_t (matrix_t A.Int)) [| pointer_t i32_t ; i32_t ; i32_t |] in
+  let makem_int_func = L.declare_function "makem_int" makem_int_t the_module in
 
   let typ_of_mat_typ = function
     A.Matrix(t) -> t
@@ -84,6 +95,9 @@ let translate (globals, functions) =
 
   (* Returns value of an identifier *)
   let rec lookup name scope =
+    (* Redirect any attempt to call the program main through it's raw "main" name
+     * to the renamed program main *)
+    let name = if name = sys_main then prog_main else name in
     try StringMap.find name scope.variables
     with Not_found ->
       match scope.parent with
@@ -92,7 +106,7 @@ let translate (globals, functions) =
   in
 
   let add_func_decl scope fdecl =
-    let fname = fdecl.sfname in
+    let fname = if fdecl.sfname = sys_main then prog_main else fdecl.sfname in
     let return_type = fdecl.styp in
     let get_decl_type (_, typ, _, _) = typ in
     let arg_types = List.map get_decl_type fdecl.sformals in
@@ -107,9 +121,8 @@ let translate (globals, functions) =
     let int_format_str = L.build_global_stringptr "%d\n" "fmt" builder
     and float_format_str = L.build_global_stringptr "%g\n" "fmt" builder in
 
-    (* TODO: support heap alloc (will be needed if we're returning matrices) *)
+    (* TODO: make sure to free any malloc'd matrices and move to stack var *)
     let make_matrix typ raw_elements builder =
-      let matrix_t = matrix_t typ in
       let ltype = ltype_of_typ typ in
       let rows = Array.length raw_elements in
       let cols = Array.length raw_elements.(0) in
@@ -119,39 +132,14 @@ let translate (globals, functions) =
       let raw_matrix = L.const_array (array_t ltype cols) raw_rows in
       let body = L.build_alloca (array_t (array_t ltype cols) rows) "body" builder in
       let _ = L.build_store raw_matrix body builder in
-
-      (* Allocate array of pointers for each row of body *)
-      let row_ptrs = L.build_array_alloca (pointer_t ltype) (L.const_int i32_t rows) "row_ptrs" builder in
-      let store_row_ptr i _ =
-        let si = string_of_int i in
-        let row_ptr =
-          L.build_in_bounds_gep body [| L.const_int i32_t i ; L.const_int i32_t 0 |]
-            ("row_ptr_" ^ si) builder
-        in
-        let row_ptr =
-          L.build_bitcast row_ptr (pointer_t ltype) ("row_ptr_bitcast_" ^ si) builder
-        in
-        let row = L.build_in_bounds_gep row_ptrs [| L.const_int i32_t i |] ("row_" ^ si) builder in
-        let _ = L.build_store row_ptr row builder in
-        ()
+      let body_ptr =
+        L.build_in_bounds_gep body [| L.const_int i32_t 0 ; L.const_int i32_t 0 |] "body_ptr" builder
       in
-      let _ = Array.iteri store_row_ptr raw_rows in
-
-      (* Set body pointer as pointer to first row pointer *)
-      let body_ptr = L.build_in_bounds_gep row_ptrs [| L.const_int i32_t 0 |] "body_ptr" builder in
-      let body_ptr = L.build_bitcast body_ptr (pointer_t (pointer_t ltype)) "body_ptr_bitcast" builder in
-
-      (* Allocate matrix *)
-      let mat = L.build_alloca matrix_t "mat" builder in
-      let mat_body = L.build_struct_gep mat 0 "mat_body" builder in
-      let mat_rows = L.build_struct_gep mat 1 "mat_rows" builder in
-      let mat_cols = L.build_struct_gep mat 2 "mat_cols" builder in
-
-      (* Fill matrix fields *)
-      let _ = L.build_store body_ptr mat_body builder in
-      let _ = L.build_store (L.const_int i32_t rows) mat_rows builder in
-      let _ = L.build_store (L.const_int i32_t cols) mat_cols builder in
-      mat
+      (
+        L.build_bitcast body_ptr (pointer_t ltype) "body_ptr" builder,
+        L.const_int i32_t rows,
+        L.const_int i32_t cols
+      )
     in
 
     match e with
@@ -161,7 +149,8 @@ let translate (globals, functions) =
       | SMatrix_Lit l ->
           let raw_elements = Array.map (Array.map (expr scope builder)) l in
           let typ = typ_of_mat_typ t in
-          make_matrix typ raw_elements builder
+          let mat, rows, cols = make_matrix typ raw_elements builder in
+          L.build_call makem_int_func [| mat ; rows ; cols |] "makem_int" builder
       | SNoexpr -> init t
       | SId s -> L.build_load (lookup s scope) s builder
       | SAssign(e1, e2) ->
@@ -174,7 +163,7 @@ let translate (globals, functions) =
           let e' = expr scope builder e2 in
           let _  = L.build_store e' (lookup s scope) builder in e'
       | SBinop(e1, op, e2) ->
-          let (t, _) = e1
+          let t, _ = e1
           and e1' = expr scope builder e1
           and e2' = expr scope builder e2
           in
@@ -222,7 +211,7 @@ let translate (globals, functions) =
               | A.Matrix typ -> (
                     let m = expr scope builder e in
                     match typ with
-                        A.Int -> L.build_call printm_int_func [| m |] "printm_int" builder
+                        A.Int -> L.build_call printm_int_func [| m |] "" builder
                       | _ -> make_err "not supported yet in print (matrix)"
                   )
               | _ -> make_err "not supported yet in print"
@@ -352,19 +341,33 @@ let translate (globals, functions) =
       | t -> L.build_ret (L.const_int (ltype_of_typ t) 0))
   in
 
+  (* Build system main *)
+  let build_main scope globals =
+    let main_type = L.function_type i32_t [||] in
+    let main = L.define_function sys_main main_type the_module in
+    let builder = L.builder_at_end context (L.entry_block main) in
+    let init_global sdecl =
+      let _, _, s, e = sdecl in
+      let e' = expr scope builder e in
+      let _ = L.build_store e' (lookup s scope) builder in
+      ()
+    in
+    let _ = List.iter init_global globals in
+    let _ = expr scope builder (A.Void, SCall ("main", [])) in
+    L.build_ret (L.const_int i32_t 0) builder
+  in
+
   let global_scope =
     let global_scope = { variables = StringMap.empty ; parent = None } in
     let add_global_decl scope sdecl =
-      (* TODO: support initializers too; we can maybe do this by renaming the
-       * program "main" function to "program_main" and creating a "true"
-       * main function that assigns the globals and calls "program_main" *)
       let _, t, s, _ = sdecl in
       let init = init t in
       let global = L.define_global s init the_module in
       { scope with variables = StringMap.add s global scope.variables }
     in
-    let global_scope = List.fold_left add_global_decl global_scope globals in
-    List.fold_left add_func_decl global_scope functions
+    List.fold_left add_global_decl global_scope globals
   in
-  List.iter (build_function_body global_scope) functions;
+  let global_scope = List.fold_left add_func_decl global_scope functions in
+  let _ = List.iter (build_function_body global_scope) functions in
+  let _ = build_main global_scope globals in
   the_module

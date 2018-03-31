@@ -30,6 +30,13 @@ let check (globals, functions) =
     ]
   in
 
+  (* We wrap the program's main function call inside of another
+   * true system main function; we rename the program's main function
+   * as "prog_main", and create a system main with name "main". The system
+   * main will also be responsible for initializing any global variables. *)
+  let sys_main = "main" in
+  let prog_main = "prog_main" in
+
   let add_decl scope name typ =
     let built_in_err = "identifier " ^ name ^ " may not be defined" in
     let dup_err = "duplicate identifier " ^ name in
@@ -78,7 +85,7 @@ let check (globals, functions) =
 
       let check_equal_type t e =
         let t', e' = check_expr scope e in
-        if t == t' then (t', e')
+        if t = t' then (t', e')
         else make_err ("container expected type " ^ string_of_typ t ^
           " but saw type " ^ string_of_typ t')
       in
@@ -208,7 +215,7 @@ let check (globals, functions) =
     let typ_err = "declared type " ^ string_of_typ t ^
       " but initialized with type " ^ string_of_typ et
     in
-    let _ = if expr != Noexpr && t != et then make_err typ_err in
+    let _ = if expr != Noexpr && t <> et then make_err typ_err in
     (kw, t, s, sexpr)
   in
 
@@ -273,7 +280,8 @@ let check (globals, functions) =
     in
     (* body of check_function *)
     { styp = func.typ;
-      sfname = func.fname;
+      (* Rename main function to prog_main *)
+      sfname = if func.fname = sys_main then prog_main else func.fname;
       sformals = formals';
       sbody = match check_stmt scope (Block func.body) with
           SBlock sl, true -> sl
