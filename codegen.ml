@@ -164,14 +164,14 @@ let translate (globals, functions) =
           make_matrix typ raw_elements builder
       | SNoexpr -> init t
       | SId s -> L.build_load (lookup s scope) s builder
-      | SAssign(e1, _, e2) ->
+      | SAssign(e1, e2) ->
           let s =
             let _, e1 = e1 in
             match e1 with
                 SId s -> s
               | _ -> make_err "not yet supported in expr"
           in
-          let e' = expr scope builder e2 in (* TODO: handle ops *)
+          let e' = expr scope builder e2 in
           let _  = L.build_store e' (lookup s scope) builder in e'
       | SBinop(e1, op, e2) ->
           let (t, _) = e1

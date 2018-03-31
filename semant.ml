@@ -104,7 +104,7 @@ let check (globals, functions) =
       | Noexpr     -> (Void, SNoexpr)
       | Id s       -> (type_of_identifier s scope, SId s)
       | Matrix_Lit _ as m -> check_container_lit scope m
-      | Assign(e1, _, e2) -> (* TODO: check e1 for index/string, and op *)
+      | Assign(e1, e2) -> (* TODO: check e1 for index/string *)
           (
             match e1 with
                 Id s ->
@@ -113,7 +113,7 @@ let check (globals, functions) =
                   let err = "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ string_of_expr expr
                   in
-                  (check_assign lt rt err, SAssign(check_expr scope e1, Noop, (rt, e')))
+                  (check_assign lt rt err, SAssign(check_expr scope e1, (rt, e')))
               | _ -> make_err "not supported yet in assign"
           )
       | Unop(op, e) ->

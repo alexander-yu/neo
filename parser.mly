@@ -110,7 +110,7 @@ for_loop:
       { Block [Expr $3 ; While($5, Block [$9 ; Expr $7])] }
   | FOR LPAREN decl SEMI expr SEMI expr_opt RPAREN stmt
       /* Implement declaration initializer as declaration
-       * followed by for loop in a block */
+       * followed by loop in a block */
       { Block [Decl $3 ; While($5, Block [$9 ; Expr $7])] }
 
 stmt:
@@ -200,16 +200,16 @@ expr:
   | expr OR     expr         { Binop($1, Or, $3) }
 
   /* Assignment ops */
-  | expr ASSIGN expr         { Assign($1, Noop, $3) }
-  | expr PLUSASSIGN expr     { Assign($1, Add, $3) }
-  | expr MINUSASSIGN expr    { Assign($1, Sub, $3) }
-  | expr TIMESASSIGN expr    { Assign($1, Mult, $3) }
-  | expr DIVIDEASSIGN expr   { Assign($1, Div, $3) }
-  | expr MATTIMESASSIGN expr { Assign($1, MatMult, $3) }
-  | expr MODASSIGN expr      { Assign($1, Mod, $3) }
-  | expr EXPASSIGN expr      { Assign($1, Exp, $3) }
-  | expr INC                 { Assign($1, Add, One) }
-  | expr DEC                 { Assign($1, Sub, One) }
+  | expr ASSIGN expr         { Assign($1, $3) }
+  | expr PLUSASSIGN expr     { Assign($1, Binop($1, Add, $3)) }
+  | expr MINUSASSIGN expr    { Assign($1, Binop($1, Sub, $3)) }
+  | expr TIMESASSIGN expr    { Assign($1, Binop($1, Mult, $3)) }
+  | expr DIVIDEASSIGN expr   { Assign($1, Binop($1, Div, $3)) }
+  | expr MATTIMESASSIGN expr { Assign($1, Binop($1, MatMult, $3)) }
+  | expr MODASSIGN expr      { Assign($1, Binop($1, Mod, $3)) }
+  | expr EXPASSIGN expr      { Assign($1, Binop($1, Exp, $3)) }
+  | expr INC                 { Assign($1, Binop($1, Add, One)) }
+  | expr DEC                 { Assign($1, Binop($1, Sub, One)) }
   /* Semantics: check that only IDs/index exprs can be assigned values */
 
 index:
