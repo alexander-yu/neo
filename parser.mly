@@ -104,13 +104,14 @@ stmt_list:
     stmt           { [$1] }
   | stmt_list stmt { $2 :: $1 }
 
+/* Implement for loops as while loops */
 for_loop:
     FOR LPAREN expr_opt SEMI expr SEMI expr_opt RPAREN stmt
-      { For($3, $5, $7, $9) }
+      { Block [Expr $3 ; While($5, Block [$9 ; Expr $7])] }
   | FOR LPAREN decl SEMI expr SEMI expr_opt RPAREN stmt
       /* Implement declaration initializer as declaration
        * followed by for loop in a block */
-      { Block [Decl $3 ; For(Noexpr, $5, $7, $9)] }
+      { Block [Decl $3 ; While($5, Block [$9 ; Expr $7])] }
 
 stmt:
     expr SEMI                               { Expr $1 }

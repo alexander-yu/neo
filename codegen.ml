@@ -339,9 +339,6 @@ let translate (globals, functions) =
           let _ = L.build_cond_br bool_val body_bb merge_bb pred_builder in
           L.builder_at_end context merge_bb
 
-      (* Implement for loops as while loops! *)
-      | SFor(e1, e2, e3, body) ->
-          stmt scope builder (SBlock [SExpr e1 ; SWhile(e2, SBlock [body ; SExpr e3])])
       | _ -> make_err "not supported yet in stmt"
     in
 

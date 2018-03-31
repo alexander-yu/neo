@@ -243,12 +243,6 @@ let check (globals, functions) =
             let b1', ret1 = check_stmt scope b1 in
             let b2', ret2 = check_stmt scope b2 in
             (SIf(p', b1', b2'), ret1 || ret2)
-        | For(e1, e2, e3, st) ->
-            let e1' = check_expr scope e1 in
-            let e2' = check_bool_expr e2 in
-            let e3' = check_expr scope e3 in
-            let st', ret = check_stmt scope st in
-            (SFor(e1', e2', e3', st'), ret)
         | While(p, s) ->
             let p' = check_bool_expr p in
             let s', ret = check_stmt scope s in
