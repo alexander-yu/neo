@@ -107,10 +107,15 @@ let check (globals, functions) =
     match expr with
         Int_Lit  l -> (Int, SInt_Lit l)
       | Float_Lit l -> (Float, SFloat_Lit l)
-      | Bool_Lit l  -> (Bool, SBool_Lit l)
-      | Noexpr     -> (Void, SNoexpr)
-      | Id s       -> (type_of_identifier s scope, SId s)
+      | Bool_Lit l -> (Bool, SBool_Lit l)
+      | Noexpr -> (Void, SNoexpr)
+      | Id s -> (type_of_identifier s scope, SId s)
       | Matrix_Lit _ as m -> check_container_lit scope m
+      | Empty_Matrix_Lit(t, r, c) ->
+          let r' = check_expr scope r in
+          let c' = check_expr scope c in
+          if fst r' != Int || fst c' != Int then make_err "dimensions of empty matrix must be of type int"
+          else (Matrix t, SEmpty_Matrix_Lit(t, r', c'))
       | Assign(e1, e2) -> (* TODO: check e1 for index/string *)
           (
             match e1 with

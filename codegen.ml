@@ -81,15 +81,14 @@ let translate (globals, functions) =
   let makem_int_t = L.function_type (pointer_t (matrix_t A.Int)) [| pointer_t i32_t ; i32_t ; i32_t |] in
   let makem_int_func = L.declare_function "makem_int" makem_int_t the_module in
 
-  let typ_of_mat_typ = function
-    A.Matrix(t) -> t
-  | _ -> make_err "internal error: matrix sexpr should have matrix type"
-  in
+  let initm_int_t = L.function_type (pointer_t (matrix_t A.Int)) [| pointer_t i32_t ; i32_t ; i32_t |] in
+  let initm_int_func = L.declare_function "initm_int" initm_int_t the_module in
 
   (* Returns initial value for an empty declaration of a given type *)
   let init t = match t with
       A.Float -> L.const_float float_t 0.0
     | A.Int -> L.const_int i32_t 0
+    | A.Matrix t -> L.const_null (pointer_t (matrix_t t))
     | _ -> make_err "not supported yet in init"
   in
 
@@ -142,15 +141,36 @@ let translate (globals, functions) =
       )
     in
 
+    let make_empty_matrix typ rows cols builder =
+      let ltype = ltype_of_typ typ in
+      let size = L.build_mul rows cols "size" builder in
+      L.build_array_alloca ltype size "body" builder
+    in
+
     match e with
         SInt_Lit i -> L.const_int i32_t i
       | SBool_Lit b -> L.const_int i1_t (if b then 1 else 0)
       | SFloat_Lit l -> L.const_float_of_string float_t l
       | SMatrix_Lit l ->
           let raw_elements = Array.map (Array.map (expr scope builder)) l in
-          let typ = typ_of_mat_typ t in
+          let typ = A.typ_of_mat_typ t in
           let mat, rows, cols = make_matrix typ raw_elements builder in
-          L.build_call makem_int_func [| mat ; rows ; cols |] "makem_int" builder
+          (
+            match typ with
+                A.Int ->
+                  L.build_call makem_int_func [| mat ; rows ; cols |] "makem_int" builder
+              | _ -> make_err "not yet supported in expr"
+          )
+      | SEmpty_Matrix_Lit(t, r, c) ->
+          let rows = expr scope builder r in
+          let cols = expr scope builder c in
+          let mat = make_empty_matrix t rows cols builder in
+          (
+            match t with
+                A.Int ->
+                  L.build_call initm_int_func [| mat ; rows ; cols |] "initm_int" builder
+              | _ -> make_err "not yet supported in expr"
+          )
       | SNoexpr -> init t
       | SId s -> L.build_load (lookup s scope) s builder
       | SAssign(e1, e2) ->

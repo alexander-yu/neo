@@ -17,9 +17,9 @@ type expr =
   | Bool_Lit of bool
   | String_Lit of string
   | Array_Lit of expr array
-  | Empty_Array_Lit of expr
+  | Empty_Array_Lit of typ * expr
   | Matrix_Lit of expr array array
-  | Empty_Matrix_Lit of expr * expr
+  | Empty_Matrix_Lit of typ * expr * expr
   | Index_Expr of index_expr
   | Binop of expr * op * expr
   | Unop of uop * expr
@@ -63,6 +63,10 @@ type program = decl list * func_decl list
 
 let get_id_of_decl = function
   (_, _, s, _) -> s
+
+let typ_of_mat_typ typ = match typ with
+    Matrix(t) -> t
+  | _ -> raise (Failure "internal failure: typ_of_mat_typ was given a non-matrix")
 
 (* Pretty-printing functions *)
 
@@ -113,9 +117,9 @@ let rec string_of_expr = function
   | Bool_Lit false -> "False"
   | String_Lit l -> "\"" ^ l ^ "\""
   | Array_Lit l -> string_of_array l
-  | Empty_Array_Lit n -> "{|size: " ^ string_of_expr n ^ "|}"
+  | Empty_Array_Lit(t, n) -> "{|type: " ^ string_of_typ t ^ ", size: " ^ string_of_expr n ^ "|}"
   | Matrix_Lit l -> string_of_matrix l
-  | Empty_Matrix_Lit(r, c) -> "[dims: " ^ string_of_expr r ^ " x " ^
+  | Empty_Matrix_Lit(t, r, c) -> "[type: " ^ string_of_typ t ^ ", dims: " ^ string_of_expr r ^ " x " ^
       string_of_expr c ^ "]"
   | Index_Expr e -> string_of_index_expr e
   | Id s -> s

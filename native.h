@@ -7,3 +7,4 @@ typedef struct mat_int {
 void printm_int(mat_int_t *);
 
 mat_int_t * makem_int(int *, int, int);
+mat_int_t * initm_int(int *, int, int);

@@ -9,6 +9,7 @@ and sx =
   | SFloat_Lit of string
   | SBool_Lit of bool
   | SMatrix_Lit of sexpr array array
+  | SEmpty_Matrix_Lit of typ * sexpr * sexpr
   | SBinop of sexpr * op * sexpr
   | SUnop of uop * sexpr
   | SAssign of sexpr * sexpr
@@ -44,6 +45,8 @@ let rec string_of_sexpr (t, e) =
   | SBool_Lit false -> "False"
   | SFloat_Lit l -> l
   | SMatrix_Lit l -> string_of_smatrix l
+  | SEmpty_Matrix_Lit(t, r, c) -> "[type: " ^ string_of_typ t ^ ", dims: " ^
+      string_of_sexpr r ^ " x " ^ string_of_sexpr c ^ "]"
   | SBinop(e1, o, e2) ->
       string_of_sexpr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_sexpr e2
   | SUnop(o, e) -> string_of_uop o ^ string_of_sexpr e

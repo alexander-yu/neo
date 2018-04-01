@@ -1,7 +1,4 @@
-var int i = 0;
-
 void main() {
     print([[1, 2]]);
-    print(i);
     return;
 }

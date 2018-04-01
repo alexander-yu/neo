@@ -45,3 +45,11 @@ mat_int_t * makem_int(int *body, int rows, int cols) {
     mat->cols = cols;
     return mat;
 }
+
+mat_int_t * initm_int(int *body, int rows, int cols) {
+    int size = rows * cols;
+    for (int i = 0; i < size; i++) {
+        body[i] = 0;
+    }
+    return makem_int(body, rows, cols);
+}
