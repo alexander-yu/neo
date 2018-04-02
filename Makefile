@@ -4,6 +4,9 @@
 
 # Easiest way to build: using ocamlbuild, which in turn uses ocamlfind
 
+CC = gcc
+CFLAGS = -g -Wall
+
 .PHONY : all
 all : neo.native native.o
 
@@ -34,6 +37,9 @@ scanner.ml : scanner.mll
 
 parser.ml parser.mli : parser.mly
 	ocamlyacc parser.mly
+
+native.o :
+	$(CC) $(CFLAGS) -c native.c
 
 %.cmo : %.ml
 	ocamlc -c $<
