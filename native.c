@@ -2,54 +2,60 @@
 #include <stdlib.h>
 #include "native.h"
 
-void printm_int(mat_int_t *matrix) {
+void print_matrixi(matrixi_t *matrix) {
     printf("[");
-    int m = matrix->rows;
-    int n = matrix->cols;
+    int rows = matrix->rows;
+    int cols = matrix->cols;
     int **mat = matrix->body;
-    for (int i = 0; i < m; ++i) {
+    for (int i = 0; i < rows; ++i) {
         if (i == 0) {
             printf("[");
         } else {
             printf(" [");
         }
 
-        for (int j = 0; j < n; ++j) {
-            if (j == n - 1) {
+        for (int j = 0; j < cols; ++j) {
+            if (j == cols - 1) {
                 printf("%d", mat[i][j]);
             } else {
                 printf("%d, ", mat[i][j]);
             }
         }
 
-        if (i == m - 1) {
+        if (i == rows - 1) {
             printf("]");
         } else {
             printf("],\n");
         }
     }
     printf("]\n");
-    fflush(stdout);
 }
 
-mat_int_t * makem_int(int *body, int rows, int cols) {
-    mat_int_t *mat = malloc(sizeof(mat_int_t));
-    int **mat_body = malloc(rows * sizeof(int *));
-
-    for (int i = 0; i < rows; i++) {
-        mat_body[i] = &body[i * rows];
+void print_array(array_t *arr, void(*print_element)(void *)) {
+    printf("{|");
+    for (int i = 0; i < arr->length; i++) {
+        print_element(array_get(arr, i));
+        if (i != arr->length - 1) {
+            printf(", ");
+        }
     }
-
-    mat->body = mat_body;
-    mat->rows = rows;
-    mat->cols = cols;
-    return mat;
+    printf("|}\n");
 }
 
-mat_int_t * initm_int(int *body, int rows, int cols) {
-    int size = rows * cols;
-    for (int i = 0; i < size; i++) {
-        body[i] = 0;
+void init_matrixi (matrixi_t *mat) {
+    for (int i = 0; i < mat->rows; i++) {
+        for (int j = 0; j < mat->cols; j++) {
+            mat->body[i][j] = 0;
+        }
     }
-    return makem_int(body, rows, cols);
+}
+
+void set_ptrs_matrixi(matrixi_t *mat, int *body) {
+    for (int i = 0; i < mat->rows; i++) {
+        mat->body[i] = &body[i * mat->cols];
+    }
+}
+
+void *array_get(array_t *arr, int i) {
+    return &arr->body + i * arr->size;
 }

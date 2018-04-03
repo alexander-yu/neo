@@ -8,6 +8,8 @@ and sx =
   | SInt_Lit of int
   | SFloat_Lit of string
   | SBool_Lit of bool
+  | SArray_Lit of sexpr array
+  | SEmpty_Array_Lit of typ * sexpr
   | SMatrix_Lit of sexpr array array
   | SEmpty_Matrix_Lit of typ * sexpr * sexpr
   | SBinop of sexpr * op * sexpr
@@ -44,6 +46,9 @@ let rec string_of_sexpr (t, e) =
   | SBool_Lit true -> "True"
   | SBool_Lit false -> "False"
   | SFloat_Lit l -> l
+  | SArray_Lit l -> string_of_sarray l
+  | SEmpty_Array_Lit(t, n) -> "{|type: " ^ string_of_typ t ^ ", size: " ^
+      string_of_sexpr n ^ "|}"
   | SMatrix_Lit l -> string_of_smatrix l
   | SEmpty_Matrix_Lit(t, r, c) -> "[type: " ^ string_of_typ t ^ ", dims: " ^
       string_of_sexpr r ^ " x " ^ string_of_sexpr c ^ "]"
@@ -55,6 +60,9 @@ let rec string_of_sexpr (t, e) =
       f ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ ")"
   | SNoexpr -> ""
           ) ^ ")"
+
+and string_of_sarray arr =
+  "{|" ^ String.concat ", " (Array.to_list (Array.map string_of_sexpr arr)) ^ "|}"
 
 and string_of_srow row =
   "[" ^ String.concat ", " (Array.to_list (Array.map string_of_sexpr row)) ^ "]"

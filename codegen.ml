@@ -33,14 +33,56 @@ let translate (globals, functions) =
   (* Create an LLVM module -- this is a "container" into which we'll
     generate actual code *)
   let the_module = L.create_module context "Neo" in
+
   (* Add types to the context so we can use them in our LLVM code *)
-  let i32_t      = L.i32_type    context
+  let i64_t      = L.i64_type    context
+  and i32_t      = L.i32_type    context
   and i8_t       = L.i8_type     context
   and i1_t       = L.i1_type     context
   and float_t    = L.double_type context
   and void_t     = L.void_type   context
-  and array_t    = L.array_type
   and pointer_t  = L.pointer_type in
+
+  let matrixi_t =
+    let matrix_type = L.named_struct_type context "matrixi_t" in
+    let body_type = pointer_t (pointer_t i32_t) in
+    (* Struct: double pointer to first element, nrows, ncols *)
+    let _ = L.struct_set_body matrix_type [| body_type ; i32_t ; i32_t |] false in
+    matrix_type
+  in
+
+  let mat_float_t =
+    let matrix_type = L.named_struct_type context "mat_float_t" in
+    let body_type = pointer_t (pointer_t float_t) in
+    (* Struct: double pointer to first element, nrows, ncols *)
+    let _ = L.struct_set_body matrix_type [| body_type ; i32_t ; i32_t |] false in
+    matrix_type
+  in
+
+  let array_t =
+    let array_type = L.named_struct_type context "array_t" in
+    let body_type = pointer_t i8_t in
+    (* Struct: void pointer to first element, element size, length *)
+    let _ = L.struct_set_body array_type [| body_type ; i64_t ; i32_t |] false in
+    array_type
+  in
+
+  let matrix_t typ =
+    match typ with
+        A.Int -> matrixi_t
+      | A.Float -> mat_float_t
+      | _ -> make_err "internal error: semant should have rejected invalid matrix type"
+  in
+
+  let ltype_of_typ = function
+      A.Int      -> i32_t
+    | A.Bool     -> i1_t
+    | A.Float    -> float_t
+    | A.Void     -> void_t
+    | A.Array _  -> array_t
+    | A.Matrix t -> matrix_t t
+    | _ -> make_err "not supported yet in ltype_of_typ"
+  in
 
   (* We wrap the program's main function call inside of another
    * true system main function; we rename the program's main function
@@ -50,44 +92,24 @@ let translate (globals, functions) =
   let sys_main = "main" in
   let prog_main = "prog_main" in
 
-  (* Convert Neo types to LLVM types *)
-  let matrix_types = ref StringMap.empty in
-  let rec matrix_t typ =
-    let string_typ = A.string_of_typ typ in
-    try StringMap.find string_typ !matrix_types
-    with Not_found ->
-      let matrix_type = L.named_struct_type context ("matrix_t_" ^ string_typ) in
-      let ltype = ltype_of_typ typ in
-      let _ = L.struct_set_body matrix_type [| pointer_t (pointer_t ltype) ; i32_t ; i32_t |] false in
-      matrix_types := StringMap.add string_typ matrix_type !matrix_types;
-      matrix_type
-
-  and ltype_of_typ = function
-      A.Int      -> i32_t
-    | A.Bool     -> i1_t
-    | A.Float    -> float_t
-    | A.Void     -> void_t
-    | A.Matrix t -> matrix_t t
-    | _ -> make_err "not supported yet in ltype_of_typ"
-  in
-
   (* Built-in functions *)
   let printf_t : L.lltype = L.var_arg_function_type i32_t [| pointer_t i8_t |] in
   let printf_func : L.llvalue = L.declare_function "printf" printf_t the_module in
 
-  let printm_int_t = L.function_type void_t [| pointer_t (matrix_t A.Int) |] in
-  let printm_int_func = L.declare_function "printm_int" printm_int_t the_module in
+  let print_matrixi_t = L.function_type void_t [| pointer_t matrixi_t |] in
+  let print_matrixi_func = L.declare_function "print_matrixi" print_matrixi_t the_module in
 
-  let makem_int_t = L.function_type (pointer_t (matrix_t A.Int)) [| pointer_t i32_t ; i32_t ; i32_t |] in
-  let makem_int_func = L.declare_function "makem_int" makem_int_t the_module in
+  let init_matrixi_t = L.function_type void_t [| pointer_t matrixi_t |] in
+  let init_matrixi_func = L.declare_function "init_matrixi" init_matrixi_t the_module in
 
-  let initm_int_t = L.function_type (pointer_t (matrix_t A.Int)) [| pointer_t i32_t ; i32_t ; i32_t |] in
-  let initm_int_func = L.declare_function "initm_int" initm_int_t the_module in
+  let set_ptrs_matrixi_t = L.function_type void_t [| pointer_t matrixi_t ; pointer_t i32_t |] in
+  let set_ptrs_matrixi_func = L.declare_function "set_ptrs_matrixi" set_ptrs_matrixi_t the_module in
 
   (* Returns initial value for an empty declaration of a given type *)
   let init t = match t with
       A.Float -> L.const_float float_t 0.0
     | A.Int -> L.const_int i32_t 0
+    | A.Array _ -> L.const_null (pointer_t array_t)
     | A.Matrix t -> L.const_null (pointer_t (matrix_t t))
     | _ -> make_err "not supported yet in init"
   in
@@ -117,60 +139,137 @@ let translate (globals, functions) =
 
   (* Construct code for an expression; return its value *)
   let rec expr scope builder (t, e) =
-    let int_format_str = L.build_global_stringptr "%d\n" "fmt" builder
-    and float_format_str = L.build_global_stringptr "%g\n" "fmt" builder in
-
-    (* TODO: make sure to free any malloc'd matrices and move to stack var *)
-    let make_matrix typ raw_elements builder =
+    (* TODO: make sure to free any malloc'd arrays/matrices and move to stack var *)
+    let make_array typ length builder =
       let ltype = ltype_of_typ typ in
-      let rows = Array.length raw_elements in
-      let cols = Array.length raw_elements.(0) in
+      let size = L.size_of ltype in
 
-      (* Allocate and fill matrix contents *)
-      let raw_rows = Array.map (L.const_array ltype) raw_elements in
-      let raw_matrix = L.const_array (array_t ltype cols) raw_rows in
-      let body = L.build_alloca (array_t (array_t ltype cols) rows) "body" builder in
-      let _ = L.build_store raw_matrix body builder in
+      (* Allocate required space *)
+      let body_ptr = L.build_alloca i8_t "body_ptr" builder in
+      let arr_ptr = L.build_alloca array_t "arr_ptr" builder in
+
+      (* Set fields *)
+      let arr_body = L.build_struct_gep arr_ptr 0 "arr_body" builder in
+      let arr_size = L.build_struct_gep arr_ptr 1 "arr_size" builder in
+      let arr_length = L.build_struct_gep arr_ptr 2 "arr_length" builder in
+      let _ = L.build_store body_ptr arr_body builder in
+      let _ = L.build_store size arr_size builder in
+      let _ = L.build_store length arr_length builder in
+      arr_ptr
+    in
+
+    let make_array_lit typ raw_elements builder =
+      let ltype = ltype_of_typ typ in
+      let length = Array.length raw_elements in
+      let arr_ptr = make_array typ (L.const_int i32_t length) builder in
+
+      (* Allocate and fill array body *)
+      let raw_array = L.const_array ltype raw_elements in
+      let body = L.build_alloca (L.array_type ltype length) "body" builder in
+      let _ = L.build_store raw_array body builder in
       let body_ptr =
         L.build_in_bounds_gep body [| L.const_int i32_t 0 ; L.const_int i32_t 0 |] "body_ptr" builder
       in
-      (
-        L.build_bitcast body_ptr (pointer_t ltype) "body_ptr" builder,
-        L.const_int i32_t rows,
-        L.const_int i32_t cols
-      )
+
+      (* Cast body ptr to "void pointer", i.e. pointer to i8_t *)
+      let body_ptr = L.build_bitcast body_ptr (pointer_t i8_t) "body_ptr" builder in
+
+      (* Set body field *)
+      let arr_body = L.build_struct_gep arr_ptr 0 "arr_body" builder in
+      let _ = L.build_store body_ptr arr_body builder in
+      arr_ptr
+    in
+
+    let make_empty_array typ length builder =
+      let ltype = ltype_of_typ typ in
+      let arr_ptr = make_array typ length builder in
+
+      (* Allocate array contents *)
+      let body = L.build_array_alloca ltype length "body" builder in
+      let body_ptr =
+        L.build_in_bounds_gep body [| L.const_int i32_t 0 ; L.const_int i32_t 0 |] "body_ptr" builder
+      in
+
+      (* Cast body ptr to "void pointer", i.e. pointer to i8_t *)
+      let body_ptr = L.build_bitcast body_ptr (pointer_t i8_t) "body_ptr" builder in
+
+      (* Set body field *)
+      let arr_body = L.build_struct_gep arr_ptr 0 "arr_body" builder in
+      let _ = L.build_store body_ptr arr_body builder in
+      arr_ptr
+    in
+
+    let make_matrix typ rows cols builder =
+      let ltype = ltype_of_typ typ in
+
+      (* Allocate required space *)
+      let row_ptrs = L.build_array_alloca (pointer_t ltype) rows "row_ptrs" builder in
+      let mat_ptr = L.build_alloca (matrix_t typ) "mat_ptr" builder in
+
+      (* Set fields *)
+      let mat_body = L.build_struct_gep mat_ptr 0 "mat_body" builder in
+      let mat_rows = L.build_struct_gep mat_ptr 1 "mat_rows" builder in
+      let mat_cols = L.build_struct_gep mat_ptr 2 "mat_cols" builder in
+      let _ = L.build_store row_ptrs mat_body builder in
+      let _ = L.build_store rows mat_rows builder in
+      let _ = L.build_store cols mat_cols builder in
+      mat_ptr
+    in
+
+    let make_matrix_lit typ raw_elements builder =
+      let ltype = ltype_of_typ typ in
+      let rows = Array.length raw_elements in
+      let cols = Array.length raw_elements.(0) in
+      let mat_ptr = make_matrix typ (L.const_int i32_t rows) (L.const_int i32_t cols) builder in
+
+      (* Allocate and fill matrix body *)
+      let raw_rows = Array.map (L.const_array ltype) raw_elements in
+      let raw_matrix = L.const_array (L.array_type ltype cols) raw_rows in
+      let body = L.build_alloca (L.array_type (L.array_type ltype cols) rows) "body" builder in
+      let _ = L.build_store raw_matrix body builder in
+      let body_ptr =
+        L.build_in_bounds_gep body
+        [| L.const_int i32_t 0 ; L.const_int i32_t 0 ; L.const_int i32_t 0 |] "body_ptr" builder
+      in
+
+      (* Set body pointers *)
+      let _ = L.build_call set_ptrs_matrixi_func [| mat_ptr ; body_ptr |] "" builder in
+      mat_ptr
     in
 
     let make_empty_matrix typ rows cols builder =
       let ltype = ltype_of_typ typ in
       let size = L.build_mul rows cols "size" builder in
-      L.build_array_alloca ltype size "body" builder
+      let mat_ptr = make_matrix typ rows cols builder in
+
+      (* Allocate matrix body *)
+      let body_ptr = L.build_array_alloca ltype size "body_ptr" builder in
+
+      (* Set body pointers and fill matrix contents *)
+      let _ = L.build_call set_ptrs_matrixi_func [| mat_ptr ; body_ptr |] "" builder in
+      let _ = L.build_call init_matrixi_func [| mat_ptr |] "" builder in
+      mat_ptr
     in
 
     match e with
         SInt_Lit i -> L.const_int i32_t i
       | SBool_Lit b -> L.const_int i1_t (if b then 1 else 0)
       | SFloat_Lit l -> L.const_float_of_string float_t l
+      | SArray_Lit l ->
+          let raw_array = Array.map (expr scope builder) l in
+          let typ = A.typ_of_arr_typ t in
+          make_array_lit typ raw_array builder
+      | SEmpty_Array_Lit(t, n) ->
+          let length = expr scope builder n in
+          make_empty_array t length builder
       | SMatrix_Lit l ->
           let raw_elements = Array.map (Array.map (expr scope builder)) l in
           let typ = A.typ_of_mat_typ t in
-          let mat, rows, cols = make_matrix typ raw_elements builder in
-          (
-            match typ with
-                A.Int ->
-                  L.build_call makem_int_func [| mat ; rows ; cols |] "makem_int" builder
-              | _ -> make_err "not yet supported in expr"
-          )
+          make_matrix_lit typ raw_elements builder
       | SEmpty_Matrix_Lit(t, r, c) ->
           let rows = expr scope builder r in
           let cols = expr scope builder c in
-          let mat = make_empty_matrix t rows cols builder in
-          (
-            match t with
-                A.Int ->
-                  L.build_call initm_int_func [| mat ; rows ; cols |] "initm_int" builder
-              | _ -> make_err "not yet supported in expr"
-          )
+          make_empty_matrix t rows cols builder
       | SNoexpr -> init t
       | SId s -> L.build_load (lookup s scope) s builder
       | SAssign(e1, e2) ->
@@ -226,17 +325,21 @@ let translate (globals, functions) =
             | A.Not                  -> L.build_not) e' "tmp" builder
       | SCall("print", [e]) -> (
             match t with
-                A.Int | A.Bool -> L.build_call printf_func
+                A.Int | A.Bool ->
+                  let int_format_str = L.build_global_stringptr "%d\n" "fmt" builder in
+                  L.build_call printf_func
                   [| int_format_str ; (expr scope builder e) |] "printf" builder
-              | A.Matrix typ -> (
-                    let m = expr scope builder e in
+              | A.Matrix typ ->
+                  let m = expr scope builder e in
+                  (
                     match typ with
-                        A.Int -> L.build_call printm_int_func [| m |] "" builder
+                        A.Int -> L.build_call print_matrixi_func [| m |] "" builder
                       | _ -> make_err "not supported yet in print (matrix)"
                   )
               | _ -> make_err "not supported yet in print"
           )
       | SCall("printf", [e]) ->
+          let float_format_str = L.build_global_stringptr "%g\n" "fmt" builder in
           L.build_call printf_func [| float_format_str ; (expr scope builder e) |]
           "printf" builder
       | SCall(fname, args) ->

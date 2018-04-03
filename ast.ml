@@ -64,8 +64,12 @@ type program = decl list * func_decl list
 let get_id_of_decl = function
   (_, _, s, _) -> s
 
+let typ_of_arr_typ typ = match typ with
+    Array t -> t
+  | _ -> raise (Failure "internal failure: typ_of_array_typ was given a non-array")
+
 let typ_of_mat_typ typ = match typ with
-    Matrix(t) -> t
+    Matrix t -> t
   | _ -> raise (Failure "internal failure: typ_of_mat_typ was given a non-matrix")
 
 (* Pretty-printing functions *)
@@ -105,8 +109,8 @@ let rec string_of_typ = function
 | String -> "string"
 | Void -> "void"
 | Exc -> "exc"
-| Array(t) -> "array<" ^ string_of_typ t ^ ">"
-| Matrix(t) -> "matrix<"  ^ string_of_typ t ^ ">"
+| Array t -> "array<" ^ string_of_typ t ^ ">"
+| Matrix t -> "matrix<"  ^ string_of_typ t ^ ">"
 | Func(args, ret) -> "func<(" ^ String.concat ", " (List.map string_of_typ args) ^
     "):" ^ string_of_typ ret ^ ">"
 

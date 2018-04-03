@@ -136,7 +136,8 @@ decl:
   | VAR typ ID ASSIGN expr               { (Var, $2, $3, $5) }
   | CREATE typ ID                        { (Create, $2, $3, Noexpr) }
   | CREATE typ ID ASSIGN expr            { (Create, $2, $3, $5) }
-  | CREATE typ ID LBRACKET expr RBRACKET { (Create, $2, $3, Empty_Array_Lit($2, $5)) }
+  | CREATE typ ID LBRACKET expr RBRACKET { (Create, $2, $3,
+                                            Empty_Array_Lit(typ_of_arr_typ $2, $5)) }
   | CREATE typ ID LBRACKET expr RBRACKET LBRACKET expr RBRACKET
                                          { (Create, $2, $3,
                                             Empty_Matrix_Lit(typ_of_mat_typ $2, $5, $8)) }

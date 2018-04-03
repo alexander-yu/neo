@@ -40,28 +40,15 @@ let check (globals, functions) =
   let add_decl scope name typ =
     let built_in_err = "identifier " ^ name ^ " may not be defined" in
     let dup_err = "duplicate identifier " ^ name in
+
     (* Cannot redefine built-ins *)
     let is_built_in = StringMap.mem name built_in_decls in
     let _ = if is_built_in then make_err built_in_err in
+
     (* Cannot declare duplicate in same scope *)
     let is_dup = StringMap.mem name scope.variables in
     let _ = if is_dup then make_err dup_err in
     { scope with variables = StringMap.add name typ scope.variables }
-  in
-
-  let add_func_decl scope f =
-    let typ_of_func f =
-      let get_decl_type (_, typ, _, _) = typ in
-      let arg_types = List.map get_decl_type f.formals in
-      Func(arg_types, f.typ)
-    in
-    let typ = typ_of_func f in
-    add_decl scope f.fname typ
-  in
-
-  let add_v_decl scope decl =
-    let _, t, s, _ = decl in
-    add_decl scope s t
   in
 
   let rec type_of_identifier name scope =
@@ -77,9 +64,12 @@ let check (globals, functions) =
     (* check all elements in container literal have valid type and have valid sizes *)
     let check_container_lit scope e =
       let check_size e = match e with
-          Matrix_Lit l ->
+          Array_Lit l ->
+            if Array.length(l) > 0 then e
+            else make_err "array must have non-zero size"
+        | Matrix_Lit l ->
             if Array.length(l) > 0 && Array.length(l.(0)) > 0 then e
-            else make_err (string_of_matrix l ^ " must have non-zero dimensions")
+            else make_err "matrix must have non-zero dimensions"
         | _ -> make_err (string_of_expr e ^ " is not a supported container type")
       in
 
@@ -92,7 +82,10 @@ let check (globals, functions) =
 
       let _ = check_size e in
       match e with
-          Matrix_Lit l ->
+          Array_Lit l ->
+            let t = fst (check_expr scope l.(0)) in
+            (Array t, SArray_Lit(Array.map (check_equal_type t) l))
+        | Matrix_Lit l ->
             let t = fst (check_expr scope l.(0).(0)) in
             (Matrix t, SMatrix_Lit(Array.map (Array.map (check_equal_type t)) l))
         | _ -> make_err "internal error: check_size should have rejected"
@@ -110,6 +103,11 @@ let check (globals, functions) =
       | Bool_Lit l -> (Bool, SBool_Lit l)
       | Noexpr -> (Void, SNoexpr)
       | Id s -> (type_of_identifier s scope, SId s)
+      | Array_Lit _ as a -> check_container_lit scope a
+      | Empty_Array_Lit(t, n) ->
+          let n' = check_expr scope n in
+          if fst n' != Int then make_err "size of empty array must be of type int"
+          else (Array t, SEmpty_Array_Lit(t, n'))
       | Matrix_Lit _ as m -> check_container_lit scope m
       | Empty_Matrix_Lit(t, r, c) ->
           let r' = check_expr scope r in
@@ -190,24 +188,28 @@ let check (globals, functions) =
   in
 
   (* Return semantically checked declaration *)
-  let check_decl scope decl =
-    let check_decl_type t =
+  let check_v_decl (scope, checked) decl =
+    let check_v_decl_type t =
       let err = "variable cannot have type " ^ string_of_typ t in
       match t with
           Void | Func(_, _) -> make_err err
         | _ -> ()
     in
+    let add_v_decl scope decl =
+      let _, t, s, _ = decl in
+      add_decl scope s t
+    in
     let kw, t, s, expr = decl in
 
     (* Check decl type is valid *)
-    let _ = check_decl_type t in
+    let _ = check_v_decl_type t in
 
     (* Check keyword matches type *)
     let expr_kw = match t with
         Int | Bool | Float | String -> Var
       | Exc -> Exception
       | Array _ | Matrix _ -> Create
-      | _ -> make_err "internal error: check_decl_type should have rejected"
+      | _ -> make_err "internal error: check_v_decl_type should have rejected"
     in
     let kw_err = "cannot declare type " ^
       string_of_typ t ^ " with keyword " ^ string_of_decl_kw kw
@@ -221,23 +223,32 @@ let check (globals, functions) =
       " but initialized with type " ^ string_of_typ et
     in
     let _ = if expr != Noexpr && t <> et then make_err typ_err in
-    (kw, t, s, sexpr)
+
+    (* Add decl to scope *)
+    let scope = add_v_decl scope decl in
+
+    (* After type check, we explicitly add decl's type to the sexpr,
+     * to handle the case where we have a void initialization (i.e.
+     * declaration but not initialization) *)
+    (scope, (kw, t, s, (t, snd sexpr)) :: checked)
   in
 
   (* Return semantically checked function *)
-  let check_function parent_scope func =
+  let check_func_decl (parent_scope, checked) func =
+    let add_func_decl scope f =
+      let typ_of_func f =
+        let get_decl_type (_, typ, _, _) = typ in
+        let arg_types = List.map get_decl_type f.formals in
+        Func(arg_types, f.typ)
+      in
+      let typ = typ_of_func f in
+      add_decl scope f.fname typ
+    in
     let check_formal_type formal =
       let _, t, _, _ = formal in
       let err = "function argument cannot have type " ^ string_of_typ t in
       if t = Exc || t = Void then make_err err
     in
-    let _ = List.iter check_formal_type func.formals in
-
-    (* Build local symbol table of variables for this function *)
-    let scope = { variables = StringMap.empty; parent = Some parent_scope } in
-    let formals' = List.map (check_decl scope) func.formals in
-    let scope = List.fold_left add_v_decl scope formals' in
-
     (* Return a semantically-checked statement, along with a bool
      * indicating if there was at least one return statement
      * (somewhere in the statement itself *)
@@ -283,12 +294,24 @@ let check (globals, functions) =
             (SBlock sl', ret)
         | _ -> make_err "not supported yet in check_stmt"
     in
-    (* body of check_function *)
-    { styp = func.typ;
-      (* Rename main function to prog_main *)
-      sfname = if func.fname = sys_main then prog_main else func.fname;
-      sformals = formals';
-      sbody = match check_stmt scope (Block func.body) with
+
+    (* Rename main function to prog_main *)
+    let fname = if func.fname = sys_main then prog_main else func.fname in
+    let func = { func with fname = fname } in
+
+    (* Add function decl to parent scope *)
+    let parent_scope = add_func_decl parent_scope func in
+
+    (* Check formals have valid type *)
+    let _ = List.iter check_formal_type func.formals in
+
+    (* Build local symbol table of variables for this function *)
+    let scope = { variables = StringMap.empty; parent = Some parent_scope } in
+    let scope, formals' = List.fold_left check_v_decl (scope, []) func.formals in
+
+    (* Check body *)
+    let body =
+      match check_stmt scope (Block func.body) with
           SBlock sl, true -> sl
         | SBlock sl, false ->
             let err = "function has return type " ^ string_of_typ func.typ
@@ -298,22 +321,32 @@ let check (globals, functions) =
         | _ ->
             let err = "internal error: block didn't become a block?" in
             make_err err
-    }
+    in
+    (
+      (* Return to parent scope *)
+      parent_scope,
+      (* body of check_func_decl *)
+      { styp = func.typ;
+        sfname = func.fname;
+        sformals = formals';
+        sbody = body;
+      } :: checked
+    )
   in
 
-  (* Collect globals and function names into a global symbol table *)
   let global_scope = { variables = built_in_decls; parent = None } in
-  let global_scope = List.fold_left add_v_decl global_scope globals in
-  let global_scope = List.fold_left add_func_decl global_scope functions in
+  let global_scope, globals' = List.fold_left check_v_decl (global_scope, []) globals in
+  let global_scope, functions' = List.fold_left check_func_decl (global_scope, []) functions in
 
   (* Ensure "main" is defined *)
   let _ =
-    let typ = type_of_identifier "main" global_scope in
-    match typ with
-        Func([], Void) -> typ
-      | _ -> make_err "must have a main function of type func<():void>"
+    let main_err = "must have a main function of type func<():void>" in
+    try
+      let typ = type_of_identifier prog_main global_scope in
+      match typ with
+          Func([], Void) -> typ
+        | _ -> make_err main_err
+    with Not_found -> make_err main_err
   in
 
-  let globals' = List.map (check_decl global_scope) globals in
-  let functions' = List.map (check_function global_scope) functions in
-  (globals', functions')
+  (List.rev globals', List.rev functions')
