@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "native.h"
 
-void print_matrixi(matrixi_t *matrix) {
+void print_matrixi(matrixi_t *matrix, bool flat) {
     printf("[");
     int rows = matrix->rows;
     int cols = matrix->cols;
@@ -25,21 +25,30 @@ void print_matrixi(matrixi_t *matrix) {
         if (i == rows - 1) {
             printf("]");
         } else {
-            printf("],\n");
+            printf("],");
+            if (!flat) {
+                printf("\n");
+            }
         }
     }
-    printf("]\n");
+    printf("]");
+    if (!flat) {
+        printf("\n");
+    }
 }
 
-void print_array(array_t *arr, void(*print_element)(void *)) {
+void print_array(array_t *arr, void(*print_element)(void *), bool flat) {
     printf("{|");
     for (int i = 0; i < arr->length; i++) {
-        print_element(array_get(arr, i));
+        print_element(arr->body[i]);
         if (i != arr->length - 1) {
             printf(", ");
         }
     }
-    printf("|}\n");
+    printf("|}");
+    if (!flat) {
+        printf("\n");
+    }
 }
 
 void init_matrixi (matrixi_t *mat) {
@@ -56,6 +65,8 @@ void set_ptrs_matrixi(matrixi_t *mat, int *body) {
     }
 }
 
-void *array_get(array_t *arr, int i) {
-    return &arr->body + i * arr->size;
+void set_ptrs_array(array_t *arr, void *body) {
+    for (int i = 0; i < arr->length; i++) {
+        arr->body[i] = (void *)((char *)body + i * arr->size);
+    }
 }

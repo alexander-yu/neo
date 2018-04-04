@@ -4,6 +4,7 @@ open Ast
 open Sast
 
 module StringMap = Map.Make(String)
+module TypeSet = Set.Make(struct type t = typ let compare = compare end)
 
 (* Semantic checking of the AST. Returns an SAST if successful,
    throws an exception if something is wrong.
@@ -13,6 +14,11 @@ module StringMap = Map.Make(String)
 type symbol_table = {
   variables : typ StringMap.t;
   parent : symbol_table option
+}
+
+type translation_environment = {
+  scope : symbol_table;
+  array_types : TypeSet.t
 }
 
 let make_err err = raise (Failure err)
@@ -25,8 +31,7 @@ let check (globals, functions) =
       StringMap.add name f_type map
     in
     List.fold_left add_built_in_decl StringMap.empty [
-      ("print", Void);
-      ("printf", Void)
+      ("print", Void)
     ]
   in
 
@@ -60,9 +65,9 @@ let check (globals, functions) =
   in
 
   (* Return a semantically-checked expression *)
-  let rec check_expr scope expr =
+  let rec check_expr env expr =
     (* check all elements in container literal have valid type and have valid sizes *)
-    let check_container_lit scope e =
+    let check_container_lit env e =
       let check_size e = match e with
           Array_Lit l ->
             if Array.length(l) > 0 then e
@@ -73,21 +78,39 @@ let check (globals, functions) =
         | _ -> make_err (string_of_expr e ^ " is not a supported container type")
       in
 
-      let check_equal_type t e =
-        let t', e' = check_expr scope e in
-        if t = t' then (t', e')
+      (* Note: this returns a reversed list *)
+      let check_equal_type t (env, checked) e =
+        let env, (t', e') = check_expr env e in
+        if t = t' then (env, (t', e') :: checked)
         else make_err ("container expected type " ^ string_of_typ t ^
           " but saw type " ^ string_of_typ t')
+      in
+
+      (* Note: this returns a reversed list of reversed lists *)
+      let check_row_equal_type t (env, checked) row =
+        let env, checked_row = Array.fold_left (check_equal_type t) (env, []) row in
+        (env, checked_row :: checked)
       in
 
       let _ = check_size e in
       match e with
           Array_Lit l ->
-            let t = fst (check_expr scope l.(0)) in
-            (Array t, SArray_Lit(Array.map (check_equal_type t) l))
+            let env, sexpr = check_expr env l.(0) in
+            let t = fst sexpr in
+            let env, checked = Array.fold_left (check_equal_type t) (env, []) l in
+            let checked = Array.of_list (List.rev checked) in
+            (* Add array type to set *)
+            let array_types = TypeSet.add (Array t) env.array_types in
+            let env = { env with array_types } in
+            (env, (Array t, SArray_Lit(checked)))
         | Matrix_Lit l ->
-            let t = fst (check_expr scope l.(0).(0)) in
-            (Matrix t, SMatrix_Lit(Array.map (Array.map (check_equal_type t)) l))
+            let env, sexpr = check_expr env l.(0).(0) in
+            let t = fst sexpr in
+            let env, checked = Array.fold_left (check_row_equal_type t) (env, []) l in
+            let checked = Array.of_list (List.rev checked) in
+            let checked = Array.map List.rev checked in
+            let checked = Array.map Array.of_list checked in
+            (env, (Matrix t, SMatrix_Lit(checked)))
         | _ -> make_err "internal error: check_size should have rejected"
     in
 
@@ -98,36 +121,40 @@ let check (globals, functions) =
     in
 
     match expr with
-        Int_Lit  l -> (Int, SInt_Lit l)
-      | Float_Lit l -> (Float, SFloat_Lit l)
-      | Bool_Lit l -> (Bool, SBool_Lit l)
-      | Noexpr -> (Void, SNoexpr)
-      | Id s -> (type_of_identifier s scope, SId s)
-      | Array_Lit _ as a -> check_container_lit scope a
-      | Empty_Array_Lit(t, n) ->
-          let n' = check_expr scope n in
+        Int_Lit  l -> (env, (Int, SInt_Lit l))
+      | Float_Lit l -> (env, (Float, SFloat_Lit l))
+      | Bool_Lit l -> (env, (Bool, SBool_Lit l))
+      | Noexpr -> (env, (Void, SNoexpr))
+      | Id s -> (env, (type_of_identifier s env.scope, SId s))
+      | Array_Lit _ as a ->
+          check_container_lit env a
+      | Empty_Array(t, n) ->
+          let env, n' = check_expr env n in
           if fst n' != Int then make_err "size of empty array must be of type int"
-          else (Array t, SEmpty_Array_Lit(t, n'))
-      | Matrix_Lit _ as m -> check_container_lit scope m
-      | Empty_Matrix_Lit(t, r, c) ->
-          let r' = check_expr scope r in
-          let c' = check_expr scope c in
+          else (env, (Array t, SEmpty_Array(t, n')))
+      | Matrix_Lit _ as m -> check_container_lit env m
+      | Empty_Matrix(t, r, c) ->
+          let env, r' = check_expr env r in
+          let env, c' = check_expr env c in
           if fst r' != Int || fst c' != Int then make_err "dimensions of empty matrix must be of type int"
-          else (Matrix t, SEmpty_Matrix_Lit(t, r', c'))
+          else (env, (Matrix t, SEmpty_Matrix(t, r', c')))
       | Assign(e1, e2) -> (* TODO: check e1 for index/string *)
           (
             match e1 with
                 Id s ->
-                  let lt = type_of_identifier s scope
-                  and (rt, e') = check_expr scope e2 in
+                  let lt = type_of_identifier s env.scope
+                  and env, (rt, e') = check_expr env e2 in
                   let err = "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ string_of_expr expr
                   in
-                  (check_assign lt rt err, SAssign(check_expr scope e1, (rt, e')))
+                  (* env not needed here; it won't be modified since
+                   * call to print isn't a valid assignee *)
+                  let _, sexpr = check_expr env e1 in
+                  (env, (check_assign lt rt err, SAssign(sexpr, (rt, e'))))
               | _ -> make_err "not supported yet in assign"
           )
       | Unop(op, e) ->
-          let t, e' = check_expr scope e in
+          let env, (t, e') = check_expr env e in
           let ty = match op with
               Neg when t = Int || t = Float -> t
             | Not when t = Bool -> Bool
@@ -135,10 +162,10 @@ let check (globals, functions) =
                 string_of_uop op ^ string_of_typ t ^
                 " in " ^ string_of_expr expr)
           in
-          (ty, SUnop(op, (t, e')))
+          (env, (ty, SUnop(op, (t, e'))))
       | Binop(e1, op, e2) ->
-          let t1, e1' = check_expr scope e1
-          and t2, e2' = check_expr scope e2 in
+          let env, (t1, e1') = check_expr env e1 in
+          let env, (t2, e2') = check_expr env e2 in
           (* All binary operators require operands of the same type *)
           let same = t1 = t2 in
           (* Determine expression type based on operator and operand types *)
@@ -152,43 +179,46 @@ let check (globals, functions) =
                 string_of_typ t1 ^ " " ^ string_of_op op ^ " " ^
                 string_of_typ t2 ^ " in " ^ string_of_expr expr)
           in
-          (ty, SBinop((t1, e1'), op, (t2, e2')))
+          (env, (ty, SBinop((t1, e1'), op, (t2, e2'))))
         | Call("print", args) ->
             if List.length args != 1 then make_err "expecting 1 argument in print"
             else
-              let arg = List.hd (List.map (check_expr scope) args) in
+              let env, arg = List.hd (List.map (check_expr env) args) in
               let ty = fst arg in
               (
                 match ty with
-                    Int | Bool | Matrix _ -> (ty, SCall("print", [arg]))
+                    Int | Bool | Matrix _ -> (env, (ty, SCall("print", [arg])))
+                  | Array _ -> (env, (ty, SCall("print", [arg])))
                   | _ -> make_err ("type " ^ string_of_typ ty ^ " not supported by print")
               )
         | Call(fname, args) as call ->
-            let typ = type_of_identifier fname scope in
+            let typ = type_of_identifier fname env.scope in
             let formals, return_type = match typ with
                 Func(formals, return_type) -> (formals, return_type)
               | _ -> make_err (fname ^ " is not a function")
             in
             let param_length = List.length formals in
-              if List.length args != param_length then
-                make_err ("expecting " ^ string_of_int param_length ^
-                  " arguments in " ^ string_of_expr call)
-              else
-                let check_arg arg_type arg_expr =
-                let expr_type, arg' = check_expr scope arg_expr in
+            if List.length args != param_length then
+              make_err ("expecting " ^ string_of_int param_length ^
+                " arguments in " ^ string_of_expr call)
+            else
+              let check_arg arg_type arg_expr =
+                (* We can ignore env; array types will be
+                 * found when processing the function formals *)
+                let _, (expr_type, arg') = check_expr env arg_expr in
                 let err = "illegal argument found " ^ string_of_typ expr_type ^
                   " expected " ^ string_of_typ arg_type ^ " in " ^
                   string_of_expr arg_expr
                 in
                 (check_assign arg_type expr_type err, arg')
-            in
-            let args' = List.map2 check_arg formals args in
-            (return_type, SCall(fname, args'))
+              in
+              let args' = List.map2 check_arg formals args in
+              (env, (return_type, SCall(fname, args')))
         | _ -> make_err "not supported yet in check_expr"
   in
 
   (* Return semantically checked declaration *)
-  let check_v_decl (scope, checked) decl =
+  let check_v_decl (env, checked) decl =
     let check_v_decl_type t =
       let err = "variable cannot have type " ^ string_of_typ t in
       match t with
@@ -217,7 +247,7 @@ let check (globals, functions) =
     let _ = if kw != expr_kw then make_err kw_err in
 
     (* Check initialization type is valid *)
-    let sexpr = check_expr scope expr in
+    let env, sexpr = check_expr env expr in
     let et = fst sexpr in
     let typ_err = "declared type " ^ string_of_typ t ^
       " but initialized with type " ^ string_of_typ et
@@ -225,16 +255,22 @@ let check (globals, functions) =
     let _ = if expr != Noexpr && t <> et then make_err typ_err in
 
     (* Add decl to scope *)
-    let scope = add_v_decl scope decl in
+    let scope = add_v_decl env.scope decl in
+
+    (* Add array type to set if we declared an array type *)
+    let array_types = match t with
+        Array _ -> TypeSet.add t env.array_types
+      | _ -> env.array_types
+    in
 
     (* After type check, we explicitly add decl's type to the sexpr,
      * to handle the case where we have a void initialization (i.e.
      * declaration but not initialization) *)
-    (scope, (kw, t, s, (t, snd sexpr)) :: checked)
+    ({ scope ; array_types }, (kw, t, s, (t, snd sexpr)) :: checked)
   in
 
   (* Return semantically checked function *)
-  let check_func_decl (parent_scope, checked) func =
+  let check_func_decl (env, checked) func =
     let add_func_decl scope f =
       let typ_of_func f =
         let get_decl_type (_, typ, _, _) = typ in
@@ -252,54 +288,59 @@ let check (globals, functions) =
     (* Return a semantically-checked statement, along with a bool
      * indicating if there was at least one return statement
      * (somewhere in the statement itself *)
-    let rec check_stmt scope stmt =
-      let check_bool_expr e =
-        let t', e' = check_expr scope e
+    let rec check_stmt env stmt =
+      let check_bool_expr env e =
+        let env, (t', e') = check_expr env e
         and err = "expected Boolean expression in " ^ string_of_expr e
         in
-        if t' != Bool then make_err err else (t', e')
+        if t' != Bool then make_err err else (env, (t', e'))
       in
       match stmt with
-          Expr e -> (SExpr(check_expr scope e), false)
+          Expr e ->
+            let env, sexpr = check_expr env e in
+            (env, SExpr(sexpr), false)
         | If(p, b1, b2) ->
-            let p' = check_bool_expr p in
-            let b1', ret1 = check_stmt scope b1 in
-            let b2', ret2 = check_stmt scope b2 in
-            (SIf(p', b1', b2'), ret1 || ret2)
+            let env, p' = check_bool_expr env p in
+            let env, b1', ret1 = check_stmt env b1 in
+            let env, b2', ret2 = check_stmt env b2 in
+            (env, SIf(p', b1', b2'), ret1 || ret2)
         | While(p, s) ->
-            let p' = check_bool_expr p in
-            let s', ret = check_stmt scope s in
-            (SWhile(p', s'), ret)
+            let env, p' = check_bool_expr env p in
+            let env, s', ret = check_stmt env s in
+            (env, SWhile(p', s'), ret)
         | Return e ->
-            let t, e' = check_expr scope e in
-            if t = func.typ then (SReturn(t, e'), true)
+            let env, (t, e') = check_expr env e in
+            if t = func.typ then (env, SReturn(t, e'), true)
             else make_err ("return gives " ^ string_of_typ t ^ " expected " ^
               string_of_typ func.typ ^ " in " ^ string_of_expr e)
         (* A block is correct if each statement is correct and nothing
         * follows any return statement. Blocks define their own scope. *)
         | Block sl ->
-            let scope = { variables = StringMap.empty; parent = Some scope } in
-            let rec check_stmt_list = function
+            let parent_scope = env.scope in
+            let scope = { variables = StringMap.empty; parent = Some parent_scope } in
+            let rec check_stmt_list env = function
                 [Return _ as s] ->
-                  let s', ret = check_stmt scope s in
-                  ([s'], ret)
+                  let env, s', ret = check_stmt { env with scope } s in
+                  (env, [s'], ret)
               | Return _ :: _ -> make_err "nothing may follow a return"
               | s :: ss ->
-                  let s', ret1 = check_stmt scope s in
-                  let ss', ret2 = check_stmt_list ss in
-                  (s' :: ss', ret1 || ret2)
-              | [] -> ([], false)
+                  let env, s', ret1 = check_stmt env s in
+                  let env, ss', ret2 = check_stmt_list env ss in
+                  (env, s' :: ss', ret1 || ret2)
+              | [] -> (env, [], false)
             in
-            let sl', ret = check_stmt_list sl in
-            (SBlock sl', ret)
+            let env, sl', ret = check_stmt_list env sl in
+            (* Return to parent scope *)
+            ({ env with scope = parent_scope }, SBlock sl', ret)
         | _ -> make_err "not supported yet in check_stmt"
     in
 
     (* Rename main function to prog_main *)
     let fname = if func.fname = sys_main then prog_main else func.fname in
-    let func = { func with fname = fname } in
+    let func = { func with fname } in
 
     (* Add function decl to parent scope *)
+    let parent_scope = env.scope in
     let parent_scope = add_func_decl parent_scope func in
 
     (* Check formals have valid type *)
@@ -307,24 +348,25 @@ let check (globals, functions) =
 
     (* Build local symbol table of variables for this function *)
     let scope = { variables = StringMap.empty; parent = Some parent_scope } in
-    let scope, formals' = List.fold_left check_v_decl (scope, []) func.formals in
+    let env = { env with scope } in
+    let env, formals' = List.fold_left check_v_decl (env, []) func.formals in
 
     (* Check body *)
-    let body =
-      match check_stmt scope (Block func.body) with
-          SBlock sl, true -> sl
-        | SBlock sl, false ->
+    let env, body =
+      match check_stmt env (Block func.body) with
+          env, SBlock sl, true -> (env, sl)
+        | env, SBlock sl, false ->
             let err = "function has return type " ^ string_of_typ func.typ
               ^ " but no return statement found"
             in
-            if func.typ != Void then make_err err else sl
+            if func.typ != Void then make_err err else (env, sl)
         | _ ->
             let err = "internal error: block didn't become a block?" in
             make_err err
     in
     (
       (* Return to parent scope *)
-      parent_scope,
+      { env with scope = parent_scope },
       (* body of check_func_decl *)
       { styp = func.typ;
         sfname = func.fname;
@@ -335,18 +377,20 @@ let check (globals, functions) =
   in
 
   let global_scope = { variables = built_in_decls; parent = None } in
-  let global_scope, globals' = List.fold_left check_v_decl (global_scope, []) globals in
-  let global_scope, functions' = List.fold_left check_func_decl (global_scope, []) functions in
+  let env = { scope = global_scope; array_types = TypeSet.empty } in
+  let env, globals' = List.fold_left check_v_decl (env, []) globals in
+  let env, functions' = List.fold_left check_func_decl (env, []) functions in
 
   (* Ensure "main" is defined *)
   let _ =
     let main_err = "must have a main function of type func<():void>" in
     try
-      let typ = type_of_identifier prog_main global_scope in
+      let typ = type_of_identifier prog_main env.scope in
       match typ with
           Func([], Void) -> typ
         | _ -> make_err main_err
     with Not_found -> make_err main_err
   in
 
-  (List.rev globals', List.rev functions')
+  let program = (List.rev globals', List.rev functions') in
+  (env.array_types, program)

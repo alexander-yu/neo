@@ -17,9 +17,9 @@ type expr =
   | Bool_Lit of bool
   | String_Lit of string
   | Array_Lit of expr array
-  | Empty_Array_Lit of typ * expr
+  | Empty_Array of typ * expr
   | Matrix_Lit of expr array array
-  | Empty_Matrix_Lit of typ * expr * expr
+  | Empty_Matrix of typ * expr * expr
   | Index_Expr of index_expr
   | Binop of expr * op * expr
   | Unop of uop * expr
@@ -121,9 +121,9 @@ let rec string_of_expr = function
   | Bool_Lit false -> "False"
   | String_Lit l -> "\"" ^ l ^ "\""
   | Array_Lit l -> string_of_array l
-  | Empty_Array_Lit(t, n) -> "{|type: " ^ string_of_typ t ^ ", size: " ^ string_of_expr n ^ "|}"
+  | Empty_Array(t, n) -> "{|type: " ^ string_of_typ t ^ ", size: " ^ string_of_expr n ^ "|}"
   | Matrix_Lit l -> string_of_matrix l
-  | Empty_Matrix_Lit(t, r, c) -> "[type: " ^ string_of_typ t ^ ", dims: " ^ string_of_expr r ^ " x " ^
+  | Empty_Matrix(t, r, c) -> "[type: " ^ string_of_typ t ^ ", dims: " ^ string_of_expr r ^ " x " ^
       string_of_expr c ^ "]"
   | Index_Expr e -> string_of_index_expr e
   | Id s -> s
