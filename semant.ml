@@ -126,6 +126,7 @@ let check (globals, functions) =
       | Bool_Lit l -> (env, (Bool, SBool_Lit l))
       | Noexpr -> (env, (Void, SNoexpr))
       | Id s -> (env, (type_of_identifier s env.scope, SId s))
+      | String_Lit s -> (env, (String, SString_Lit s))
       | Array_Lit _ as a ->
           check_container_lit env a
       | Empty_Array(t, n) ->
@@ -187,8 +188,8 @@ let check (globals, functions) =
               let ty = fst arg in
               (
                 match ty with
-                    Int | Bool | Matrix _ -> (env, (ty, SCall("print", [arg])))
-                  | Array _ -> (env, (ty, SCall("print", [arg])))
+                    Int | Bool | String | Matrix _ | Array _ ->
+                      (env, (ty, SCall("print", [arg])))
                   | _ -> make_err ("type " ^ string_of_typ ty ^ " not supported by print")
               )
         | Call(fname, args) as call ->

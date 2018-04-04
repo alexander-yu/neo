@@ -8,6 +8,7 @@ and sx =
   | SInt_Lit of int
   | SFloat_Lit of string
   | SBool_Lit of bool
+  | SString_Lit of string
   | SArray_Lit of sexpr array
   | SEmpty_Array of typ * sexpr
   | SMatrix_Lit of sexpr array array
@@ -46,6 +47,7 @@ let rec string_of_sexpr (t, e) =
   | SBool_Lit true -> "True"
   | SBool_Lit false -> "False"
   | SFloat_Lit l -> l
+  | SString_Lit s -> s
   | SArray_Lit l -> string_of_sarray l
   | SEmpty_Array(t, n) -> "{|type: " ^ string_of_typ t ^ ", size: " ^
       string_of_sexpr n ^ "|}"

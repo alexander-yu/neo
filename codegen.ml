@@ -83,6 +83,7 @@ let translate (array_types, program) =
     | A.Bool     -> i1_t
     | A.Float    -> float_t
     | A.Void     -> void_t
+    | A.String   -> pointer_t i8_t
     | A.Array _  -> pointer_t array_t
     | A.Matrix t -> pointer_t (matrix_t t)
     | _ -> make_err "not supported yet in ltype_of_typ"
@@ -102,10 +103,9 @@ let translate (array_types, program) =
   let main_builder = L.builder_at_end context (L.entry_block main) in
 
   (* Built-in format strings *)
-  let inline_int_format_str = L.build_global_stringptr "%d" "fmt" main_builder in
-  let int_format_str = L.build_global_stringptr "%d\n" "fmt" main_builder in
-  let inline_float_format_str = L.build_global_stringptr "%g" "fmt" main_builder in
-  let float_format_str = L.build_global_stringptr "%g\n" "fmt" main_builder in
+  let empty_str = L.build_global_stringptr "" "empty_string" main_builder in
+  let int_format_str = L.build_global_stringptr "%d" "fmt" main_builder in
+  let float_format_str = L.build_global_stringptr "%g" "fmt" main_builder in
 
   (* Declare built-in functions *)
   let printf_t = L.var_arg_function_type i32_t [| pointer_t i8_t |] in
@@ -139,7 +139,7 @@ let translate (array_types, program) =
       let builder = L.builder_at_end context (L.entry_block print_func) in
       let ltype = ltype_of_typ typ in
 
-      (* Cast and store param *)
+      (* Cast and load param *)
       let param = (L.params print_func).(0) in
       let param = L.build_bitcast param (pointer_t ltype) "param" builder in
       let param = L.build_load param "param" builder in
@@ -152,10 +152,11 @@ let translate (array_types, program) =
       let _ = match typ with
           A.Int | A.Bool ->
             L.build_call printf_func
-            [| inline_int_format_str ; param |] "printf" builder
+            [| int_format_str ; param |] "printf" builder
         | A.Float ->
             L.build_call printf_func
-            [| inline_float_format_str ; param |] "printf" builder
+            [| float_format_str ; param |] "printf" builder
+        | A.String -> L.build_call printf_func [| param |] "printf" builder
         | A.Array _ ->
             (* Print flat arrays if embedded within arrays *)
             L.build_call print_array_func
@@ -180,6 +181,7 @@ let translate (array_types, program) =
   let init t = match t with
       A.Float -> L.const_float float_t 0.0
     | A.Int -> L.const_int i32_t 0
+    | A.String -> empty_str
     | A.Array _ -> L.const_null (pointer_t array_t)
     | A.Matrix t -> L.const_null (pointer_t (matrix_t t))
     | _ -> make_err "not supported yet in init"
@@ -325,6 +327,7 @@ let translate (array_types, program) =
         SInt_Lit i -> L.const_int i32_t i
       | SBool_Lit b -> L.const_int i1_t (if b then 1 else 0)
       | SFloat_Lit l -> L.const_float_of_string float_t l
+      | SString_Lit s -> L.build_global_stringptr (Scanf.unescaped s) "str" builder
       | SArray_Lit l ->
           let raw_array = Array.map (expr scope builder) l in
           let typ = A.typ_of_arr_typ t in
@@ -403,6 +406,7 @@ let translate (array_types, program) =
               | A.Float ->
                   L.build_call printf_func
                   [| float_format_str ; e' |] "printf" builder
+              | A.String ->L.build_call printf_func [| e' |] "printf" builder
               | A.Array _ ->
                   L.build_call print_array_func
                   [| e' ; TypeMap.find t element_print_funcs ; L.const_int i1_t 0 |] "" builder
