@@ -427,6 +427,7 @@ let translate (array_types, program) =
             | _ -> fname ^ "_result")
           in
           L.build_call f (Array.of_list args) result builder
+      | SEnd -> make_err "internal error: SEnd should not be passed to expr"
   in
 
   (* Fill in the body of the given function *)
@@ -514,7 +515,6 @@ let translate (array_types, program) =
           let _ = L.build_cond_br bool_val then_bb else_bb builder in
           (* Move to the merge block for further instruction building *)
           (scope, L.builder_at_end context merge_bb)
-
       | SWhile(predicate, body) ->
           (* First create basic block for condition instructions -- this will
           serve as destination in the case of a loop *)

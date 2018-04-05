@@ -17,6 +17,7 @@ and sx =
   | SUnop of uop * sexpr
   | SAssign of sexpr * sexpr
   | SCall of string * sexpr list
+  | SEnd
   | SNoexpr
 
 type sdecl = decl_kw * typ * string * sexpr
@@ -60,6 +61,7 @@ let rec string_of_sexpr (t, e) =
   | SAssign(e1, e2) -> string_of_sexpr e1 ^ " = " ^ string_of_sexpr e2
   | SCall(f, el) ->
       f ^ "(" ^ String.concat ", " (List.map string_of_sexpr el) ^ ")"
+  | SEnd -> "END"
   | SNoexpr -> ""
           ) ^ ")"
 

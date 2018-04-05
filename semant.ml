@@ -18,7 +18,8 @@ type symbol_table = {
 
 type translation_environment = {
   scope : symbol_table;
-  array_types : TypeSet.t
+  array_types : TypeSet.t;
+  expr_type : typ option;
 }
 
 let make_err err = raise (Failure err)
@@ -121,7 +122,7 @@ let check (globals, functions) =
     in
 
     match expr with
-        Int_Lit  l -> (env, (Int, SInt_Lit l))
+        Int_Lit l -> (env, (Int, SInt_Lit l))
       | Float_Lit l -> (env, (Float, SFloat_Lit l))
       | Bool_Lit l -> (env, (Bool, SBool_Lit l))
       | Noexpr -> (env, (Void, SNoexpr))
@@ -166,7 +167,19 @@ let check (globals, functions) =
           (env, (ty, SUnop(op, (t, e'))))
       | Binop(e1, op, e2) ->
           let env, (t1, e1') = check_expr env e1 in
-          let env, (t2, e2') = check_expr env e2 in
+          let env, (t2, e2') = match e2 with
+              One ->
+                let rec get_one typ = match typ with
+                    Int -> Int_Lit 1
+                  | Float -> Float_Lit "1."
+                  | Matrix t -> get_one t
+                  | _ -> make_err ("type " ^ string_of_typ typ ^
+                      " cannot be incremented/decremented")
+                in
+                let one = get_one t1 in
+                check_expr env one
+            | _ -> check_expr env e2
+          in
           (* All binary operators require operands of the same type *)
           let same = t1 = t2 in
           (* Determine expression type based on operator and operand types *)
@@ -215,6 +228,8 @@ let check (globals, functions) =
               in
               let args' = List.map2 check_arg formals args in
               (env, (return_type, SCall(fname, args')))
+        | One -> make_err "internal error: One should not be passed to check_expr"
+        | End -> (env, (Int, SEnd))
         | _ -> make_err "not supported yet in check_expr"
   in
 
@@ -267,7 +282,7 @@ let check (globals, functions) =
     (* After type check, we explicitly add decl's type to the sexpr,
      * to handle the case where we have a void initialization (i.e.
      * declaration but not initialization) *)
-    ({ scope ; array_types }, (kw, t, s, (t, snd sexpr)) :: checked)
+    ({ env with scope ; array_types }, (kw, t, s, (t, snd sexpr)) :: checked)
   in
 
   (* Return semantically checked function *)
@@ -382,7 +397,7 @@ let check (globals, functions) =
   in
 
   let global_scope = { variables = built_in_decls; parent = None } in
-  let env = { scope = global_scope; array_types = TypeSet.empty } in
+  let env = { scope = global_scope; array_types = TypeSet.empty; expr_type = None } in
   let env, globals' = List.fold_left check_v_decl (env, []) globals in
   let env, functions' = List.fold_left check_func_decl (env, []) functions in
 
