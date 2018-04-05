@@ -333,6 +333,10 @@ let check (globals, functions) =
             let env, sl', ret = check_stmt_list env sl in
             (* Return to parent scope *)
             ({ env with scope = parent_scope }, SBlock sl', ret)
+        | Decl d ->
+            let env, checked = check_v_decl (env, []) d in
+            let sdecl = List.hd checked in
+            (env, SDecl sdecl, false)
         | _ -> make_err "not supported yet in check_stmt"
     in
 

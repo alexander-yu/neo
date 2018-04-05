@@ -32,12 +32,9 @@ void print_matrixi(matrixi_t *matrix, bool flat) {
         }
     }
     printf("]");
-    if (!flat) {
-        printf("\n");
-    }
 }
 
-void print_array(array_t *arr, void(*print_element)(void *), bool flat) {
+void print_array(array_t *arr, void(*print_element)(void *)) {
     printf("{|");
     for (int i = 0; i < arr->length; i++) {
         print_element(arr->body[i]);
@@ -46,9 +43,6 @@ void print_array(array_t *arr, void(*print_element)(void *), bool flat) {
         }
     }
     printf("|}");
-    if (!flat) {
-        printf("\n");
-    }
 }
 
 void init_matrixi (matrixi_t *mat) {

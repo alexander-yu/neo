@@ -20,7 +20,7 @@ void print_matrixi(matrixi_t *, bool);
  * to perform the correct cast at some point in its
  * execution (print_array does not handle this and is type-independent)
  */
-void print_array(array_t *, void(*)(void *), bool);
+void print_array(array_t *, void(*)(void *));
 
 void init_matrixi(matrixi_t *);
 void set_ptrs_matrixi(matrixi_t *, int *);

@@ -113,15 +113,22 @@ for_loop:
        * followed by loop in a block */
       { Block [Decl $3 ; While($5, Block [$9 ; Expr $7])] }
 
-stmt:
+/* This is to prevent if/else statements from containing
+ * single-line declarations in their bodies; declarations
+ * can be used in if/else bodies only if they're inside of
+ * a block. This is due to scope reasons; an if/else statement
+ * should not affect its containing scope (i.e. adding new
+ * variables), so blocks are okay but declarations are not. */
+nondecl_stmt:
     expr SEMI                               { Expr $1 }
   | RETURN expr_opt SEMI                    { Return $2 }
   | LBRACE stmts_opt RBRACE                 { Block $2 }
-  | IF LPAREN expr RPAREN stmt %prec NOELSE { If($3, $5, Block []) }
-  | IF LPAREN expr RPAREN stmt ELSE stmt    { If($3, $5, $7) }
+  | IF LPAREN expr RPAREN nondecl_stmt %prec NOELSE
+                                            { If($3, $5, Block []) }
+  | IF LPAREN expr RPAREN nondecl_stmt ELSE nondecl_stmt
+                                            { If($3, $5, $7) }
   | for_loop                                { $1 }
   | WHILE LPAREN expr RPAREN stmt           { While($3, $5) }
-  | decl SEMI                               { Decl $1 }
   | TRY LBRACE stmts_opt RBRACE CATCH ID LPAREN ID RPAREN LBRACE stmts_opt RBRACE
                                             { Try_Catch({
                                               try_block = $3;
@@ -130,6 +137,10 @@ stmt:
                                               catch_block = $11;
                                             }) }
   | PROTEST ID LPAREN expr_opt RPAREN SEMI  { Protest($2, $4) }
+
+stmt:
+    nondecl_stmt { $1 }
+  | decl SEMI    { Decl $1 }
 
 decl:
     VAR typ ID                           { (Var, $2, $3, Noexpr) }

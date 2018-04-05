@@ -4,6 +4,8 @@ create array<matrix<int>> c = {| [[1], [2]], [[3], [4]] |};
 
 void main() {
     print(a);
+    print("\n");
     print(b);
+    print("\n");
     print(c);
 }
