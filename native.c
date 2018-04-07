@@ -78,16 +78,32 @@ void *get_array(array_t *arr, int i) {
     return arr->body[i];
 }
 
+void set_array(array_t *arr, int i, void *data) {
+    arr->body[i] = data;
+}
+
 void slice_array(array_t *arr, slice_t *slice, array_t *res) {
     int start_i = slice->start;
     int end_i = slice->end;
     for (int i = start_i; i < end_i; i++) {
-        res->body[i] = arr->body[i];
+        res->body[i - start_i] = arr->body[i];
+    }
+}
+
+void set_slice_array(array_t *arr, slice_t *slice, array_t *data) {
+    int start_i = slice->start;
+    int end_i = slice->end;
+    for (int i = start_i; i < end_i; i++) {
+        arr->body[i] = data->body[i - start_i];
     }
 }
 
 int get_matrixi(matrixi_t *mat, int i, int j) {
     return mat->body[i][j];
+}
+
+void set_matrixi(matrixi_t *mat, int i, int j, int data) {
+    mat->body[i][j] = data;
 }
 
 void slice_matrixi(matrixi_t *mat, slice_t *row_slice, slice_t *col_slice, matrixi_t *res) {
@@ -98,6 +114,18 @@ void slice_matrixi(matrixi_t *mat, slice_t *row_slice, slice_t *col_slice, matri
     for (int i = start_i; i < end_i; i++) {
         for (int j = start_j; j < end_j; j++) {
             res->body[i - start_i][j - start_j] = mat->body[i][j];
+        }
+    }
+}
+
+void set_slice_matrixi(matrixi_t *mat, slice_t *row_slice, slice_t *col_slice, matrixi_t *data) {
+    int start_i = row_slice->start;
+    int end_i = row_slice->end;
+    int start_j = col_slice->start;
+    int end_j = col_slice->end;
+    for (int i = start_i; i < end_i; i++) {
+        for (int j = start_j; j < end_j; j++) {
+            mat->body[i][j] = data->body[i - start_i][j - start_j];
         }
     }
 }

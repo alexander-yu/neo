@@ -32,7 +32,11 @@ void set_ptrs_matrixi(matrixi_t *, int *);
 void set_ptrs_array(array_t *, void *);
 
 void * get_array(array_t *, int);
+void set_array(array_t *, int, void *);
 void slice_array(array_t *, slice_t *, array_t *);
+void set_slice_array(array_t *, slice_t *, array_t *);
 
 int get_matrixi(matrixi_t *, int, int);
+void set_matrixi(matrixi_t *, int, int, int);
 void slice_matrixi(matrixi_t *, slice_t *, slice_t *, matrixi_t *);
+void set_slice_matrixi(matrixi_t *, slice_t *, slice_t *, matrixi_t *);

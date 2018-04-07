@@ -135,8 +135,11 @@ let translate (array_types, program) =
   let set_ptrs_array_t = L.function_type void_t [| pointer_t array_t ; pointer_t i8_t |] in
   let set_ptrs_array_func = L.declare_function "set_ptrs_array" set_ptrs_array_t the_module in
 
-  let get_array_t = L.function_type (pointer_t i8_t) [| pointer_t array_t; i32_t |] in
+  let get_array_t = L.function_type (pointer_t i8_t) [| pointer_t array_t ; i32_t |] in
   let get_array_func = L.declare_function "get_array" get_array_t the_module in
+
+  let set_array_t = L.function_type void_t [| pointer_t array_t ; i32_t ; pointer_t i8_t |] in
+  let set_array_func = L.declare_function "set_array" set_array_t the_module in
 
   let slice_array_t =
     L.function_type void_t
@@ -144,14 +147,29 @@ let translate (array_types, program) =
   in
   let slice_array_func = L.declare_function "slice_array" slice_array_t the_module in
 
+  let set_slice_array_t =
+    L.function_type void_t
+    [| pointer_t array_t ; pointer_t slice_t ; pointer_t array_t |]
+  in
+  let set_slice_array_func = L.declare_function "set_slice_array" set_slice_array_t the_module in
+
   let get_matrixi_t = L.function_type i32_t [| pointer_t matrixi_t ; i32_t ; i32_t |] in
   let get_matrixi_func = L.declare_function "get_matrixi" get_matrixi_t the_module in
+
+  let set_matrixi_t = L.function_type void_t [| pointer_t matrixi_t ; i32_t ; i32_t ; i32_t |] in
+  let set_matrixi_func = L.declare_function "set_matrixi" set_matrixi_t the_module in
 
   let slice_matrixi_t =
     L.function_type void_t
     [| pointer_t matrixi_t ; pointer_t slice_t ; pointer_t slice_t ; pointer_t matrixi_t |]
   in
   let slice_matrixi_func = L.declare_function "slice_matrixi" slice_matrixi_t the_module in
+
+  let set_slice_matrixi_t =
+    L.function_type void_t
+    [| pointer_t matrixi_t ; pointer_t slice_t ; pointer_t slice_t ; pointer_t matrixi_t |]
+  in
+  let set_slice_matrixi_func = L.declare_function "set_slice_matrixi" set_slice_matrixi_t the_module in
 
   (* Build any necessary element-printing functions for array types *)
   let rec build_element_print_func array_type element_print_funcs =
@@ -458,11 +476,11 @@ let translate (array_types, program) =
                   let ptr = L.build_call get_array_func [| e' ; i' |] "ptr" builder in
                   let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
                   L.build_load ptr "arr_element" builder
-              | SDbl_Index(e, i1, i2) ->
+              | SDbl_Index(e, i, j) ->
                   let e' = expr scope builder e in
-                  let i1' = expr scope builder (sexpr_of_sindex i1) in
-                  let i2' = expr scope builder (sexpr_of_sindex i2) in
-                  L.build_call get_matrixi_func [| e' ; i1' ; i2' |] "mat_element" builder
+                  let i' = expr scope builder (sexpr_of_sindex i) in
+                  let j' = expr scope builder (sexpr_of_sindex j) in
+                  L.build_call get_matrixi_func [| e' ; i' ; j' |] "mat_element" builder
           )
       | SSlice_Expr s ->
           let typ = A.typ_of_container t in
@@ -486,14 +504,58 @@ let translate (array_types, program) =
       | SNoexpr -> init t
       | SId s -> L.build_load (lookup s scope) s builder
       | SAssign(e1, e2) ->
-          let s =
-            let _, e1 = e1 in
+          let _, e1 = e1 in
+          let e2' = expr scope builder e2 in
+          let _ =
             match e1 with
-                SId s -> s
-              | _ -> make_err "not yet supported in expr"
+                SId s ->
+                  let _ = L.build_store e2' (lookup s scope) builder in
+                  ()
+              | SIndex_Expr i ->
+                  (
+                    match i with
+                        SSgl_Index(e, i) ->
+                          let ltype = ltype_of_typ t in
+                          let e' = expr scope builder e in
+                          let i' = expr scope builder (sexpr_of_sindex i) in
+                          let ptr = L.build_alloca ltype "ptr" builder in
+                          let _ = L.build_store e2' ptr builder in
+                          let ptr = L.build_bitcast ptr (pointer_t i8_t) "ptr" builder in
+                          let _ = L.build_call set_array_func [| e' ; i' ; ptr |] "" builder in
+                          ()
+                      | SDbl_Index(e, i, j) ->
+                          let e' = expr scope builder e in
+                          let i' = expr scope builder (sexpr_of_sindex i) in
+                          let j' = expr scope builder (sexpr_of_sindex j) in
+                          let _ =
+                            L.build_call set_matrixi_func
+                            [| e' ; i' ; j' ; e2' |] "" builder
+                          in
+                          ()
+                  )
+              | SSlice_Expr s ->
+                (
+                  match s with
+                      SSgl_Slice(e, s) ->
+                        let e' = expr scope builder e in
+                        let s' = build_sgl_slice e' s builder in
+                        let _ =
+                          L.build_call set_slice_array_func
+                          [| e' ; s' ; e2' |] "" builder
+                        in
+                        ()
+                    | SDbl_Slice(e, s1, s2) ->
+                        let e' = expr scope builder e in
+                        let s1', s2' = build_dbl_slice e' s1 s2 builder in
+                        let _ =
+                          L.build_call set_slice_matrixi_func
+                          [| e' ; s1' ; s2' ; e2' |] "" builder
+                        in
+                        ()
+                )
+              | _ -> make_err "internal error: semant should have rejected invalid assignment"
           in
-          let e' = expr scope builder e2 in
-          let _  = L.build_store e' (lookup s scope) builder in e'
+          e2'
       | SBinop(e1, op, e2) ->
           let t, _ = e1
           and e1' = expr scope builder e1

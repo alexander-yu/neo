@@ -206,7 +206,7 @@ let check (globals, functions) =
             let sslice = SSlice_Expr(SDbl_Slice((t, e'), ss1, ss2)) in
             (env, (t, sslice))
     in
-
+    (* TODO: add string_of_expr expr to all error messages here *)
     match expr with
         Int_Lit l -> (env, (Int, SInt_Lit l))
       | Float_Lit l -> (env, (Float, SFloat_Lit l))
@@ -228,18 +228,31 @@ let check (globals, functions) =
           else (env, (Matrix t, SEmpty_Matrix(t, (rt, r'), (ct, c'))))
       | Index_Expr i -> check_index_expr env i
       | Slice_Expr s -> check_slice_expr env s
-      | Assign(e1, e2) -> (* TODO: check e1 for index/string *)
+      | Assign(e1, e2) ->
           (
             match e1 with
-                Id s ->
-                  let lt = type_of_identifier s env.scope
-                  and env, (rt, e') = check_expr env e2 in
+                Id _ ->
+                  let env, (lt, s') = check_expr env e1 in
+                  let env, (rt, e') = check_expr env e2 in
                   let err = "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ string_of_expr expr
                   in
-                  let env, se1 = check_expr env e1 in
-                  (env, (check_assign lt rt err, SAssign(se1, (rt, e'))))
-              | _ -> make_err "not supported yet in assign"
+                  (env, (check_assign lt rt err, SAssign((lt, s'), (rt, e'))))
+              | Index_Expr i ->
+                  let env, (lt, i') = check_index_expr env i in
+                  let env, (rt, e') = check_expr env e2 in
+                  let err = "illegal assignment " ^ string_of_typ lt ^ " = " ^
+                    string_of_typ rt ^ " in " ^ string_of_expr expr
+                  in
+                  (env, (check_assign lt rt err, SAssign((lt, i'), (rt, e'))))
+              | Slice_Expr s ->
+                  let env, (lt, s') = check_slice_expr env s in
+                  let env, (rt, e') = check_expr env e2 in
+                  let err = "illegal assignment " ^ string_of_typ lt ^ " = " ^
+                    string_of_typ rt ^ " in " ^ string_of_expr expr
+                  in
+                  (env, (check_assign lt rt err, SAssign((lt, s'), (rt, e'))))
+              | _ -> make_err (string_of_expr expr ^ " is not assignable")
           )
       | Unop(op, e) ->
           let env, (t, e') = check_expr env e in
