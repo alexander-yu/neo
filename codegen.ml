@@ -55,8 +55,8 @@ let translate (array_types, program) =
     matrix_type
   in
 
-  let mat_float_t =
-    let matrix_type = L.named_struct_type context "mat_float_t" in
+  let matrixf_t =
+    let matrix_type = L.named_struct_type context "matrixf_t" in
     let body_type = pointer_t (pointer_t float_t) in
     (* Struct: double pointer to first element, nrows, ncols *)
     let _ = L.struct_set_body matrix_type [| body_type ; i32_t ; i32_t |] false in
@@ -71,10 +71,16 @@ let translate (array_types, program) =
     array_type
   in
 
+  let slice_t =
+    let slice_type = L.named_struct_type context "slice_t" in
+    let _ = L.struct_set_body slice_type [| i32_t ; i32_t |] false in
+    slice_type
+  in
+
   let matrix_t typ =
     match typ with
         A.Int -> matrixi_t
-      | A.Float -> mat_float_t
+      | A.Float -> matrixf_t
       | _ -> make_err "internal error: semant should have rejected invalid matrix type"
   in
 
@@ -129,9 +135,27 @@ let translate (array_types, program) =
   let set_ptrs_array_t = L.function_type void_t [| pointer_t array_t ; pointer_t i8_t |] in
   let set_ptrs_array_func = L.declare_function "set_ptrs_array" set_ptrs_array_t the_module in
 
+  let get_array_t = L.function_type (pointer_t i8_t) [| pointer_t array_t; i32_t |] in
+  let get_array_func = L.declare_function "get_array" get_array_t the_module in
+
+  let slice_array_t =
+    L.function_type void_t
+    [| pointer_t array_t ; pointer_t slice_t ; pointer_t array_t |]
+  in
+  let slice_array_func = L.declare_function "slice_array" slice_array_t the_module in
+
+  let get_matrixi_t = L.function_type i32_t [| pointer_t matrixi_t ; i32_t ; i32_t |] in
+  let get_matrixi_func = L.declare_function "get_matrixi" get_matrixi_t the_module in
+
+  let slice_matrixi_t =
+    L.function_type void_t
+    [| pointer_t matrixi_t ; pointer_t slice_t ; pointer_t slice_t ; pointer_t matrixi_t |]
+  in
+  let slice_matrixi_func = L.declare_function "slice_matrixi" slice_matrixi_t the_module in
+
   (* Build any necessary element-printing functions for array types *)
-  let rec make_element_print_func array_type element_print_funcs =
-    let typ = A.typ_of_arr_typ array_type in
+  let rec build_element_print_func array_type element_print_funcs =
+    let typ = A.typ_of_container array_type in
     if TypeMap.mem array_type element_print_funcs then element_print_funcs
     else
       let print_t = L.function_type void_t [| pointer_t i8_t |] in
@@ -146,7 +170,7 @@ let translate (array_types, program) =
 
       (* Call corresponding print function; if we have another array, recursively make it *)
       let element_print_funcs = match typ with
-          A.Array _ -> make_element_print_func typ element_print_funcs
+          A.Array _ -> build_element_print_func typ element_print_funcs
         | _ -> element_print_funcs
       in
       let _ = match typ with
@@ -174,7 +198,7 @@ let translate (array_types, program) =
       let _ = L.build_ret_void builder in
       TypeMap.add array_type print_func element_print_funcs
   in
-  let element_print_funcs = S.TypeSet.fold make_element_print_func array_types TypeMap.empty in
+  let element_print_funcs = S.TypeSet.fold build_element_print_func array_types TypeMap.empty in
 
   (* Returns initial value for an empty declaration of a given type *)
   let init t = match t with
@@ -212,7 +236,7 @@ let translate (array_types, program) =
   (* Construct code for an expression; return its value *)
   let rec expr scope builder (t, e) =
     (* TODO: make sure to free any malloc'd arrays/matrices and move to stack var *)
-    let make_array typ length builder =
+    let build_array typ length builder =
       let ltype = ltype_of_typ typ in
       let size = L.size_of ltype in
 
@@ -230,10 +254,10 @@ let translate (array_types, program) =
       arr_ptr
     in
 
-    let make_array_lit typ raw_elements builder =
+    let build_array_lit typ raw_elements builder =
       let ltype = ltype_of_typ typ in
       let length = L.const_int i32_t (Array.length raw_elements) in
-      let arr_ptr = make_array typ length builder in
+      let arr_ptr = build_array typ length builder in
 
       (* Allocate and fill array body *)
       let body = L.build_array_alloca ltype length "body" builder in
@@ -255,9 +279,9 @@ let translate (array_types, program) =
       arr_ptr
     in
 
-    let make_empty_array typ length builder =
+    let build_empty_array typ length builder =
       let ltype = ltype_of_typ typ in
-      let arr_ptr = make_array typ length builder in
+      let arr_ptr = build_array typ length builder in
 
       (* Allocate array contents *)
       let body = L.build_array_alloca ltype length "body" builder in
@@ -270,7 +294,7 @@ let translate (array_types, program) =
       arr_ptr
     in
 
-    let make_matrix typ rows cols builder =
+    let build_matrix typ rows cols builder =
       let ltype = ltype_of_typ typ in
 
       (* Allocate required space *)
@@ -287,11 +311,11 @@ let translate (array_types, program) =
       mat_ptr
     in
 
-    let make_matrix_lit typ raw_elements builder =
+    let build_matrix_lit typ raw_elements builder =
       let ltype = ltype_of_typ typ in
       let rows = Array.length raw_elements in
       let cols = Array.length raw_elements.(0) in
-      let mat_ptr = make_matrix typ (L.const_int i32_t rows) (L.const_int i32_t cols) builder in
+      let mat_ptr = build_matrix typ (L.const_int i32_t rows) (L.const_int i32_t cols) builder in
 
       (* Allocate and fill matrix body *)
       let raw_rows = Array.map (L.const_array ltype) raw_elements in
@@ -308,18 +332,97 @@ let translate (array_types, program) =
       mat_ptr
     in
 
-    let make_empty_matrix typ rows cols builder =
+    let build_empty_matrix typ rows cols builder =
       let ltype = ltype_of_typ typ in
       let size = L.build_mul rows cols "size" builder in
-      let mat_ptr = make_matrix typ rows cols builder in
+      let mat_ptr = build_matrix typ rows cols builder in
 
       (* Allocate matrix body *)
       let body_ptr = L.build_array_alloca ltype size "body_ptr" builder in
 
-      (* Set body pointers and fill matrix contents *)
+      (* Set body pointers *)
       let _ = L.build_call set_ptrs_matrixi_func [| mat_ptr ; body_ptr |] "" builder in
-      let _ = L.build_call init_matrixi_func [| mat_ptr |] "" builder in
       mat_ptr
+    in
+
+    let build_sgl_slice arr slice builder = match slice with
+        SSlice(i, j) ->
+          let slice_ptr = L.build_alloca slice_t "slice_ptr" builder in
+          let slice_start = L.build_struct_gep slice_ptr 0 "slice_start" builder in
+          let slice_end = L.build_struct_gep slice_ptr 1 "slice_end" builder in
+          let i' = expr scope builder i in
+          let j' =
+            match snd j with
+                SInt_Lit _ -> expr scope builder j
+              (* Otherwise, it's SEnd *)
+              | _ ->
+                  let length_ptr = L.build_struct_gep arr 2 "length_ptr" builder in
+                  L.build_load length_ptr "length" builder
+          in
+          let _ = L.build_store i' slice_start builder in
+          let _ = L.build_store j' slice_end builder in
+          slice_ptr
+      | _ -> make_err "internal error: build_sgl_slice given non-slice"
+    in
+
+    let build_dbl_slice mat row_slice col_slice builder = match (row_slice, col_slice) with
+        (SSlice(i1, j1), SSlice(i2, j2)) ->
+          let row_slice_ptr = L.build_alloca slice_t "row_slice_ptr" builder in
+          let row_slice_start = L.build_struct_gep row_slice_ptr 0 "row_slice_start" builder in
+          let row_slice_end = L.build_struct_gep row_slice_ptr 1 "row_slice_end" builder in
+          let col_slice_ptr = L.build_alloca slice_t "col_slice_ptr" builder in
+          let col_slice_start = L.build_struct_gep col_slice_ptr 0 "col_slice_start" builder in
+          let col_slice_end = L.build_struct_gep col_slice_ptr 1 "col_slice_end" builder in
+          let i1' = expr scope builder i1 in
+          let j1' =
+            match snd j1 with
+                SInt_Lit _ -> expr scope builder j1
+              | SSlice_Inc -> L.build_add i1' (L.const_int i32_t 1) "row_slice_inc" builder
+              (* Otherwise, it's SEnd *)
+              | _ ->
+                  let rows_ptr = L.build_struct_gep mat 1 "rows_ptr" builder in
+                  L.build_load rows_ptr "rows" builder
+          in
+          let i2' = expr scope builder i2 in
+          let j2' =
+            match snd j2 with
+                SInt_Lit _ -> expr scope builder j2
+              | SSlice_Inc -> L.build_add i2' (L.const_int i32_t 1) "col_slice_inc" builder
+              (* Otherwise, it's SEnd *)
+              | _ ->
+                  let cols_ptr = L.build_struct_gep mat 2 "cols_ptr" builder in
+                  L.build_load cols_ptr "cols" builder
+          in
+          let _ = L.build_store i1' row_slice_start builder in
+          let _ = L.build_store j1' row_slice_end builder in
+          let _ = L.build_store i2' col_slice_start builder in
+          let _ = L.build_store j2' col_slice_end builder in
+          (row_slice_ptr, col_slice_ptr)
+      | (_, _) -> make_err "internal error: build_dbl_slice given non-slice"
+    in
+
+    let build_slice_delta slice builder =
+      let slice_start_ptr = L.build_struct_gep slice 0 "slice_start_ptr" builder in
+      let slice_end_ptr = L.build_struct_gep slice 1 "slice_end_ptr" builder in
+      let slice_start = L.build_load slice_start_ptr "slice_start" builder in
+      let slice_end = L.build_load slice_end_ptr "slice_end" builder in
+      L.build_sub slice_end slice_start "delta" builder
+    in
+
+    let build_slice_array typ slice builder =
+      let length = build_slice_delta slice builder in
+      build_empty_array typ length builder
+    in
+
+    let build_slice_matrix typ row_slice col_slice builder =
+      let rows = build_slice_delta row_slice builder in
+      let cols = build_slice_delta col_slice builder in
+      build_empty_matrix typ rows cols builder
+    in
+
+    let sexpr_of_sindex = function
+        SIndex e -> e
+      | _ -> make_err "internal error: sexpr_of_sindex given non-index"
     in
 
     match e with
@@ -329,19 +432,57 @@ let translate (array_types, program) =
       | SString_Lit s -> L.build_global_stringptr (Scanf.unescaped s) "str" builder
       | SArray_Lit l ->
           let raw_array = Array.map (expr scope builder) l in
-          let typ = A.typ_of_arr_typ t in
-          make_array_lit typ raw_array builder
+          let typ = A.typ_of_container t in
+          build_array_lit typ raw_array builder
       | SEmpty_Array(t, n) ->
           let length = expr scope builder n in
-          make_empty_array t length builder
+          build_empty_array t length builder
       | SMatrix_Lit l ->
           let raw_elements = Array.map (Array.map (expr scope builder)) l in
-          let typ = A.typ_of_mat_typ t in
-          make_matrix_lit typ raw_elements builder
+          let typ = A.typ_of_container t in
+          build_matrix_lit typ raw_elements builder
       | SEmpty_Matrix(t, r, c) ->
           let rows = expr scope builder r in
           let cols = expr scope builder c in
-          make_empty_matrix t rows cols builder
+          let mat_ptr = build_empty_matrix t rows cols builder in
+          let _ = L.build_call init_matrixi_func [| mat_ptr |] "" builder in
+          mat_ptr
+      (* TODO: perform runtime checks on index bounds *)
+      | SIndex_Expr i ->
+          (
+            match i with
+                SSgl_Index(e, i) ->
+                  let ltype = ltype_of_typ t in
+                  let e' = expr scope builder e in
+                  let i' = expr scope builder (sexpr_of_sindex i) in
+                  let ptr = L.build_call get_array_func [| e' ; i' |] "ptr" builder in
+                  let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
+                  L.build_load ptr "arr_element" builder
+              | SDbl_Index(e, i1, i2) ->
+                  let e' = expr scope builder e in
+                  let i1' = expr scope builder (sexpr_of_sindex i1) in
+                  let i2' = expr scope builder (sexpr_of_sindex i2) in
+                  L.build_call get_matrixi_func [| e' ; i1' ; i2' |] "mat_element" builder
+          )
+      | SSlice_Expr s ->
+          let typ = A.typ_of_container t in
+          (
+            match s with
+                SSgl_Slice(e, s) ->
+                  let e' = expr scope builder e in
+                  let s' = build_sgl_slice e' s builder in
+                  let res_ptr = build_slice_array typ s' builder in
+                  let _ = L.build_call slice_array_func [| e' ; s' ; res_ptr |] "" builder in
+                  res_ptr
+              | SDbl_Slice(e, s1, s2) ->
+                  let e' = expr scope builder e in
+                  let s1', s2' = build_dbl_slice e' s1 s2 builder in
+                  let res_ptr = build_slice_matrix typ s1' s2' builder in
+                  let _ =
+                    L.build_call slice_matrixi_func [| e' ; s1' ; s2' ; res_ptr |] "" builder
+                  in
+                  res_ptr
+          )
       | SNoexpr -> init t
       | SId s -> L.build_load (lookup s scope) s builder
       | SAssign(e1, e2) ->
@@ -427,6 +568,7 @@ let translate (array_types, program) =
             | _ -> fname ^ "_result")
           in
           L.build_call f (Array.of_list args) result builder
+      | SSlice_Inc -> make_err "internal error: SSlice_Inc should not be passed to expr"
       | SEnd -> make_err "internal error: SEnd should not be passed to expr"
   in
 

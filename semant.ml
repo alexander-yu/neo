@@ -96,8 +96,7 @@ let check (globals, functions) =
       let _ = check_size e in
       match e with
           Array_Lit l ->
-            let env, sexpr = check_expr env l.(0) in
-            let t = fst sexpr in
+            let env, (t, _) = check_expr env l.(0) in
             let env, checked = Array.fold_left (check_equal_type t) (env, []) l in
             let checked = Array.of_list (List.rev checked) in
             (* Add array type to set *)
@@ -105,8 +104,7 @@ let check (globals, functions) =
             let env = { env with array_types } in
             (env, (Array t, SArray_Lit(checked)))
         | Matrix_Lit l ->
-            let env, sexpr = check_expr env l.(0).(0) in
-            let t = fst sexpr in
+            let env, (t, _) = check_expr env l.(0).(0) in
             let env, checked = Array.fold_left (check_row_equal_type t) (env, []) l in
             let checked = Array.of_list (List.rev checked) in
             let checked = Array.map List.rev checked in
@@ -121,25 +119,115 @@ let check (globals, functions) =
       if lvaluet = rvaluet then lvaluet else make_err err
     in
 
+    let get_idx_err e =
+      "index " ^ string_of_expr e ^ " is not an int"
+    in
+
+    let check_islice env = function
+        Index i ->
+          let env, (t, i') = check_expr env i in
+          if t = Int then (env, SIndex((t, i'))) else make_err (get_idx_err i)
+      | Slice(i, j) ->
+          let env, (ti, i') = check_expr env i in
+          let env, (tj, j') =
+            match j with
+                Slice_Inc -> (env, (Int, SSlice_Inc))
+              | _ -> check_expr env j
+          in
+          let _ = if ti != Int then make_err (get_idx_err i) in
+          let _ = if tj != Int then make_err (get_idx_err j) in
+          (env, SSlice((ti, i'), (tj, j')))
+    in
+
+    let check_index_expr env i =
+      match i with
+          Sgl_Index(e, i) ->
+            let env, (t, e') = check_expr env e in
+            (
+              match t with
+                  Array _ ->
+                    let env, si = check_islice env i in
+                    let sindex = SIndex_Expr(SSgl_Index((t, e'), si)) in
+                    (* Strip the container type *)
+                    (env, (typ_of_container t, sindex))
+                | Matrix _ ->
+                    (* m[i] is semantically equivalent to m[i:i+1][:] *)
+                    let env, ss1 = check_islice env (index_to_slice i) in
+                    let ss2 = SSlice((Int, SInt_Lit 0), (Int, SEnd)) in
+                    let sslice = SSlice_Expr(SDbl_Slice((t, e'), ss1, ss2)) in
+                    (env, (t, sslice))
+                | _ -> make_err ("indexed expression " ^ string_of_expr e ^
+                    " is not an array or matrix")
+            )
+        | Dbl_Index(e, i1, i2) ->
+            let env, (t, e') = check_expr env e in
+            let _ =
+              match t with
+                  Matrix _ -> ()
+                | _ -> make_err ("doubled-indexed expression " ^ string_of_expr e ^
+                    " is not a matrix")
+            in
+            let env, si1 = check_islice env i1 in
+            let env, si2 = check_islice env i2 in
+            let sindex = SIndex_Expr(SDbl_Index((t, e'), si1, si2)) in
+            (* Strip the container type *)
+            (env, (typ_of_container t, sindex))
+    in
+
+    let check_slice_expr env i =
+      match i with
+          Sgl_Slice(e, s) ->
+            let env, (t, e') = check_expr env e in
+            (
+              match t with
+                  Array _ ->
+                    let env, ss = check_islice env s in
+                    let sslice = SSlice_Expr(SSgl_Slice((t, e'), ss)) in
+                    (env, (t, sslice))
+                | Matrix _ ->
+                    (* m[i:j] is semantically equivalent to m[i:j][:] *)
+                    let env, ss1 = check_islice env s in
+                    let ss2 = SSlice((Int, SInt_Lit 0), (Int, SEnd)) in
+                    let sslice = SSlice_Expr(SDbl_Slice((t, e'), ss1, ss2)) in
+                    (env, (t, sslice))
+                | _ -> make_err ("sliced expression " ^ string_of_expr e ^
+                    " is not an array")
+            )
+        | Dbl_Slice(e, s1, s2) ->
+            let env, (t, e') = check_expr env e in
+            let _ =
+              match t with
+                  Matrix _ -> ()
+                | _ -> make_err ("doubled-sliced expression " ^ string_of_expr e ^
+                    " is not a matrix")
+            in
+            let env, ss1 = check_islice env s1 in
+            let env, ss2 = check_islice env s2 in
+            let sslice = SSlice_Expr(SDbl_Slice((t, e'), ss1, ss2)) in
+            (env, (t, sslice))
+    in
+
     match expr with
         Int_Lit l -> (env, (Int, SInt_Lit l))
       | Float_Lit l -> (env, (Float, SFloat_Lit l))
       | Bool_Lit l -> (env, (Bool, SBool_Lit l))
       | Noexpr -> (env, (Void, SNoexpr))
+      (* TODO: check for uninitialized variables *)
       | Id s -> (env, (type_of_identifier s env.scope, SId s))
       | String_Lit s -> (env, (String, SString_Lit s))
-      | Array_Lit _ as a ->
-          check_container_lit env a
+      | Array_Lit _ as a -> check_container_lit env a
       | Empty_Array(t, n) ->
-          let env, n' = check_expr env n in
-          if fst n' != Int then make_err "size of empty array must be of type int"
-          else (env, (Array t, SEmpty_Array(t, n')))
+          let env, (nt, n') = check_expr env n in
+          if nt != Int then make_err "size of empty array must be of type int"
+          else (env, (Array t, SEmpty_Array(t, (nt, n'))))
       | Matrix_Lit _ as m -> check_container_lit env m
       | Empty_Matrix(t, r, c) ->
-          let env, r' = check_expr env r in
-          let env, c' = check_expr env c in
-          if fst r' != Int || fst c' != Int then make_err "dimensions of empty matrix must be of type int"
-          else (env, (Matrix t, SEmpty_Matrix(t, r', c')))
+          let env, (rt, r') = check_expr env r in
+          let env, (ct, c') = check_expr env c in
+          if rt != Int || ct != Int then make_err "dimensions of empty matrix must be of type int"
+          else (env, (Matrix t, SEmpty_Matrix(t, (rt, r'), (ct, c'))))
+      | Index_Expr i -> check_index_expr env i
+      | Slice_Expr s -> check_slice_expr env s
       | Assign(e1, e2) -> (* TODO: check e1 for index/string *)
           (
             match e1 with
@@ -149,10 +237,8 @@ let check (globals, functions) =
                   let err = "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ string_of_expr expr
                   in
-                  (* env not needed here; it won't be modified since
-                   * call to print isn't a valid assignee *)
-                  let _, sexpr = check_expr env e1 in
-                  (env, (check_assign lt rt err, SAssign(sexpr, (rt, e'))))
+                  let env, se1 = check_expr env e1 in
+                  (env, (check_assign lt rt err, SAssign(se1, (rt, e'))))
               | _ -> make_err "not supported yet in assign"
           )
       | Unop(op, e) ->
@@ -197,13 +283,12 @@ let check (globals, functions) =
         | Call("print", args) ->
             if List.length args != 1 then make_err "expecting 1 argument in print"
             else
-              let env, arg = List.hd (List.map (check_expr env) args) in
-              let ty = fst arg in
+              let env, (t, arg) = List.hd (List.map (check_expr env) args) in
               (
-                match ty with
-                    Int | Bool | String | Matrix _ | Array _ ->
-                      (env, (ty, SCall("print", [arg])))
-                  | _ -> make_err ("type " ^ string_of_typ ty ^ " not supported by print")
+                match t with
+                    Int | Float | Bool | String | Matrix _ | Array _ ->
+                      (env, (t, SCall("print", [(t, arg)])))
+                  | _ -> make_err ("type " ^ string_of_typ t ^ " not supported by print")
               )
         | Call(fname, args) as call ->
             let typ = type_of_identifier fname env.scope in
@@ -216,21 +301,20 @@ let check (globals, functions) =
               make_err ("expecting " ^ string_of_int param_length ^
                 " arguments in " ^ string_of_expr call)
             else
-              let check_arg arg_type arg_expr =
-                (* We can ignore env; array types will be
-                 * found when processing the function formals *)
-                let _, (expr_type, arg') = check_expr env arg_expr in
+              let check_arg (env, checked) arg_type arg_expr =
+                let env, (expr_type, arg') = check_expr env arg_expr in
                 let err = "illegal argument found " ^ string_of_typ expr_type ^
                   " expected " ^ string_of_typ arg_type ^ " in " ^
                   string_of_expr arg_expr
                 in
-                (check_assign arg_type expr_type err, arg')
+                let checked_arg = (check_assign arg_type expr_type err, arg') in
+                (env, checked_arg :: checked)
               in
-              let args' = List.map2 check_arg formals args in
-              (env, (return_type, SCall(fname, args')))
+              let env, args' = List.fold_left2 check_arg (env, []) formals args in
+              (env, (return_type, SCall(fname, List.rev args')))
         | One -> make_err "internal error: One should not be passed to check_expr"
+        | Slice_Inc -> make_err "internal error: Slice_Inc should not be passed to check_expr"
         | End -> (env, (Int, SEnd))
-        | _ -> make_err "not supported yet in check_expr"
   in
 
   (* Return semantically checked declaration *)
@@ -263,8 +347,7 @@ let check (globals, functions) =
     let _ = if kw != expr_kw then make_err kw_err in
 
     (* Check initialization type is valid *)
-    let env, sexpr = check_expr env expr in
-    let et = fst sexpr in
+    let env, (et, expr') = check_expr env expr in
     let typ_err = "declared type " ^ string_of_typ t ^
       " but initialized with type " ^ string_of_typ et
     in
@@ -282,7 +365,7 @@ let check (globals, functions) =
     (* After type check, we explicitly add decl's type to the sexpr,
      * to handle the case where we have a void initialization (i.e.
      * declaration but not initialization) *)
-    ({ env with scope ; array_types }, (kw, t, s, (t, snd sexpr)) :: checked)
+    ({ env with scope ; array_types }, (kw, t, s, (t, expr')) :: checked)
   in
 
   (* Return semantically checked function *)

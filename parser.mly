@@ -148,10 +148,10 @@ decl:
   | CREATE typ ID                        { (Create, $2, $3, Noexpr) }
   | CREATE typ ID ASSIGN expr            { (Create, $2, $3, $5) }
   | CREATE typ ID LBRACKET expr RBRACKET { (Create, $2, $3,
-                                            Empty_Array(typ_of_arr_typ $2, $5)) }
+                                            Empty_Array(typ_of_container $2, $5)) }
   | CREATE typ ID LBRACKET expr RBRACKET LBRACKET expr RBRACKET
                                          { (Create, $2, $3,
-                                            Empty_Matrix(typ_of_mat_typ $2, $5, $8)) }
+                                            Empty_Matrix(typ_of_container $2, $5, $8)) }
   | EXCEPTION ID                         { (Exception, Exc, $2, Noexpr) }
 
 expr_opt:
@@ -178,10 +178,23 @@ postfix_expr:
 
   /* Array/Matrix Indexing */
   | postfix_expr LBRACKET index RBRACKET
-                             { Index_Expr(Sgl_Index($1, $3)) }
+                              {
+                                match $3 with
+                                    Index _ -> Index_Expr(Sgl_Index($1, $3))
+                                  | Slice _ -> Slice_Expr(Sgl_Slice($1, $3))
+                              }
   | postfix_expr LBRACKET index COMMA index RBRACKET
-                             { Index_Expr(Dbl_Index($1, $3, $5)) }
-
+                              {
+                                match ($3, $5) with
+                                    (Index _, Index _) ->
+                                      Index_Expr(Dbl_Index($1, $3, $5))
+                                  | (Slice _, Index _) ->
+                                      Slice_Expr(Dbl_Slice($1, $3, index_to_slice($5)))
+                                  | (Index _, Slice _) ->
+                                      Slice_Expr(Dbl_Slice($1, index_to_slice($3), $5))
+                                  | (Slice _, Slice _) ->
+                                      Slice_Expr(Dbl_Slice($1, $3, $5))
+                              }
   /* Function Call */
   | ID LPAREN args_opt RPAREN { Call($1, $3) }
 

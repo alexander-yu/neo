@@ -1,0 +1,18 @@
+void main() {
+    create matrix<int> a = [[1, 2], [3, 4]];
+    create matrix<int> b = a[0];
+    create array<array<int>> c = {| {|1|}, {|2|} |};
+    create array<int> d = c[0];
+
+    print(a[0]);
+    print("\n");
+    print(d);
+    print("\n");
+    print(a[0, 0]);
+    print("\n");
+    print(a[1:]);
+    print("\n");
+    print(c[:]);
+    print("\n");
+    print(a[:1, 1:]);
+}
