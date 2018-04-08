@@ -76,7 +76,7 @@ let check (globals, functions) =
         | Matrix_Lit l ->
             if Array.length(l) > 0 && Array.length(l.(0)) > 0 then e
             else make_err "matrix must have non-zero dimensions"
-        | _ -> make_err (string_of_expr e ^ " is not a supported container type")
+        | _ -> make_err "internal error: check_container_lit passed non-container type"
       in
 
       (* Note: this returns a reversed list *)
@@ -110,7 +110,7 @@ let check (globals, functions) =
             let checked = Array.map List.rev checked in
             let checked = Array.map Array.of_list checked in
             (env, (Matrix t, SMatrix_Lit(checked)))
-        | _ -> make_err "internal error: check_size should have rejected"
+        | _ -> make_err "internal error: check_container_lit passed non-container type"
     in
 
     (* Raise an exception if the given rvalue type cannot be assigned to
@@ -288,6 +288,7 @@ let check (globals, functions) =
             | Equal | Neq                when same               -> Bool
             | Less | Leq | Greater | Geq when same && (t1 = Int || t1 = Float) -> Bool
             | And | Or                   when same && t1 = Bool -> Bool
+            | MatMult | Mod | Exp -> make_err "not supported yet in check_expr"
             | _ -> make_err ("illegal binary operator " ^
                 string_of_typ t1 ^ " " ^ string_of_op op ^ " " ^
                 string_of_typ t2 ^ " in " ^ string_of_expr expr)
@@ -301,7 +302,7 @@ let check (globals, functions) =
                 match t with
                     Int | Float | Bool | String | Matrix _ | Array _ ->
                       (env, (t, SCall("print", [(t, arg)])))
-                  | _ -> make_err ("type " ^ string_of_typ t ^ " not supported by print")
+                  | _ -> make_err ("type " ^ string_of_typ t ^ " not supported yet in print")
               )
         | Call(fname, args) as call ->
             let typ = type_of_identifier fname env.scope in

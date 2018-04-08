@@ -1,17 +1,17 @@
 void main() {
     var string s;
-    create matrix<int> a = [[1, 2], [3, 4]];
+    create matrix<float> a = [[1.1, 2.2], [3.3, 4.4]];
     create array<int> b = {| 1, 2, 3 |};
 
     s = "Hello!\n";
     print(s);
 
-    print(a[0, 0] = 5);
+    print(a[0, 0] = 5.5);
     print("\n");
     print(a);
     print("\n");
 
-    a[:, :] = [[3, 4], [5, 6]];
+    a[:, :] = [[3., 4.], [5., 6.]];
     print(a);
     print("\n");
     print(b[0] = 4);

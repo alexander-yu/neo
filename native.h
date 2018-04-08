@@ -1,17 +1,25 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+enum mat_type {Int, Float};
+
+union mat_body {
+    double **fbody;
+    int **ibody;
+};
+
 typedef struct array {
     void **body;
     size_t size;
     int length;
 } array_t;
 
-typedef struct matrixi {
-    int **body;
+typedef struct matrix {
+    union mat_body body;
     int rows;
     int cols;
-} matrixi_t;
+    enum mat_type type;
+} matrix_t;
 
 typedef struct slice {
     int start;
@@ -19,7 +27,7 @@ typedef struct slice {
 } slice_t;
 
 void print_bool(bool);
-void print_matrixi(matrixi_t *, bool);
+void print_matrix(matrix_t *, bool);
 /**
  * Second argument should be a function that prints out
  * an element of the array; therefore, it should be able
@@ -28,8 +36,8 @@ void print_matrixi(matrixi_t *, bool);
  */
 void print_array(array_t *, void(*)(void *));
 
-void init_matrixi(matrixi_t *);
-void set_ptrs_matrixi(matrixi_t *, int *);
+void init_matrix(matrix_t *);
+void set_ptrs_matrix(matrix_t *, void *);
 void set_ptrs_array(array_t *, void *);
 
 void * get_array(array_t *, int);
@@ -37,7 +45,7 @@ void set_array(array_t *, int, void *);
 void slice_array(array_t *, slice_t *, array_t *);
 void set_slice_array(array_t *, slice_t *, array_t *);
 
-int get_matrixi(matrixi_t *, int, int);
-void set_matrixi(matrixi_t *, int, int, int);
-void slice_matrixi(matrixi_t *, slice_t *, slice_t *, matrixi_t *);
-void set_slice_matrixi(matrixi_t *, slice_t *, slice_t *, matrixi_t *);
+void * get_matrix(matrix_t *, int, int);
+void set_matrix(matrix_t *, int, int, void *);
+void slice_matrix(matrix_t *, slice_t *, slice_t *, matrix_t *);
+void set_slice_matrix(matrix_t *, slice_t *, slice_t *, matrix_t *);

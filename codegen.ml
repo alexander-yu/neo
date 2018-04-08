@@ -47,19 +47,11 @@ let translate (array_types, program) =
   and void_t     = L.void_type   context
   and pointer_t  = L.pointer_type in
 
-  let matrixi_t =
-    let matrix_type = L.named_struct_type context "matrixi_t" in
-    let body_type = pointer_t (pointer_t i32_t) in
-    (* Struct: double pointer to first element, nrows, ncols *)
-    let _ = L.struct_set_body matrix_type [| body_type ; i32_t ; i32_t |] false in
-    matrix_type
-  in
-
-  let matrixf_t =
-    let matrix_type = L.named_struct_type context "matrixf_t" in
+  let matrix_t =
+    let matrix_type = L.named_struct_type context "matrix_t" in
     let body_type = pointer_t (pointer_t float_t) in
     (* Struct: double pointer to first element, nrows, ncols *)
-    let _ = L.struct_set_body matrix_type [| body_type ; i32_t ; i32_t |] false in
+    let _ = L.struct_set_body matrix_type [| body_type ; i32_t ; i32_t ; i32_t |] false in
     matrix_type
   in
 
@@ -77,13 +69,6 @@ let translate (array_types, program) =
     slice_type
   in
 
-  let matrix_t typ =
-    match typ with
-        A.Int -> matrixi_t
-      | A.Float -> matrixf_t
-      | _ -> make_err "internal error: semant should have rejected invalid matrix type"
-  in
-
   let ltype_of_typ = function
       A.Int      -> i32_t
     | A.Bool     -> i1_t
@@ -91,7 +76,7 @@ let translate (array_types, program) =
     | A.Void     -> void_t
     | A.String   -> pointer_t i8_t
     | A.Array _  -> pointer_t array_t
-    | A.Matrix t -> pointer_t (matrix_t t)
+    | A.Matrix _ -> pointer_t matrix_t
     | _ -> make_err "not supported yet in ltype_of_typ"
   in
 
@@ -126,14 +111,14 @@ let translate (array_types, program) =
   in
   let print_array_func = L.declare_function "print_array" print_array_t the_module in
 
-  let print_matrixi_t = L.function_type void_t [| pointer_t matrixi_t ; i1_t |] in
-  let print_matrixi_func = L.declare_function "print_matrixi" print_matrixi_t the_module in
+  let print_matrix_t = L.function_type void_t [| pointer_t matrix_t ; i1_t |] in
+  let print_matrix_func = L.declare_function "print_matrix" print_matrix_t the_module in
 
-  let init_matrixi_t = L.function_type void_t [| pointer_t matrixi_t |] in
-  let init_matrixi_func = L.declare_function "init_matrixi" init_matrixi_t the_module in
+  let init_matrix_t = L.function_type void_t [| pointer_t matrix_t |] in
+  let init_matrix_func = L.declare_function "init_matrix" init_matrix_t the_module in
 
-  let set_ptrs_matrixi_t = L.function_type void_t [| pointer_t matrixi_t ; pointer_t i32_t |] in
-  let set_ptrs_matrixi_func = L.declare_function "set_ptrs_matrixi" set_ptrs_matrixi_t the_module in
+  let set_ptrs_matrix_t = L.function_type void_t [| pointer_t matrix_t ; pointer_t i8_t |] in
+  let set_ptrs_matrix_func = L.declare_function "set_ptrs_matrix" set_ptrs_matrix_t the_module in
 
   let set_ptrs_array_t = L.function_type void_t [| pointer_t array_t ; pointer_t i8_t |] in
   let set_ptrs_array_func = L.declare_function "set_ptrs_array" set_ptrs_array_t the_module in
@@ -156,23 +141,25 @@ let translate (array_types, program) =
   in
   let set_slice_array_func = L.declare_function "set_slice_array" set_slice_array_t the_module in
 
-  let get_matrixi_t = L.function_type i32_t [| pointer_t matrixi_t ; i32_t ; i32_t |] in
-  let get_matrixi_func = L.declare_function "get_matrixi" get_matrixi_t the_module in
+  let get_matrix_t = L.function_type (pointer_t i8_t) [| pointer_t matrix_t ; i32_t ; i32_t |] in
+  let get_matrix_func = L.declare_function "get_matrix" get_matrix_t the_module in
 
-  let set_matrixi_t = L.function_type void_t [| pointer_t matrixi_t ; i32_t ; i32_t ; i32_t |] in
-  let set_matrixi_func = L.declare_function "set_matrixi" set_matrixi_t the_module in
+  let set_matrix_t = L.function_type void_t [| pointer_t matrix_t ; i32_t ; i32_t ; pointer_t i8_t |] in
+  let set_matrix_func = L.declare_function "set_matrix" set_matrix_t the_module in
 
-  let slice_matrixi_t =
+  let slice_matrix_t =
     L.function_type void_t
-    [| pointer_t matrixi_t ; pointer_t slice_t ; pointer_t slice_t ; pointer_t matrixi_t |]
+    [| pointer_t matrix_t ; pointer_t slice_t ; pointer_t slice_t ; pointer_t matrix_t |]
   in
-  let slice_matrixi_func = L.declare_function "slice_matrixi" slice_matrixi_t the_module in
+  let slice_matrix_func = L.declare_function "slice_matrix" slice_matrix_t the_module in
 
-  let set_slice_matrixi_t =
+  let set_slice_matrix_t =
     L.function_type void_t
-    [| pointer_t matrixi_t ; pointer_t slice_t ; pointer_t slice_t ; pointer_t matrixi_t |]
+    [| pointer_t matrix_t ; pointer_t slice_t ; pointer_t slice_t ; pointer_t matrix_t |]
   in
-  let set_slice_matrixi_func = L.declare_function "set_slice_matrixi" set_slice_matrixi_t the_module in
+  let set_slice_matrix_func = L.declare_function "set_slice_matrix" set_slice_matrix_t the_module in
+
+
 
   (* Build any necessary element-printing functions for array types *)
   let rec build_element_print_func array_type element_print_funcs =
@@ -207,15 +194,10 @@ let translate (array_types, program) =
         | A.Array _ ->
             L.build_call print_array_func
             [| param ; TypeMap.find typ element_print_funcs |] "" builder
-        | A.Matrix t ->
-            (
-              (* Print flat matrices if embedded within arrays *)
-              match t with
-                  A.Int ->
-                    L.build_call print_matrixi_func
-                    [| param ; L.const_int i1_t 1 |] "" builder
-                | _ -> make_err "not supported yet in print (matrix)"
-            )
+        | A.Matrix _ ->
+            (* Print flat matrices if embedded within arrays *)
+            L.build_call print_matrix_func
+            [| param ; L.const_int i1_t 1 |] "" builder
         | A.Void -> make_err "internal error: semant should have rejected void data"
         | _ -> make_err "not supported yet in print"
       in
@@ -231,7 +213,7 @@ let translate (array_types, program) =
     | A.Bool -> L.const_int i1_t 0
     | A.String -> empty_str
     | A.Array _ -> L.const_null (pointer_t array_t)
-    | A.Matrix t -> L.const_null (pointer_t (matrix_t t))
+    | A.Matrix _ -> L.const_null (pointer_t matrix_t)
     | A.Void -> make_err "internal error: semant should have rejected void data"
     | _ -> make_err "not supported yet in init"
   in
@@ -320,41 +302,56 @@ let translate (array_types, program) =
       arr_ptr
     in
 
-    let build_matrix typ rows cols builder =
-      let ltype = ltype_of_typ typ in
+    let get_mat_type = function
+        A.Int -> L.const_int i32_t 0
+      (* Otherwise, it's A.Float *)
+      | _ -> L.const_int i32_t 1
+    in
 
+    let build_matrix typ rows cols builder =
       (* Allocate required space *)
-      let row_ptrs = L.build_array_alloca (pointer_t ltype) rows "row_ptrs" builder in
-      let mat_ptr = L.build_alloca (matrix_t typ) "mat_ptr" builder in
+      let row_ptrs = L.build_array_alloca (pointer_t float_t) rows "row_ptrs" builder in
+      let mat_ptr = L.build_alloca matrix_t "mat_ptr" builder in
 
       (* Set fields *)
       let mat_body = L.build_struct_gep mat_ptr 0 "mat_body" builder in
       let mat_rows = L.build_struct_gep mat_ptr 1 "mat_rows" builder in
       let mat_cols = L.build_struct_gep mat_ptr 2 "mat_cols" builder in
+      let mat_type = L.build_struct_gep mat_ptr 3 "mat_type" builder in
       let _ = L.build_store row_ptrs mat_body builder in
       let _ = L.build_store rows mat_rows builder in
       let _ = L.build_store cols mat_cols builder in
+      let _ = L.build_store (get_mat_type typ) mat_type builder in
       mat_ptr
     in
 
     let build_matrix_lit typ raw_elements builder =
       let ltype = ltype_of_typ typ in
-      let rows = Array.length raw_elements in
-      let cols = Array.length raw_elements.(0) in
-      let mat_ptr = build_matrix typ (L.const_int i32_t rows) (L.const_int i32_t cols) builder in
+      let rows = L.const_int i32_t (Array.length raw_elements) in
+      let cols = L.const_int i32_t (Array.length raw_elements.(0)) in
+      let size = L.build_mul rows cols "size" builder in
+      let mat_ptr = build_matrix typ rows cols builder in
+
+      (* Flatten elements into one array *)
+      let raw_elements = Array.concat (Array.to_list raw_elements) in
 
       (* Allocate and fill matrix body *)
-      let raw_rows = Array.map (L.const_array ltype) raw_elements in
-      let raw_matrix = L.const_array (L.array_type ltype cols) raw_rows in
-      let body = L.build_alloca (L.array_type (L.array_type ltype cols) rows) "body" builder in
-      let _ = L.build_store raw_matrix body builder in
-      let body_ptr =
-        L.build_in_bounds_gep body
-        [| L.const_int i32_t 0 ; L.const_int i32_t 0 ; L.const_int i32_t 0 |] "body_ptr" builder
+      let body_ptr = L.build_array_alloca ltype size "body_ptr" builder in
+      let set_element i element =
+        let ptr =
+          L.build_in_bounds_gep body_ptr
+          [| L.const_int i32_t i |] "ptr" builder
+        in
+        let _ = L.build_store element ptr builder in
+        ()
       in
+      let _ = Array.iteri set_element raw_elements in
+
+      (* Cast body ptr to "void pointer" *)
+      let body_ptr = L.build_bitcast body_ptr (pointer_t i8_t) "body_ptr" builder in
 
       (* Set body pointers *)
-      let _ = L.build_call set_ptrs_matrixi_func [| mat_ptr ; body_ptr |] "" builder in
+      let _ = L.build_call set_ptrs_matrix_func [| mat_ptr ; body_ptr |] "" builder in
       mat_ptr
     in
 
@@ -366,8 +363,11 @@ let translate (array_types, program) =
       (* Allocate matrix body *)
       let body_ptr = L.build_array_alloca ltype size "body_ptr" builder in
 
+      (* Cast body ptr to "void pointer" *)
+      let body_ptr = L.build_bitcast body_ptr (pointer_t i8_t) "body_ptr" builder in
+
       (* Set body pointers *)
-      let _ = L.build_call set_ptrs_matrixi_func [| mat_ptr ; body_ptr |] "" builder in
+      let _ = L.build_call set_ptrs_matrix_func [| mat_ptr ; body_ptr |] "" builder in
       mat_ptr
     in
 
@@ -471,7 +471,7 @@ let translate (array_types, program) =
           let rows = expr scope builder r in
           let cols = expr scope builder c in
           let mat_ptr = build_empty_matrix t rows cols builder in
-          let _ = L.build_call init_matrixi_func [| mat_ptr |] "" builder in
+          let _ = L.build_call init_matrix_func [| mat_ptr |] "" builder in
           mat_ptr
       (* TODO: perform runtime checks on index bounds *)
       | SIndex_Expr i ->
@@ -485,10 +485,15 @@ let translate (array_types, program) =
                   let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
                   L.build_load ptr "arr_element" builder
               | SDbl_Index(e, i, j) ->
+                  let ltype = ltype_of_typ t in
                   let e' = expr scope builder e in
                   let i' = expr scope builder (sexpr_of_sindex i) in
                   let j' = expr scope builder (sexpr_of_sindex j) in
-                  L.build_call get_matrixi_func [| e' ; i' ; j' |] "mat_element" builder
+                  let ptr =
+                    L.build_call get_matrix_func [| e' ; i' ; j' |] "mat_element" builder
+                  in
+                  let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
+                  L.build_load ptr "mat_element" builder
           )
       | SSlice_Expr s ->
           let typ = A.typ_of_container t in
@@ -505,7 +510,7 @@ let translate (array_types, program) =
                   let s1', s2' = build_dbl_slice e' s1 s2 builder in
                   let res_ptr = build_slice_matrix typ s1' s2' builder in
                   let _ =
-                    L.build_call slice_matrixi_func [| e' ; s1' ; s2' ; res_ptr |] "" builder
+                    L.build_call slice_matrix_func [| e' ; s1' ; s2' ; res_ptr |] "" builder
                   in
                   res_ptr
           )
@@ -532,12 +537,16 @@ let translate (array_types, program) =
                           let _ = L.build_call set_array_func [| e' ; i' ; ptr |] "" builder in
                           ()
                       | SDbl_Index(e, i, j) ->
+                          let ltype = ltype_of_typ t in
                           let e' = expr scope builder e in
                           let i' = expr scope builder (sexpr_of_sindex i) in
                           let j' = expr scope builder (sexpr_of_sindex j) in
+                          let ptr = L.build_alloca ltype "ptr" builder in
+                          let _ = L.build_store e2' ptr builder in
+                          let ptr = L.build_bitcast ptr (pointer_t i8_t) "ptr" builder in
                           let _ =
-                            L.build_call set_matrixi_func
-                            [| e' ; i' ; j' ; e2' |] "" builder
+                            L.build_call set_matrix_func
+                            [| e' ; i' ; j' ; ptr |] "" builder
                           in
                           ()
                   )
@@ -556,7 +565,7 @@ let translate (array_types, program) =
                         let e' = expr scope builder e in
                         let s1', s2' = build_dbl_slice e' s1 s2 builder in
                         let _ =
-                          L.build_call set_slice_matrixi_func
+                          L.build_call set_slice_matrix_func
                           [| e' ; s1' ; s2' ; e2' |] "" builder
                         in
                         ()
@@ -622,14 +631,9 @@ let translate (array_types, program) =
               | A.Array _ ->
                   L.build_call print_array_func
                   [| e' ; TypeMap.find t element_print_funcs |] "" builder
-              | A.Matrix t ->
-                  (
-                    match t with
-                        A.Int ->
-                          L.build_call print_matrixi_func
-                          [| e' ; L.const_int i1_t 0 |] "" builder
-                      | _ -> make_err "not supported yet in print (matrix)"
-                  )
+              | A.Matrix _ ->
+                  L.build_call print_matrix_func
+                  [| e' ; L.const_int i1_t 0 |] "" builder
               | A.Void -> make_err "internal error: semant should have rejected void data"
               | _ -> make_err "not supported yet in print"
           )

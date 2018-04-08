@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include "native.h"
 
 void print_bool(bool b) {
@@ -10,11 +11,11 @@ void print_bool(bool b) {
     }
 }
 
-void print_matrixi(matrixi_t *matrix, bool flat) {
+void print_matrix(matrix_t *mat, bool flat) {
     printf("[");
-    int rows = matrix->rows;
-    int cols = matrix->cols;
-    int **mat = matrix->body;
+    int rows = mat->rows;
+    int cols = mat->cols;
+    union mat_body body = mat->body;
     for (int i = 0; i < rows; ++i) {
         if (i == 0) {
             printf("[");
@@ -24,10 +25,16 @@ void print_matrixi(matrixi_t *matrix, bool flat) {
 
         for (int j = 0; j < cols; ++j) {
             if (j == cols - 1) {
-                printf("%d", mat[i][j]);
+                switch (mat->type) {
+                    case Int: printf("%d", body.ibody[i][j]); break;
+                    case Float: printf("%g", body.fbody[i][j]); break;
+                }
             } else {
-                printf("%d, ", mat[i][j]);
+                switch (mat->type) {
+                    case Int: printf("%d, ", body.ibody[i][j]); break;
+                    case Float: printf("%g, ", body.fbody[i][j]); break;
             }
+        }
         }
 
         if (i == rows - 1) {
@@ -55,22 +62,31 @@ void print_array(array_t *arr, void(*print_element)(void *)) {
     printf("|}");
 }
 
-void init_matrixi (matrixi_t *mat) {
-    int **body = mat->body;
+void init_matrix (matrix_t *mat) {
     int rows = mat->rows;
     int cols = mat->cols;
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            body[i][j] = 0;
+            switch (mat->type) {
+                case Int: mat->body.ibody[i][j] = 0; break;
+                case Float: mat->body.fbody[i][j] = 0.0; break;
         }
     }
 }
+}
 
-void set_ptrs_matrixi(matrixi_t *mat, int *body) {
+void set_ptrs_matrix(matrix_t *mat, void *body) {
     int rows = mat->rows;
     int cols = mat->cols;
     for (int i = 0; i < rows; i++) {
-        mat->body[i] = &body[i * cols];
+        switch (mat->type) {
+            case Int:
+                mat->body.ibody[i] = (int *)((char *)body + i * cols * sizeof(int));
+                break;
+            case Float:
+                mat->body.fbody[i] = (double *)((char *)body + (i * cols * sizeof(double)));
+                break;
+        }
     }
 }
 
@@ -106,34 +122,61 @@ void set_slice_array(array_t *arr, slice_t *slice, array_t *data) {
     }
 }
 
-int get_matrixi(matrixi_t *mat, int i, int j) {
-    return mat->body[i][j];
+void * get_matrix(matrix_t *mat, int i, int j) {
+    switch (mat->type) {
+        case Int: return (void *)&mat->body.ibody[i][j];
+        case Float: return (void *)&mat->body.fbody[i][j];
+    }
+    /**
+     * This is for placating GCC warnings, since get_matrix is
+     * a non-void function, and control flow thus can't reach the
+     * end of the function
+     */
+    perror("get_matrix got invalid mat_type; this should never happen");
+    exit(EXIT_FAILURE);
 }
 
-void set_matrixi(matrixi_t *mat, int i, int j, int data) {
-    mat->body[i][j] = data;
+void set_matrix(matrix_t *mat, int i, int j, void *data) {
+    switch (mat->type) {
+        case Int: mat->body.ibody[i][j] = *(int *)data; break;
+        case Float: mat->body.fbody[i][j] = *(double *)data; break;
+    }
 }
 
-void slice_matrixi(matrixi_t *mat, slice_t *row_slice, slice_t *col_slice, matrixi_t *res) {
+void slice_matrix(matrix_t *mat, slice_t *row_slice, slice_t *col_slice, matrix_t *res) {
     int start_i = row_slice->start;
     int end_i = row_slice->end;
     int start_j = col_slice->start;
     int end_j = col_slice->end;
     for (int i = start_i; i < end_i; i++) {
         for (int j = start_j; j < end_j; j++) {
-            res->body[i - start_i][j - start_j] = mat->body[i][j];
+            switch (mat->type) {
+                case Int:
+                    res->body.ibody[i - start_i][j - start_j] = mat->body.ibody[i][j];
+                    break;
+                case Float:
+                    res->body.fbody[i - start_i][j - start_j] = mat->body.fbody[i][j];
+                    break;
+            }
         }
     }
 }
 
-void set_slice_matrixi(matrixi_t *mat, slice_t *row_slice, slice_t *col_slice, matrixi_t *data) {
+void set_slice_matrix(matrix_t *mat, slice_t *row_slice, slice_t *col_slice, matrix_t *data) {
     int start_i = row_slice->start;
     int end_i = row_slice->end;
     int start_j = col_slice->start;
     int end_j = col_slice->end;
     for (int i = start_i; i < end_i; i++) {
         for (int j = start_j; j < end_j; j++) {
-            mat->body[i][j] = data->body[i - start_i][j - start_j];
+            switch (mat->type) {
+                case Int:
+                    mat->body.ibody[i][j] = data->body.ibody[i - start_i][j - start_j];
+                    break;
+                case Float:
+                    mat->body.fbody[i][j] = data->body.fbody[i - start_i][j - start_j];
+                    break;
+            }
         }
     }
 }
