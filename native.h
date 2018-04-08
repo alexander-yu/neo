@@ -18,6 +18,7 @@ typedef struct slice {
     int end;
 } slice_t;
 
+void print_bool(bool);
 void print_matrixi(matrixi_t *, bool);
 /**
  * Second argument should be a function that prints out

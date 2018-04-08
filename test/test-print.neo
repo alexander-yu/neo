@@ -1,0 +1,20 @@
+var string a = "World!";
+create array<string> arr1 = {| a |};
+create array<int> arr2 = {| 1, 2 |};
+create array<array<int>> b = {| {|1|}, {|2|} |};
+create array<matrix<int>> c = {| [[1], [2]], [[3], [4]] |};
+
+void main() {
+    print("Hello\n");
+    print(a);
+    print("\n");
+    print(arr1);
+    print("\n");
+    print(arr2);
+    print("\n");
+    print(b);
+    print("\n");
+    print(c);
+    print("\n");
+    print(True);
+}

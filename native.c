@@ -2,6 +2,14 @@
 #include <stdlib.h>
 #include "native.h"
 
+void print_bool(bool b) {
+    if (b) {
+        printf("True");
+    } else {
+        printf("False");
+    }
+}
+
 void print_matrixi(matrixi_t *matrix, bool flat) {
     printf("[");
     int rows = matrix->rows;

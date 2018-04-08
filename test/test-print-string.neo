@@ -1,9 +1,0 @@
-var string a = "World!";
-create array<string> arr = {| a |};
-
-void main() {
-    print("Hello\n");
-    print(a);
-    print("\n");
-    print(arr);
-}

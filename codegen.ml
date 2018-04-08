@@ -114,6 +114,9 @@ let translate (array_types, program) =
   let float_format_str = L.build_global_stringptr "%g" "fmt" main_builder in
 
   (* Declare built-in functions *)
+  let print_bool_t = L.function_type void_t [| i1_t |] in
+  let print_bool_func = L.declare_function "print_bool" print_bool_t the_module in
+
   let printf_t = L.var_arg_function_type i32_t [| pointer_t i8_t |] in
   let printf_func = L.declare_function "printf" printf_t the_module in
 
@@ -192,9 +195,11 @@ let translate (array_types, program) =
         | _ -> element_print_funcs
       in
       let _ = match typ with
-          A.Int | A.Bool ->
+          A.Int ->
             L.build_call printf_func
             [| int_format_str ; param |] "printf" builder
+        | A.Bool ->
+            L.build_call print_bool_func [| param |] "" builder
         | A.Float ->
             L.build_call printf_func
             [| float_format_str ; param |] "printf" builder
@@ -211,6 +216,7 @@ let translate (array_types, program) =
                     [| param ; L.const_int i1_t 1 |] "" builder
                 | _ -> make_err "not supported yet in print (matrix)"
             )
+        | A.Void -> make_err "internal error: semant should have rejected void data"
         | _ -> make_err "not supported yet in print"
       in
       let _ = L.build_ret_void builder in
@@ -222,9 +228,11 @@ let translate (array_types, program) =
   let init t = match t with
       A.Float -> L.const_float float_t 0.0
     | A.Int -> L.const_int i32_t 0
+    | A.Bool -> L.const_int i1_t 0
     | A.String -> empty_str
     | A.Array _ -> L.const_null (pointer_t array_t)
     | A.Matrix t -> L.const_null (pointer_t (matrix_t t))
+    | A.Void -> make_err "internal error: semant should have rejected void data"
     | _ -> make_err "not supported yet in init"
   in
 
@@ -602,9 +610,11 @@ let translate (array_types, program) =
           let e' = expr scope builder e in
           (
             match t with
-                A.Int | A.Bool ->
+                A.Int ->
                   L.build_call printf_func
                   [| int_format_str ; e' |] "printf" builder
+              | A.Bool ->
+                  L.build_call print_bool_func [| e' |] "" builder
               | A.Float ->
                   L.build_call printf_func
                   [| float_format_str ; e' |] "printf" builder
@@ -620,6 +630,7 @@ let translate (array_types, program) =
                           [| e' ; L.const_int i1_t 0 |] "" builder
                       | _ -> make_err "not supported yet in print (matrix)"
                   )
+              | A.Void -> make_err "internal error: semant should have rejected void data"
               | _ -> make_err "not supported yet in print"
           )
       | SCall(fname, args) ->
