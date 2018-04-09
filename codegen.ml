@@ -13,7 +13,6 @@ http://llvm.moe/ocaml/
 *)
 
 (* We'll refer to Llvm and Ast constructs with module names *)
-(* TODO: make a utility module of some sort *)
 module S = Semant
 module L = Llvm
 module A = Ast
@@ -158,8 +157,6 @@ let translate (array_types, program) =
     [| pointer_t matrix_t ; pointer_t slice_t ; pointer_t slice_t ; pointer_t matrix_t |]
   in
   let set_slice_matrix_func = L.declare_function "set_slice_matrix" set_slice_matrix_t the_module in
-
-
 
   (* Build any necessary element-printing functions for array types *)
   let rec build_element_print_func array_type element_print_funcs =
