@@ -12,26 +12,27 @@ module TypeSet = Set.Make(struct type t = typ let compare = compare end)
    Check each global variable, then check each function *)
 
 type symbol_table = {
-  variables : typ StringMap.t;
+  (* The bool value represents whether or not the variable
+   * has been assigned a value *)
+  variables : (typ * bool) StringMap.t;
   parent : symbol_table option
 }
 
 type translation_environment = {
   scope : symbol_table;
   array_types : TypeSet.t;
-  expr_type : typ option;
 }
 
 let make_err err = raise (Failure err)
 
 let check (globals, functions) =
   (* add built-in functions *)
-  let built_in_decls =
-    let add_built_in_decl map (name, typ) =
+  let built_in_funcs =
+    let add_built_in_func map (name, typ) =
       let f_type = Func([], typ) in
-      StringMap.add name f_type map
+      StringMap.add name (f_type, true) map
     in
-    List.fold_left add_built_in_decl StringMap.empty [
+    List.fold_left add_built_in_func StringMap.empty [
       ("print", Void)
     ]
   in
@@ -43,26 +44,26 @@ let check (globals, functions) =
   let sys_main = "main" in
   let prog_main = "prog_main" in
 
-  let add_decl scope name typ =
+  let add_decl scope name typ has_value =
     let built_in_err = "identifier " ^ name ^ " may not be defined" in
     let dup_err = "duplicate identifier " ^ name in
 
     (* Cannot redefine built-ins *)
-    let is_built_in = StringMap.mem name built_in_decls in
+    let is_built_in = StringMap.mem name built_in_funcs in
     let _ = if is_built_in then make_err built_in_err in
 
     (* Cannot declare duplicate in same scope *)
     let is_dup = StringMap.mem name scope.variables in
     let _ = if is_dup then make_err dup_err in
-    { scope with variables = StringMap.add name typ scope.variables }
+    { scope with variables = StringMap.add name (typ, has_value) scope.variables }
   in
 
-  let rec type_of_identifier name scope =
+  let rec lookup name scope =
     try StringMap.find name scope.variables
     with Not_found ->
       match scope.parent with
           None -> make_err ("undeclared identifier " ^ name)
-        | Some parent -> type_of_identifier name parent
+        | Some parent -> lookup name parent
   in
 
   (* Return a semantically-checked expression *)
@@ -212,8 +213,15 @@ let check (globals, functions) =
       | Float_Lit l -> (env, (Float, SFloat_Lit l))
       | Bool_Lit l -> (env, (Bool, SBool_Lit l))
       | Noexpr -> (env, (Void, SNoexpr))
-      (* TODO: check for uninitialized variables *)
-      | Id s -> (env, (type_of_identifier s env.scope, SId s))
+      | Id s ->
+          (* If we're here, this should mean that the expression is attempting
+           * to access/read the symbol; thus, it needs to have a value *)
+          let t, has_value = lookup s env.scope in
+          let _ =
+            if not has_value
+            then make_err ("variable " ^ s ^ " must be initialized before use")
+          in
+          (env, (t, SId s))
       | String_Lit s -> (env, (String, SString_Lit s))
       | Array_Lit _ as a -> check_container_lit env a
       | Empty_Array(t, n) ->
@@ -232,14 +240,34 @@ let check (globals, functions) =
       | Assign(e1, e2) ->
           (
             match e1 with
-                Id _ ->
-                  let env, (lt, s') = check_expr env e1 in
+                Id s ->
+                  (* Set the value flag for a symbol; here, since we're assigning a value,
+                   * we need to make sure the flag is now true *)
+                  let rec set_value_flag s scope =
+                    try
+                      let typ, _ = StringMap.find s scope.variables in
+                      let variables = StringMap.add s (typ, true) scope.variables in
+                      { scope with variables }
+                    with Not_found ->
+                      (* If not found in current scope, search its parent and return the
+                       * updated parent *)
+                       match scope.parent with
+                          None ->
+                            make_err
+                            ("internal error: lookup should have " ^
+                            "thrown unidentified error")
+                        | Some parent ->
+                            let parent = set_value_flag s parent in
+                            { scope with parent = Some parent }
+                  in
+                  let lt, _ = lookup s env.scope in
+                  let env = { env with scope = set_value_flag s env.scope} in
                   let env, (rt, e') = check_expr env e2 in
                   let err =
                     "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ expr_s
                   in
-                  (env, (check_assign lt rt err, SAssign((lt, s'), (rt, e'))))
+                  (env, (check_assign lt rt err, SAssign((lt, SId s), (rt, e'))))
               | Index_Expr i ->
                   let env, (lt, i') = check_index_expr env i in
                   let env, (rt, e') = check_expr env e2 in
@@ -309,7 +337,7 @@ let check (globals, functions) =
                   | _ -> make_err ("unsupported print parameter type in " ^ expr_s)
               )
         | Call(fname, args) ->
-            let typ = type_of_identifier fname env.scope in
+            let typ, _ = lookup fname env.scope in
             let formals, return_type = match typ with
                 Func(formals, return_type) -> (formals, return_type)
               | _ -> make_err (fname ^ " is not a function in " ^ expr_s)
@@ -338,7 +366,7 @@ let check (globals, functions) =
   in
 
   (* Return semantically checked declaration *)
-  let check_v_decl (env, checked) decl =
+  let check_v_decl override_true (env, checked) decl =
     let check_v_decl_type t =
       let err =
         "illegal declaration type " ^ string_of_typ t ^
@@ -349,8 +377,14 @@ let check (globals, functions) =
         | _ -> ()
     in
     let add_v_decl scope decl =
-      let _, t, s, _ = decl in
-      add_decl scope s t
+      let _, t, s, expr = decl in
+      (* If override_true, we override the initializer check with a value of true;
+       * this is needed for globals (we'll be generating a value for them when
+       * declared, and also because this behavior is impossible to track for
+       * globals anyhow) as well as function parameters (because presumably
+       * these parameters will themselves be checked during the actual function
+       * call) *)
+      add_decl scope s t (expr != Noexpr || override_true)
     in
     let kw, t, s, expr = decl in
 
@@ -365,12 +399,13 @@ let check (globals, functions) =
       | _ -> make_err "internal error: check_v_decl_type should have rejected"
     in
     let kw_err =
-      "illegal use of declaration keyword " ^ string_of_decl_kw kw
+      "illegal use of declaration keyword " ^ string_of_decl_kw kw ^
       " for type " ^ string_of_typ t ^ " in " ^ string_of_vdecl decl
     in
     let _ = if kw != expr_kw then make_err kw_err in
 
-    (* Check initialization type is valid *)
+    (* Check initialization type is valid; note that an empty initialization
+     * is valid, as this means we're declaring but not initializing *)
     let env, (et, expr') = check_expr env expr in
     let typ_err =
       "declared type " ^ string_of_typ t ^
@@ -391,7 +426,7 @@ let check (globals, functions) =
     (* After type check, we explicitly add decl's type to the sexpr,
      * to handle the case where we have a void initialization (i.e.
      * declaration but not initialization) *)
-    ({ env with scope ; array_types }, (kw, t, s, (t, expr')) :: checked)
+    ({ scope ; array_types }, (kw, t, s, (t, expr')) :: checked)
   in
 
   (* Return semantically checked function *)
@@ -403,13 +438,15 @@ let check (globals, functions) =
         Func(arg_types, f.typ)
       in
       let typ = typ_of_func f in
-      add_decl scope f.fname typ
+      (* Note function declarations automatically have a value, since
+       * their declarations include their definitions *)
+      add_decl scope f.fname typ true
     in
-    let check_formal_type formal =
+    let check_formal_type fname formal =
       let _, t, _, _ = formal in
       let err =
         "illegal argument type " ^ string_of_typ t ^ " in " ^
-        string_of_vdecl formal " for the function " ^ f.fname
+        string_of_vdecl formal ^ " for the function " ^ fname
       in
       if t = Exc || t = Void then make_err err
     in
@@ -462,7 +499,7 @@ let check (globals, functions) =
             (* Return to parent scope *)
             ({ env with scope = parent_scope }, SBlock sl', ret)
         | Decl d ->
-            let env, checked = check_v_decl (env, []) d in
+            let env, checked = check_v_decl false (env, []) d in
             let sdecl = List.hd checked in
             (env, SDecl sdecl, false)
         | _ -> make_err "not supported yet in check_stmt"
@@ -478,12 +515,13 @@ let check (globals, functions) =
     let parent_scope = add_func_decl parent_scope func in
 
     (* Check formals have valid type *)
-    let _ = List.iter check_formal_type func.formals in
+    let _ = List.iter (check_formal_type old_fname) func.formals in
 
     (* Build local symbol table of variables for this function *)
     let scope = { variables = StringMap.empty; parent = Some parent_scope } in
     let env = { env with scope } in
-    let env, formals' = List.fold_left check_v_decl (env, []) func.formals in
+    (* Set override_true; function parameters should have values *)
+    let env, formals' = List.fold_left (check_v_decl true) (env, []) func.formals in
 
     (* Check body *)
     let env, body =
@@ -511,16 +549,18 @@ let check (globals, functions) =
     )
   in
 
-  let global_scope = { variables = built_in_decls; parent = None } in
-  let env = { scope = global_scope; array_types = TypeSet.empty; expr_type = None } in
-  let env, globals' = List.fold_left check_v_decl (env, []) globals in
+  let global_scope = { variables = built_in_funcs; parent = None } in
+  let env = { scope = global_scope; array_types = TypeSet.empty; } in
+  (* Set override_true; globals will have a default value generated at declaration *)
+  (* TODO: how to handle null defaults for array/matrices? *)
+  let env, globals' = List.fold_left (check_v_decl true) (env, []) globals in
   let env, functions' = List.fold_left check_func_decl (env, []) functions in
 
   (* Ensure "main" is defined *)
   let _ =
     let main_err = "must have a main function of type func<():void>" in
     try
-      let typ = type_of_identifier prog_main env.scope in
+      let typ, _ = lookup prog_main env.scope in
       match typ with
           Func([], Void) -> typ
         | _ -> make_err main_err
