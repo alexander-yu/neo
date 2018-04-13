@@ -49,6 +49,18 @@ void print_matrix(matrix_t *mat, bool flat) {
     printf("]");
 }
 
+void free_matrix(matrix_t *mat) {
+    union mat_body body = mat->body;
+    enum mat_type type = mat->type;
+
+    switch (type) {
+        case Int: free(body.ibody[0]); free(body.ibody); break;
+        case Float: free(body.fbody[0]); free(body.fbody); break;
+    }
+
+    free(mat);
+}
+
 void print_array(array_t *arr, void(*print_element)(void *)) {
     void **body = arr->body;
     int length = arr->length;
@@ -62,7 +74,20 @@ void print_array(array_t *arr, void(*print_element)(void *)) {
     printf("|}");
 }
 
-void init_matrix (matrix_t *mat) {
+void free_array(array_t *arr, void(*free_element)(void *)) {
+    void **body = arr->body;
+    int length = arr->length;
+
+    for (int i = 0; i < length; i++) {
+        free_element(body[i]);
+    }
+
+    free(body[0]);
+    free(body);
+    free(arr);
+}
+
+void init_matrix(matrix_t *mat) {
     int rows = mat->rows;
     int cols = mat->cols;
     for (int i = 0; i < rows; i++) {

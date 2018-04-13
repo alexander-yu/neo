@@ -49,7 +49,7 @@ let translate (array_types, program) =
   let matrix_t =
     let matrix_type = L.named_struct_type context "matrix_t" in
     let body_type = pointer_t (pointer_t float_t) in
-    (* Struct: double pointer to first element, nrows, ncols *)
+    (* Struct: double pointer to first element, nrows, ncols, element type *)
     let _ = L.struct_set_body matrix_type [| body_type ; i32_t ; i32_t ; i32_t |] false in
     matrix_type
   in
@@ -57,8 +57,8 @@ let translate (array_types, program) =
   let array_t =
     let array_type = L.named_struct_type context "array_t" in
     let body_type = pointer_t (pointer_t i8_t) in
-    (* Struct: void pointer to first element, element size, length *)
-    let _ = L.struct_set_body array_type [| body_type ; i64_t ; i32_t |] false in
+    (* Struct: void pointer to first element, length, size of elements *)
+    let _ = L.struct_set_body array_type [| body_type ; i32_t ; i64_t |] false in
     array_type
   in
 
@@ -110,8 +110,17 @@ let translate (array_types, program) =
   in
   let print_array_func = L.declare_function "print_array" print_array_t the_module in
 
+  let free_element_t = L.function_type void_t [| pointer_t i8_t |] in
+  let free_array_t =
+    L.function_type void_t [| pointer_t array_t ; pointer_t free_element_t |]
+  in
+  let free_array_func = L.declare_function "free_array" free_array_t the_module in
+
   let print_matrix_t = L.function_type void_t [| pointer_t matrix_t ; i1_t |] in
   let print_matrix_func = L.declare_function "print_matrix" print_matrix_t the_module in
+
+  let free_matrix_t = L.function_type void_t [| pointer_t matrix_t |] in
+  let free_matrix_func = L.declare_function "free_matrix" free_matrix_t the_module in
 
   let init_matrix_t = L.function_type void_t [| pointer_t matrix_t |] in
   let init_matrix_func = L.declare_function "init_matrix" init_matrix_t the_module in
@@ -195,13 +204,58 @@ let translate (array_types, program) =
             (* Print flat matrices if embedded within arrays *)
             L.build_call print_matrix_func
             [| param ; L.const_int i1_t 1 |] "" builder
-        | A.Void -> make_err "internal error: semant should have rejected void data"
+        | A.Void -> make_err "internal error: semant should have rejected void data (build print)"
         | _ -> make_err "not supported yet in print"
       in
       let _ = L.build_ret_void builder in
       TypeMap.add array_type print_func element_print_funcs
   in
   let element_print_funcs = S.TypeSet.fold build_element_print_func array_types TypeMap.empty in
+
+  (* Build any necessary element-freeing functions for array types *)
+  let rec build_element_free_func array_type element_free_funcs =
+    let typ = A.typ_of_container array_type in
+    if TypeMap.mem array_type element_free_funcs then element_free_funcs
+    else
+      let free_t = L.function_type void_t [| pointer_t i8_t |] in
+      let free_func =
+        L.define_function ("free_" ^ A.string_of_typ typ) free_t the_module
+      in
+      let builder = L.builder_at_end context (L.entry_block free_func) in
+      let ltype = ltype_of_typ typ in
+
+      (* Cast and load param *)
+      let param_ptr = (L.params free_func).(0) in
+      let param_ptr = L.build_bitcast param_ptr (pointer_t ltype) "param_ptr" builder in
+      let param = L.build_load param_ptr "param" builder in
+
+      (* Perform corresponding free action; if we have another array,
+       * recursively make it *)
+      let element_free_funcs = match typ with
+          A.Array _ -> build_element_free_func typ element_free_funcs
+        | _ -> element_free_funcs
+      in
+      let _ = match typ with
+          (* In these cases, don't do anything *)
+          A.Int | A.Bool | A.Float | A.String -> ()
+        | A.Array _ ->
+            let _ =
+              L.build_call free_array_func
+              [| param ; TypeMap.find typ element_free_funcs |] "" builder
+            in
+            ()
+        | A.Matrix _ ->
+            let _ =
+              L.build_call free_matrix_func [| param |] "" builder
+            in
+            ()
+        | A.Void -> make_err "internal error: semant should have rejected void data (build free)"
+        | _ -> make_err "not supported yet in build_element_free_func"
+      in
+      let _ = L.build_ret_void builder in
+      TypeMap.add array_type free_func element_free_funcs
+  in
+  let element_free_funcs = S.TypeSet.fold build_element_free_func array_types TypeMap.empty in
 
   (* Returns initial value for an empty declaration of a given type *)
   let init t = match t with
@@ -211,7 +265,7 @@ let translate (array_types, program) =
     | A.String -> empty_str
     | A.Array _ -> L.const_null (pointer_t array_t)
     | A.Matrix _ -> L.const_null (pointer_t matrix_t)
-    | A.Void -> make_err "internal error: semant should have rejected void data"
+    | A.Void -> make_err "internal error: semant should have rejected void data (init)"
     | _ -> make_err "not supported yet in init"
   in
 
@@ -228,7 +282,7 @@ let translate (array_types, program) =
   in
 
   let add_func_decl scope fdecl =
-    let fname = if fdecl.sfname = sys_main then prog_main else fdecl.sfname in
+    let fname = fdecl.sfname in
     let return_type = fdecl.styp in
     let get_decl_type (_, typ, _, _) = typ in
     let arg_types = List.map get_decl_type fdecl.sformals in
@@ -238,24 +292,25 @@ let translate (array_types, program) =
     { scope with variables = StringMap.add fname f scope.variables }
   in
 
+  (* Fill in the body of the given function *)
+  let build_function_body scope builder fdecl =
+    let the_function = lookup fdecl.sfname scope in
+
   (* Construct code for an expression; return its value *)
   let rec expr scope builder (t, e) =
-    (* TODO: make sure to free any malloc'd arrays/matrices and move to stack var *)
     let build_array typ length builder =
       let ltype = ltype_of_typ typ in
-      let size = L.size_of ltype in
-
       (* Allocate required space *)
-      let body_ptr = L.build_array_alloca (pointer_t i8_t) length "body_ptr" builder in
-      let arr_ptr = L.build_alloca array_t "arr_ptr" builder in
+        let body_ptr = L.build_array_malloc (pointer_t i8_t) length "body_ptr" builder in
+        let arr_ptr = L.build_malloc array_t "arr_ptr" builder in
 
       (* Set fields *)
       let arr_body = L.build_struct_gep arr_ptr 0 "arr_body" builder in
-      let arr_size = L.build_struct_gep arr_ptr 1 "arr_size" builder in
-      let arr_length = L.build_struct_gep arr_ptr 2 "arr_length" builder in
+        let arr_length = L.build_struct_gep arr_ptr 1 "arr_length" builder in
+        let arr_size = L.build_struct_gep arr_ptr 2 "arr_size" builder in
       let _ = L.build_store body_ptr arr_body builder in
-      let _ = L.build_store size arr_size builder in
       let _ = L.build_store length arr_length builder in
+        let _ = L.build_store (L.size_of ltype) arr_size builder in
       arr_ptr
     in
 
@@ -265,7 +320,7 @@ let translate (array_types, program) =
       let arr_ptr = build_array typ length builder in
 
       (* Allocate and fill array body *)
-      let body = L.build_array_alloca ltype length "body" builder in
+        let body = L.build_array_malloc ltype length "body" builder in
       let set_element i element =
         let ptr =
           L.build_in_bounds_gep body
@@ -276,11 +331,11 @@ let translate (array_types, program) =
       in
       let _ = Array.iteri set_element raw_elements in
 
-      (* Cast body ptr to "void pointer" *)
-      let body_ptr = L.build_bitcast body (pointer_t i8_t) "body_ptr" builder in
+        (* Cast body to "void pointer" *)
+        let body = L.build_bitcast body (pointer_t i8_t) "body" builder in
 
       (* Set body pointers *)
-      let _ = L.build_call set_ptrs_array_func [| arr_ptr ; body_ptr |] "" builder in
+        let _ = L.build_call set_ptrs_array_func [| arr_ptr ; body |] "" builder in
       arr_ptr
     in
 
@@ -289,13 +344,13 @@ let translate (array_types, program) =
       let arr_ptr = build_array typ length builder in
 
       (* Allocate array contents *)
-      let body = L.build_array_alloca ltype length "body" builder in
+        let body = L.build_array_malloc ltype length "body" builder in
 
-      (* Cast body ptr to "void pointer" *)
-      let body_ptr = L.build_bitcast body (pointer_t i8_t) "body_ptr" builder in
+        (* Cast body to "void pointer" *)
+        let body = L.build_bitcast body (pointer_t i8_t) "body" builder in
 
       (* Set body pointers *)
-      let _ = L.build_call set_ptrs_array_func [| arr_ptr ; body_ptr |] "" builder in
+        let _ = L.build_call set_ptrs_array_func [| arr_ptr ; body |] "" builder in
       arr_ptr
     in
 
@@ -307,8 +362,8 @@ let translate (array_types, program) =
 
     let build_matrix typ rows cols builder =
       (* Allocate required space *)
-      let row_ptrs = L.build_array_alloca (pointer_t float_t) rows "row_ptrs" builder in
-      let mat_ptr = L.build_alloca matrix_t "mat_ptr" builder in
+        let row_ptrs = L.build_array_malloc (pointer_t float_t) rows "row_ptrs" builder in
+        let mat_ptr = L.build_malloc matrix_t "mat_ptr" builder in
 
       (* Set fields *)
       let mat_body = L.build_struct_gep mat_ptr 0 "mat_body" builder in
@@ -333,7 +388,7 @@ let translate (array_types, program) =
       let raw_elements = Array.concat (Array.to_list raw_elements) in
 
       (* Allocate and fill matrix body *)
-      let body_ptr = L.build_array_alloca ltype size "body_ptr" builder in
+        let body_ptr = L.build_array_malloc ltype size "body_ptr" builder in
       let set_element i element =
         let ptr =
           L.build_in_bounds_gep body_ptr
@@ -358,7 +413,7 @@ let translate (array_types, program) =
       let mat_ptr = build_matrix typ rows cols builder in
 
       (* Allocate matrix body *)
-      let body_ptr = L.build_array_alloca ltype size "body_ptr" builder in
+        let body_ptr = L.build_array_malloc ltype size "body_ptr" builder in
 
       (* Cast body ptr to "void pointer" *)
       let body_ptr = L.build_bitcast body_ptr (pointer_t i8_t) "body_ptr" builder in
@@ -379,7 +434,7 @@ let translate (array_types, program) =
                 SInt_Lit _ -> expr scope builder j
               (* Otherwise, it's SEnd *)
               | _ ->
-                  let length_ptr = L.build_struct_gep arr 2 "length_ptr" builder in
+                    let length_ptr = L.build_struct_gep arr 1 "length_ptr" builder in
                   L.build_load length_ptr "length" builder
           in
           let _ = L.build_store i' slice_start builder in
@@ -448,6 +503,9 @@ let translate (array_types, program) =
       | _ -> make_err "internal error: sexpr_of_sindex given non-index"
     in
 
+    (* TODO: perform runtime checks; division by zero, index out of bounds,
+    * working with null arrays/matrices (i.e. global array/matrix that hasn't
+    * been assigned a real value) *)
     match e with
         SInt_Lit i -> L.const_int i32_t i
       | SBool_Lit b -> L.const_int i1_t (if b then 1 else 0)
@@ -470,7 +528,6 @@ let translate (array_types, program) =
           let mat_ptr = build_empty_matrix t rows cols builder in
           let _ = L.build_call init_matrix_func [| mat_ptr |] "" builder in
           mat_ptr
-      (* TODO: perform runtime checks on index bounds *)
       | SIndex_Expr i ->
           (
             match i with
@@ -624,16 +681,27 @@ let translate (array_types, program) =
               | A.Float ->
                   L.build_call printf_func
                   [| float_format_str ; e' |] "printf" builder
-              | A.String ->L.build_call printf_func [| e' |] "printf" builder
+                | A.String -> L.build_call printf_func [| e' |] "printf" builder
               | A.Array _ ->
                   L.build_call print_array_func
                   [| e' ; TypeMap.find t element_print_funcs |] "" builder
               | A.Matrix _ ->
                   L.build_call print_matrix_func
                   [| e' ; L.const_int i1_t 0 |] "" builder
-              | A.Void -> make_err "internal error: semant should have rejected void data"
+                | A.Void -> make_err "internal error: semant should have rejected void data (print)"
               | _ -> make_err "not supported yet in print"
           )
+        | SCall("free", [e]) ->
+            let e' = expr scope builder e in
+            (
+              match t with
+                  A.Matrix _ ->
+                    L.build_call free_matrix_func [| e' |] "" builder
+                | A.Array _ ->
+                    L.build_call free_array_func
+                    [| e' ; TypeMap.find t element_free_funcs |] "" builder
+                | _ -> make_err "internal error: semant should have rejected invalid free parameter"
+            )
       | SCall(fname, args) ->
           let f = lookup fname scope in
           let args = List.rev (List.map (expr scope builder) (List.rev args)) in
@@ -645,24 +713,6 @@ let translate (array_types, program) =
       | SSlice_Inc -> make_err "internal error: SSlice_Inc should not be passed to expr"
       | SEnd -> make_err "internal error: SEnd should not be passed to expr"
   in
-
-  (* Fill in the body of the given function *)
-  let build_function_body scope fdecl =
-    let the_function = lookup fdecl.sfname scope in
-    let builder = L.builder_at_end context (L.entry_block the_function) in
-
-    let scope =
-      let scope = { variables = StringMap.empty ; parent = Some scope } in
-      let add_formal scope formal param =
-        let _, t, s, _ = formal in
-        let () = L.set_value_name s param in
-	      let local = L.build_alloca (ltype_of_typ t) s builder in
-        let _  = L.build_store param local builder in
-        { scope with variables = StringMap.add s local scope.variables }
-      in
-      let params = Array.to_list (L.params the_function) in
-      List.fold_left2 add_formal scope fdecl.sformals params
-    in
 
     (* Each basic block in a program ends with a "terminator" instruction i.e.
     one that ends the basic block. By definition, these instructions must
@@ -763,27 +813,49 @@ let translate (array_types, program) =
           (scope, builder)
     in
 
+    (* If no builder is provided, make one *)
+    let builder = match builder with
+        None -> L.builder_at_end context (L.entry_block the_function)
+      | Some builder -> builder
+    in
+
+    let scope =
+      let scope = { variables = StringMap.empty ; parent = Some scope } in
+      let add_formal scope formal param =
+        let _, t, s, _ = formal in
+        let () = L.set_value_name s param in
+	      let local = L.build_alloca (ltype_of_typ t) s builder in
+        let _  = L.build_store param local builder in
+        { scope with variables = StringMap.add s local scope.variables }
+      in
+      let params = Array.to_list (L.params the_function) in
+      List.fold_left2 add_formal scope fdecl.sformals params
+    in
+
     (* Build the code for each statement in the function *)
     let _, builder = stmt (scope, builder) (SBlock fdecl.sbody) in
 
     (* Add a return if the last block falls off the end *)
-    add_terminal builder (match fdecl.styp with
-        A.Void -> L.build_ret_void
-      | A.Float -> L.build_ret (L.const_float float_t 0.0)
-      | t -> L.build_ret (L.const_int (ltype_of_typ t) 0))
+    match fdecl.styp with
+        A.Void -> add_terminal builder L.build_ret_void
+      (* Semant should have detected if there was a missing required return *)
+      | _ -> ()
   in
 
-  (* Build system main *)
-  let build_main scope globals builder =
-    let init_global sdecl =
-      let _, _, s, e = sdecl in
-      let e' = expr scope builder e in
-      let _ = L.build_store e' (lookup s scope) builder in
-      ()
+  let get_main_decl globals =
+    let get_assign sdecl =
+      let _, t, s, e = sdecl in
+      let s' = (t, SId s) in
+      SExpr(t, SAssign(s', e))
     in
-    let _ = List.iter init_global globals in
-    let _ = expr scope builder (A.Void, SCall ("main", [])) in
-    L.build_ret (L.const_int i32_t 0) builder
+    let globals = List.map get_assign globals in
+    {
+      styp = A.Int;
+      sfname = sys_main;
+      sformals = [];
+      sbody = globals @ [ SExpr(A.Void, SCall("main", [])) ;
+        SReturn (A.Int, SInt_Lit 0) ]
+    }
   in
 
   let global_scope =
@@ -797,6 +869,10 @@ let translate (array_types, program) =
     List.fold_left add_global_decl global_scope globals
   in
   let global_scope = List.fold_left add_func_decl global_scope functions in
-  let _ = List.iter (build_function_body global_scope) functions in
-  let _ = build_main global_scope globals main_builder in
+  let global_scope =
+    { global_scope with variables = StringMap.add sys_main main global_scope.variables }
+  in
+  let main_decl = get_main_decl globals in
+  let _ = List.iter (build_function_body global_scope None) functions in
+  let _ = build_function_body global_scope (Some main_builder) main_decl in
   the_module

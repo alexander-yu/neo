@@ -33,7 +33,8 @@ let check (globals, functions) =
       StringMap.add name (f_type, true) map
     in
     List.fold_left add_built_in_func StringMap.empty [
-      ("print", Void)
+      ("print", Void);
+      ("free", Void)
     ]
   in
 
@@ -336,6 +337,16 @@ let check (globals, functions) =
                       (env, (t, SCall("print", [(t, arg)])))
                   | _ -> make_err ("unsupported print parameter type in " ^ expr_s)
               )
+        | Call("free", args) ->
+            if List.length args != 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            else
+              let env, (t, arg) = List.hd (List.map (check_expr env) args) in
+              (
+                match t with
+                    Matrix _ | Array _ ->
+                      (env, (t, SCall("free", [(t, arg)])))
+                  | _ -> make_err ("unsupported free parameter type in " ^ expr_s)
+              )
         | Call(fname, args) ->
             let typ, _ = lookup fname env.scope in
             let formals, return_type = match typ with
@@ -485,7 +496,7 @@ let check (globals, functions) =
             let scope = { variables = StringMap.empty; parent = Some parent_scope } in
             let rec check_stmt_list env = function
                 [Return _ as s] ->
-                  let env, s', ret = check_stmt { env with scope } s in
+                  let env, s', ret = check_stmt env s in
                   (env, [s'], ret)
               | Return _ as r :: _ ->
                   make_err ("unreachable code after the return statement " ^ string_of_stmt r)
@@ -495,7 +506,7 @@ let check (globals, functions) =
                   (env, s' :: ss', ret1 || ret2)
               | [] -> (env, [], false)
             in
-            let env, sl', ret = check_stmt_list env sl in
+            let env, sl', ret = check_stmt_list { env with scope } sl in
             (* Return to parent scope *)
             ({ env with scope = parent_scope }, SBlock sl', ret)
         | Decl d ->
@@ -552,7 +563,6 @@ let check (globals, functions) =
   let global_scope = { variables = built_in_funcs; parent = None } in
   let env = { scope = global_scope; array_types = TypeSet.empty; } in
   (* Set override_true; globals will have a default value generated at declaration *)
-  (* TODO: how to handle null defaults for array/matrices? *)
   let env, globals' = List.fold_left (check_v_decl true) (env, []) globals in
   let env, functions' = List.fold_left check_func_decl (env, []) functions in
 

@@ -1,0 +1,31 @@
+array<int> foo() {
+    create array<int> a = {| 1, 2, 3 |};
+    return a;
+}
+
+matrix<float> bar() {
+    return [[1.2, 1.3]];
+}
+
+array<matrix<int>> f() {
+    return {| [[1]], [[2]] |};
+}
+
+array<array<array<int>>> g() {
+    return {| {| {|1|} |}, {| {|2|} |} |};
+}
+
+void main() {
+    create array<int> a = foo();
+    create matrix<float> b = bar();
+    create array<matrix<int>> c = f();
+    create array<array<array<int>>> d = g();
+
+    print(a);
+    print("\n");
+    print(b);
+    print("\n");
+    print(c);
+    print("\n");
+    print(d);
+}
