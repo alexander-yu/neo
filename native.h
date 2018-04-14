@@ -57,3 +57,4 @@ int iexp(int, int);
 double fexp(double, double);
 
 void matmult(matrix_t *, matrix_t *, matrix_t *);
+void transpose(matrix_t *, matrix_t *);

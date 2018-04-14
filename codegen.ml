@@ -176,6 +176,9 @@ let translate (array_types, program) =
   let matmult_t = L.function_type void_t [| pointer_t matrix_t; pointer_t matrix_t; pointer_t matrix_t |] in
   let matmult_func = L.declare_function "matmult" matmult_t the_module in
 
+  let transpose_t = L.function_type void_t [| pointer_t matrix_t; pointer_t matrix_t |] in
+  let transpose_func = L.declare_function "transpose" transpose_t the_module in
+
   (* Build any necessary element-printing functions for array types *)
   let rec build_element_print_func array_type element_print_funcs =
     let typ = A.typ_of_container array_type in
@@ -725,17 +728,27 @@ let translate (array_types, program) =
                 | A.Void -> make_err "internal error: semant should have rejected void data (print)"
               | _ -> make_err "not supported yet in print"
           )
-        | SCall("free", [e]) ->
-            let e' = expr scope builder e in
-            (
-              match t with
-                  A.Matrix _ ->
-                    L.build_call free_matrix_func [| e' |] "" builder
-                | A.Array _ ->
-                    L.build_call free_array_func
-                    [| e' ; TypeMap.find t element_free_funcs |] "" builder
-                | _ -> make_err "internal error: semant should have rejected invalid free parameter"
-            )
+      | SCall("free", [e]) ->
+          let e' = expr scope builder e in
+          (
+            match t with
+                A.Matrix _ ->
+                  L.build_call free_matrix_func [| e' |] "" builder
+              | A.Array _ ->
+                  L.build_call free_array_func
+                  [| e' ; TypeMap.find t element_free_funcs |] "" builder
+              | _ -> make_err "internal error: semant should have rejected invalid free parameter"
+          )
+      | SCall("transpose", [e]) ->
+          let e' = expr scope builder e in
+          let rows_ptr = L.build_struct_gep e' 1 "rows_ptr" builder in
+          let rows = L.build_load rows_ptr "rows" builder in
+          let cols_ptr = L.build_struct_gep e' 2 "cols_ptr" builder in
+          let cols = L.build_load cols_ptr "cols" builder in
+          let typ = A.typ_of_container (fst e) in
+          let mat = build_empty_matrix typ cols rows builder in
+          let _ = L.build_call transpose_func [|e'; mat|] "" builder in 
+          mat
       | SCall(fname, args) ->
           let f = lookup fname scope in
           let args = List.rev (List.map (expr scope builder) (List.rev args)) in

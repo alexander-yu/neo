@@ -237,3 +237,20 @@ void matmult(matrix_t * a, matrix_t * b, matrix_t * res){
         }    
     }
 }
+
+void transpose(matrix_t *a, matrix_t* res){
+    int rows = res->rows;
+    int cols = res->cols;
+    for (int i = 0; i<rows; i++){
+        for (int j = 0; j<cols; j++){
+            switch (res->type){
+                case Int:
+                    res->body.ibody[i][j] = a->body.ibody[j][i];
+                    break;
+                case Float:
+                    res->body.fbody[i][j] = a->body.fbody[j][i];
+                    break;
+            }
+        }
+    }
+}

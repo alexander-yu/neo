@@ -34,7 +34,8 @@ let check (globals, functions) =
     in
     List.fold_left add_built_in_func StringMap.empty [
       ("print", Void);
-      ("free", Void)
+      ("free", Void);
+      ("transpose", Void);
     ]
   in
 
@@ -349,6 +350,16 @@ let check (globals, functions) =
                     Matrix _ | Array _ ->
                       (env, (t, SCall("free", [(t, arg)])))
                   | _ -> make_err ("unsupported free parameter type in " ^ expr_s)
+              )
+        | Call("transpose", args) ->
+            if List.length args != 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            else
+              let env, (t, arg) = List.hd (List.map (check_expr env) args) in
+              (
+                match t with
+                    Matrix _ ->
+                      (env, (t, SCall("transpose", [(t, arg)])))
+                  | _ -> make_err ("transpose does not support non-matrix parameter in " ^ expr_s)
               )
         | Call(fname, args) ->
             let typ, _ = lookup fname env.scope in
