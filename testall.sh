@@ -12,7 +12,10 @@ LLI="lli"
 LLC="llc"
 
 # Path to the C compiler
-CC="cc"
+CC="gcc"
+
+# C Flags
+CFLAGS="-g -Wall"
 
 # Path to the Neo compiler.  Usually "./neo.native"
 # Try "_build/neo.native" if ocamlbuild was unable to create a symbolic link.
@@ -93,7 +96,7 @@ Check() {
     generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out" &&
     Run "$NEO" "$1" ">" "${basename}.ll" &&
     Run "$LLC" "${basename}.ll" ">" "${basename}.s" &&
-    Run "$CC" "-o" "${basename}.exe" "${basename}.s" "native.o" &&
+    Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" &&
     Run "./${basename}.exe" > "${basename}.out" &&
     Compare ${basename}.out ${reffile}.out ${basename}.diff
 
