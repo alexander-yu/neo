@@ -55,3 +55,5 @@ void set_slice_matrix(matrix_t *, slice_t *, slice_t *, matrix_t *);
 
 int iexp(int, int); 
 double fexp(double, double);
+
+void matmult(matrix_t *, matrix_t *, matrix_t *);
