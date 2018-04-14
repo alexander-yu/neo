@@ -321,7 +321,9 @@ let check (globals, functions) =
             | Equal | Neq                when same               -> Bool
             | Less | Leq | Greater | Geq when same && (t1 = Int || t1 = Float) -> Bool
             | And | Or                   when same && t1 = Bool -> Bool
-            | MatMult | Mod | Exp -> make_err "not supported yet in check_expr"
+            | Mod | Exp                  when same && t1 = Int   -> Int
+            | Mod | Exp                  when same && t1 = Float -> Float
+            | MatMult                     -> make_err "not supported yet in check_expr"
             | _ -> make_err ("illegal binary operator " ^
                 string_of_typ t1 ^ " " ^ string_of_op op ^ " " ^
                 string_of_typ t2 ^ " in " ^ expr_s)

@@ -96,7 +96,7 @@ Check() {
     generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out" &&
     Run "$NEO" "$1" ">" "${basename}.ll" &&
     Run "$LLC" "${basename}.ll" ">" "${basename}.s" &&
-    Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" &&
+    Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" "-lm" &&
     Run "./${basename}.exe" > "${basename}.out" &&
     Compare ${basename}.out ${reffile}.out ${basename}.diff
 

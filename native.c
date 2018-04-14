@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <math.h>
 #include "native.h"
 
 void print_bool(bool b) {
@@ -204,4 +205,12 @@ void set_slice_matrix(matrix_t *mat, slice_t *row_slice, slice_t *col_slice, mat
             }
         }
     }
+}
+
+int iexp(int e1, int e2){
+    return (int) pow((double) e1, (double) e2);
+}
+
+double fexp(double e1, double e2){
+    return pow(e1,e2);
 }
