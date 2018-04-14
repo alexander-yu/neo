@@ -172,6 +172,9 @@ let translate (array_types, program) =
 
   let fexp_t = L.function_type float_t [| float_t ; float_t |] in
   let fexp_func = L.declare_function "fexp" fexp_t the_module in
+  
+  let matmult_t = L.function_type void_t [| pointer_t matrix_t; pointer_t matrix_t; pointer_t matrix_t |] in
+  let matmult_func = L.declare_function "matmult" matmult_t the_module in
 
   (* Build any necessary element-printing functions for array types *)
   let rec build_element_print_func array_type element_print_funcs =
@@ -655,7 +658,7 @@ let translate (array_types, program) =
               make_err "internal error: semant should have rejected and/or on float"
           | _ -> make_err "binop not supported yet"
           )
-          else (match op with
+          else if t = A.Int then (match op with
           | A.Add     -> L.build_add e1' e2' "temp" builder
           | A.Sub     -> L.build_sub e1' e2' "temp" builder
           | A.Mult    -> L.build_mul e1' e2' "temp" builder
@@ -672,6 +675,27 @@ let translate (array_types, program) =
           | A.Geq     -> L.build_icmp L.Icmp.Sge e1' e2' "temp" builder
           | _ -> make_err "binop not supported yet"
           )
+          else if t = A.Matrix A.Int then (match op with
+          | A.MatMult -> let rows_ptr = L.build_struct_gep e1' 1 "rows_ptr" builder in
+                let rows = L.build_load rows_ptr "rows" builder in
+                let cols_ptr = L.build_struct_gep e2' 2 "cols_ptr" builder in
+                let cols = L.build_load cols_ptr "cols" builder in
+                let mat = build_empty_matrix A.Int rows cols builder in
+                let _ = L.build_call matmult_func [|e1'; e2'; mat|] "" builder in 
+                mat
+          | _ -> make_err "matrix operation not supported yet"
+          )
+          else if t = A.Matrix A.Float then (match op with
+          | A.MatMult -> let rows_ptr = L.build_struct_gep e1' 1 "rows_ptr" builder in
+                let rows = L.build_load rows_ptr "rows" builder in
+                let cols_ptr = L.build_struct_gep e2' 2 "cols_ptr" builder in
+                let cols = L.build_load cols_ptr "cols" builder in
+                let mat = build_empty_matrix A.Float rows cols builder in
+                let _ = L.build_call matmult_func [|e1'; e2'; mat|] "" builder in
+                mat
+          | _ -> make_err "matrix operation not supported yet"
+          )
+          else make_err "else error"
       | SUnop(op, e) ->
           let (t, _) = e in
           let e' = expr scope builder e in

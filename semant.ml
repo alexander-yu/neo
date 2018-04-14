@@ -323,7 +323,8 @@ let check (globals, functions) =
             | And | Or                   when same && t1 = Bool -> Bool
             | Mod | Exp                  when same && t1 = Int   -> Int
             | Mod | Exp                  when same && t1 = Float -> Float
-            | MatMult                     -> make_err "not supported yet in check_expr"
+            | MatMult                    when same && t1 = Matrix Int -> Matrix Int
+            | MatMult                    when same && t1 = Matrix Float -> Matrix Float
             | _ -> make_err ("illegal binary operator " ^
                 string_of_typ t1 ^ " " ^ string_of_op op ^ " " ^
                 string_of_typ t2 ^ " in " ^ expr_s)
