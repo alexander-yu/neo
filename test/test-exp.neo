@@ -1,0 +1,11 @@
+void main(){ 
+    var int x = 2;
+    var int y = 3;
+    print(x^y);
+   
+    print("\n");
+    
+    var float a = 1.5;
+    var float b = 2.5;
+    print(a^b);
+}

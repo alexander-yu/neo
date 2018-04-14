@@ -52,3 +52,6 @@ void * get_matrix(matrix_t *, int, int);
 void set_matrix(matrix_t *, int, int, void *);
 void slice_matrix(matrix_t *, slice_t *, slice_t *, matrix_t *);
 void set_slice_matrix(matrix_t *, slice_t *, slice_t *, matrix_t *);
+
+int iexp(int, int); 
+double fexp(double, double);

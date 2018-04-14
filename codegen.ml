@@ -167,6 +167,12 @@ let translate (array_types, program) =
   in
   let set_slice_matrix_func = L.declare_function "set_slice_matrix" set_slice_matrix_t the_module in
 
+  let iexp_t = L.function_type i32_t [| i32_t ; i32_t |] in
+  let iexp_func = L.declare_function "iexp" iexp_t the_module in
+
+  let fexp_t = L.function_type float_t [| float_t ; float_t |] in
+  let fexp_func = L.declare_function "fexp" fexp_t the_module in
+
   (* Build any necessary element-printing functions for array types *)
   let rec build_element_print_func array_type element_print_funcs =
     let typ = A.typ_of_container array_type in
@@ -633,35 +639,39 @@ let translate (array_types, program) =
           and e2' = expr scope builder e2
           in
           if t = A.Float then (match op with
-            A.Add     -> L.build_fadd
-          | A.Sub     -> L.build_fsub
-          | A.Mult    -> L.build_fmul
-          | A.Div     -> L.build_fdiv
-          | A.Equal   -> L.build_fcmp L.Fcmp.Oeq
-          | A.Neq     -> L.build_fcmp L.Fcmp.One
-          | A.Less    -> L.build_fcmp L.Fcmp.Olt
-          | A.Leq     -> L.build_fcmp L.Fcmp.Ole
-          | A.Greater -> L.build_fcmp L.Fcmp.Ogt
-          | A.Geq     -> L.build_fcmp L.Fcmp.Oge
+            A.Add     -> L.build_fadd e1' e2' "temp" builder
+          | A.Sub     -> L.build_fsub e1' e2' "temp" builder 
+          | A.Mult    -> L.build_fmul e1' e2' "temp" builder
+          | A.Div     -> L.build_fdiv e1' e2' "temp" builder
+          | A.Mod     -> L.build_frem e1' e2' "temp" builder
+          | A.Exp     -> L.build_call fexp_func [| e1'; e2'|] "temp" builder
+          | A.Equal   -> L.build_fcmp L.Fcmp.Oeq e1' e2' "temp" builder
+          | A.Neq     -> L.build_fcmp L.Fcmp.One e1' e2' "temp" builder
+          | A.Less    -> L.build_fcmp L.Fcmp.Olt e1' e2' "temp" builder
+          | A.Leq     -> L.build_fcmp L.Fcmp.Ole e1' e2' "temp" builder
+          | A.Greater -> L.build_fcmp L.Fcmp.Ogt e1' e2' "temp" builder
+          | A.Geq     -> L.build_fcmp L.Fcmp.Oge e1' e2' "temp" builder
           | A.And | A.Or ->
               make_err "internal error: semant should have rejected and/or on float"
           | _ -> make_err "binop not supported yet"
-          ) e1' e2' "tmp" builder
+          )
           else (match op with
-          | A.Add     -> L.build_add
-          | A.Sub     -> L.build_sub
-          | A.Mult    -> L.build_mul
-          | A.Div     -> L.build_sdiv
-          | A.And     -> L.build_and
-          | A.Or      -> L.build_or
-          | A.Equal   -> L.build_icmp L.Icmp.Eq
-          | A.Neq     -> L.build_icmp L.Icmp.Ne
-          | A.Less    -> L.build_icmp L.Icmp.Slt
-          | A.Leq     -> L.build_icmp L.Icmp.Sle
-          | A.Greater -> L.build_icmp L.Icmp.Sgt
-          | A.Geq     -> L.build_icmp L.Icmp.Sge
+          | A.Add     -> L.build_add e1' e2' "temp" builder
+          | A.Sub     -> L.build_sub e1' e2' "temp" builder
+          | A.Mult    -> L.build_mul e1' e2' "temp" builder
+          | A.Div     -> L.build_sdiv e1' e2' "temp" builder
+          | A.And     -> L.build_and e1' e2' "temp" builder
+          | A.Or      -> L.build_or e1' e2' "temp" builder
+          | A.Mod     -> L.build_srem e1' e2' "temp" builder
+          | A.Exp     -> L.build_call iexp_func [| e1'; e2'|] "temp" builder
+          | A.Equal   -> L.build_icmp L.Icmp.Eq e1' e2' "temp" builder
+          | A.Neq     -> L.build_icmp L.Icmp.Ne e1' e2' "temp" builder
+          | A.Less    -> L.build_icmp L.Icmp.Slt e1' e2' "temp" builder
+          | A.Leq     -> L.build_icmp L.Icmp.Sle e1' e2' "temp" builder
+          | A.Greater -> L.build_icmp L.Icmp.Sgt e1' e2' "temp" builder
+          | A.Geq     -> L.build_icmp L.Icmp.Sge e1' e2' "temp" builder
           | _ -> make_err "binop not supported yet"
-          ) e1' e2' "tmp" builder
+          )
       | SUnop(op, e) ->
           let (t, _) = e in
           let e' = expr scope builder e in
