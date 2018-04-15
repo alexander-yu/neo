@@ -172,11 +172,11 @@ let translate (array_types, program) =
 
   let fexp_t = L.function_type float_t [| float_t ; float_t |] in
   let fexp_func = L.declare_function "fexp" fexp_t the_module in
-  
-  let matmult_t = L.function_type void_t [| pointer_t matrix_t; pointer_t matrix_t; pointer_t matrix_t |] in
+
+  let matmult_t = L.function_type void_t [| pointer_t matrix_t ; pointer_t matrix_t ; pointer_t matrix_t |] in
   let matmult_func = L.declare_function "matmult" matmult_t the_module in
 
-  let transpose_t = L.function_type void_t [| pointer_t matrix_t; pointer_t matrix_t |] in
+  let transpose_t = L.function_type void_t [| pointer_t matrix_t ; pointer_t matrix_t |] in
   let transpose_func = L.declare_function "transpose" transpose_t the_module in
 
   (* Build any necessary element-printing functions for array types *)
@@ -646,7 +646,7 @@ let translate (array_types, program) =
           in
           if t = A.Float then (match op with
             A.Add     -> L.build_fadd e1' e2' "temp" builder
-          | A.Sub     -> L.build_fsub e1' e2' "temp" builder 
+          | A.Sub     -> L.build_fsub e1' e2' "temp" builder
           | A.Mult    -> L.build_fmul e1' e2' "temp" builder
           | A.Div     -> L.build_fdiv e1' e2' "temp" builder
           | A.Mod     -> L.build_frem e1' e2' "temp" builder
@@ -684,7 +684,7 @@ let translate (array_types, program) =
                 let cols_ptr = L.build_struct_gep e2' 2 "cols_ptr" builder in
                 let cols = L.build_load cols_ptr "cols" builder in
                 let mat = build_empty_matrix A.Int rows cols builder in
-                let _ = L.build_call matmult_func [|e1'; e2'; mat|] "" builder in 
+                let _ = L.build_call matmult_func [|e1'; e2'; mat|] "" builder in
                 mat
           | _ -> make_err "matrix operation not supported yet"
           )
@@ -700,13 +700,14 @@ let translate (array_types, program) =
           )
           else make_err "else error"
       | SUnop(op, e) ->
-          let (t, _) = e in
+          let t, _ = e in
           let e' = expr scope builder e in
           (match op with
               A.Neg when t = A.Float -> L.build_fneg
             | A.Neg                  -> L.build_neg
             | A.Not                  -> L.build_not) e' "tmp" builder
       | SCall("print", [e]) ->
+          let t, _ = e in
           let e' = expr scope builder e in
           (
             match t with
@@ -729,6 +730,7 @@ let translate (array_types, program) =
               | _ -> make_err "not supported yet in print"
           )
       | SCall("free", [e]) ->
+          let t, _ = e in
           let e' = expr scope builder e in
           (
             match t with
@@ -747,7 +749,7 @@ let translate (array_types, program) =
           let cols = L.build_load cols_ptr "cols" builder in
           let typ = A.typ_of_container (fst e) in
           let mat = build_empty_matrix typ cols rows builder in
-          let _ = L.build_call transpose_func [|e'; mat|] "" builder in 
+          let _ = L.build_call transpose_func [| e' ; mat|] "" builder in
           mat
       | SCall(fname, args) ->
           let f = lookup fname scope in

@@ -137,8 +137,8 @@ let check (globals, functions) =
                 Slice_Inc -> (env, (Int, SSlice_Inc))
               | _ -> check_expr env j
           in
-          let _ = if ti != Int then make_err (get_idx_err i) in
-          let _ = if tj != Int then make_err (get_idx_err j) in
+          let _ = if ti <> Int then make_err (get_idx_err i) in
+          let _ = if tj <> Int then make_err (get_idx_err j) in
           (env, SSlice((ti, i'), (tj, j')))
     in
 
@@ -228,13 +228,13 @@ let check (globals, functions) =
       | Array_Lit _ as a -> check_container_lit env a
       | Empty_Array(t, n) ->
           let env, (nt, n') = check_expr env n in
-          if nt != Int then make_err ("non-integer length specified in " ^ expr_s)
+          if nt <> Int then make_err ("non-integer length specified in " ^ expr_s)
           else (env, (Array t, SEmpty_Array(t, (nt, n'))))
       | Matrix_Lit _ as m -> check_container_lit env m
       | Empty_Matrix(t, r, c) ->
           let env, (rt, r') = check_expr env r in
           let env, (ct, c') = check_expr env c in
-          if rt != Int || ct != Int
+          if rt <> Int || ct <> Int
           then make_err ("non-integer dimensions specified in " ^ expr_s)
           else (env, (Matrix t, SEmpty_Matrix(t, (rt, r'), (ct, c'))))
       | Index_Expr i -> check_index_expr env i
@@ -306,60 +306,91 @@ let check (globals, functions) =
                     Int -> Int_Lit 1
                   | Float -> Float_Lit "1."
                   | Matrix t -> get_one t
-                  | _ -> make_err ("type " ^ string_of_typ typ ^
-                      " cannot be incremented/decremented")
+                  | _ -> make_err ("illegal increment/decrement " ^
+                      string_of_typ typ ^ " in " ^ expr_s)
                 in
                 let one = get_one t1 in
                 check_expr env one
             | _ -> check_expr env e2
           in
-          (* All binary operators require operands of the same type *)
-          let same = t1 = t2 in
+          let err = "illegal binary operator " ^
+            string_of_typ t1 ^ " " ^ string_of_op op ^ " " ^
+            string_of_typ t2 ^ " in " ^ expr_s
+          in
+          (* Checks that the basic data type of an operand is valid
+           * for performing arithmetic; returns the base data type *)
+          let check_arith_operand t =
+            match t with
+                Int | Float -> t
+              | Matrix t -> t
+              | _ -> make_err err
+          in
+          (* We check if one of the operands is a matrix; if so, the result
+           * will also be a matrix due to broadcasting *)
+          let is_matrix = match t1, t2 with
+              (Matrix _, _) | (_, Matrix _) -> true
+            | (_, _) -> false
+          in
           (* Determine expression type based on operator and operand types *)
           let ty = match op with
-              Add | Sub | Mult | Div     when same && t1 = Int   -> Int
-            | Add | Sub | Mult | Div     when same && t1 = Float -> Float
-            | Equal | Neq                when same               -> Bool
-            | Less | Leq | Greater | Geq when same && (t1 = Int || t1 = Float) -> Bool
-            | And | Or                   when same && t1 = Bool -> Bool
-            | Mod | Exp                  when same && t1 = Int   -> Int
-            | Mod | Exp                  when same && t1 = Float -> Float
-            | MatMult                    when same && t1 = Matrix Int -> Matrix Int
-            | MatMult                    when same && t1 = Matrix Float -> Matrix Float
-            | _ -> make_err ("illegal binary operator " ^
-                string_of_typ t1 ^ " " ^ string_of_op op ^ " " ^
-                string_of_typ t2 ^ " in " ^ expr_s)
+              Add | Sub | Mult | Div | Mod | Exp ->
+                (* Since we're supporting broadcasting, we just need to
+                 * check that the base types are the same *)
+                let base_t1 = check_arith_operand t1 in
+                let base_t2 = check_arith_operand t2 in
+                let _ = if base_t1 <> base_t2 then make_err err in
+                if is_matrix then Matrix base_t1 else base_t1
+            | Equal | Neq ->
+                if not is_matrix && t1 = t2 then Bool
+                (* Instead of returning matrix of bools, we return a
+                * matrix of 0s and 1s *)
+                else if is_matrix then
+                  let base_t1 = check_arith_operand t1 in
+                  let base_t2 = check_arith_operand t2 in
+                  let _ = if base_t1 <> base_t2 then make_err err in
+                  Matrix Int
+                else make_err err
+            | Less | Leq | Greater | Geq ->
+                let base_t1 = check_arith_operand t1 in
+                let base_t2 = check_arith_operand t2 in
+                let _ = if base_t1 <> base_t2 then make_err err in
+                (* Instead of returning matrix of bools, we return a
+                * matrix of 0s and 1s *)
+                if is_matrix then Matrix Int else Bool
+            | And | Or when t1 = t2 && t1 = Bool -> Bool
+            | MatMult when t1 = t2 && is_matrix -> t1
+            | _ -> make_err err
           in
           (env, (ty, SBinop((t1, e1'), op, (t2, e2'))))
         | Call("print", args) ->
-            if List.length args != 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
             else
               let env, (t, arg) = List.hd (List.map (check_expr env) args) in
               (
                 match t with
                     Int | Float | Bool | String | Matrix _ | Array _ ->
-                      (env, (t, SCall("print", [(t, arg)])))
-                  | _ -> make_err ("unsupported print parameter type in " ^ expr_s)
+                      (env, (Void, SCall("print", [(t, arg)])))
+                  | _ -> make_err ("unsupported print argument type in " ^ expr_s)
               )
         | Call("free", args) ->
-            if List.length args != 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
             else
               let env, (t, arg) = List.hd (List.map (check_expr env) args) in
               (
                 match t with
                     Matrix _ | Array _ ->
-                      (env, (t, SCall("free", [(t, arg)])))
-                  | _ -> make_err ("unsupported free parameter type in " ^ expr_s)
+                      (env, (Void, SCall("free", [(t, arg)])))
+                  | _ -> make_err ("unsupported free argument type in " ^ expr_s)
               )
         | Call("transpose", args) ->
-            if List.length args != 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
             else
               let env, (t, arg) = List.hd (List.map (check_expr env) args) in
               (
                 match t with
                     Matrix _ ->
                       (env, (t, SCall("transpose", [(t, arg)])))
-                  | _ -> make_err ("transpose does not support non-matrix parameter in " ^ expr_s)
+                  | _ -> make_err ("non-matrix argument in " ^ expr_s)
               )
         | Call(fname, args) ->
             let typ, _ = lookup fname env.scope in
@@ -368,7 +399,7 @@ let check (globals, functions) =
               | _ -> make_err (fname ^ " is not a function in " ^ expr_s)
             in
             let param_length = List.length formals in
-            if List.length args != param_length then
+            if List.length args <> param_length then
               make_err ("expecting " ^ string_of_int param_length ^
                 " arguments in " ^ expr_s)
             else
@@ -390,13 +421,24 @@ let check (globals, functions) =
         | End -> (env, (Int, SEnd))
   in
 
+  (* Check that a type is validly formed; basically, just check that
+   * there are no invalid matrix types; everything else is fair game *)
+  let rec check_type = function
+      Matrix t when t <> Int && t <> Float -> false
+    | Array t -> check_type t
+    | Func(args, ret) -> List.for_all check_type args && check_type ret
+    | _ -> true
+  in
+
   (* Return semantically checked declaration *)
   let check_v_decl override_true (env, checked) decl =
-    let check_v_decl_type t =
+    let check_v_decl_type decl =
+      let _, t, _, _ = decl in
       let err =
         "illegal declaration type " ^ string_of_typ t ^
         " in " ^ string_of_vdecl decl
       in
+      let _ = if not (check_type t) then make_err err in
       match t with
           Void | Func(_, _) -> make_err err
         | _ -> ()
@@ -409,12 +451,12 @@ let check (globals, functions) =
        * globals anyhow) as well as function parameters (because presumably
        * these parameters will themselves be checked during the actual function
        * call) *)
-      add_decl scope s t (expr != Noexpr || override_true)
+      add_decl scope s t (expr <> Noexpr || override_true)
     in
     let kw, t, s, expr = decl in
 
     (* Check decl type is valid *)
-    let _ = check_v_decl_type t in
+    let _ = check_v_decl_type decl in
 
     (* Check keyword matches type *)
     let expr_kw = match t with
@@ -427,7 +469,7 @@ let check (globals, functions) =
       "illegal use of declaration keyword " ^ string_of_decl_kw kw ^
       " for type " ^ string_of_typ t ^ " in " ^ string_of_vdecl decl
     in
-    let _ = if kw != expr_kw then make_err kw_err in
+    let _ = if kw <> expr_kw then make_err kw_err in
 
     (* Check initialization type is valid; note that an empty initialization
      * is valid, as this means we're declaring but not initializing *)
@@ -437,7 +479,7 @@ let check (globals, functions) =
       " but initialized with type " ^ string_of_typ et ^
       " in " ^ string_of_vdecl decl
     in
-    let _ = if expr != Noexpr && t <> et then make_err typ_err in
+    let _ = if expr <> Noexpr && t <> et then make_err typ_err in
 
     (* Add decl to scope *)
     let scope = add_v_decl env.scope decl in
@@ -473,7 +515,7 @@ let check (globals, functions) =
         "illegal argument type " ^ string_of_typ t ^ " in " ^
         string_of_vdecl formal ^ " for the function " ^ fname
       in
-      if t = Exc || t = Void then make_err err
+      if t = Exc || t = Void || not (check_type t) then make_err err
     in
     (* Return a semantically-checked statement, along with a bool
      * indicating if there was at least one return statement
@@ -483,7 +525,7 @@ let check (globals, functions) =
         let env, (t', e') = check_expr env e
         and err = "expected Boolean expression in " ^ string_of_expr e
         in
-        if t' != Bool then make_err err else (env, (t', e'))
+        if t' <> Bool then make_err err else (env, (t', e'))
       in
       match stmt with
           Expr e ->
@@ -535,12 +577,19 @@ let check (globals, functions) =
     let fname = if old_fname = sys_main then prog_main else old_fname in
     let func = { func with fname } in
 
+    (* Check formals have valid type *)
+    let _ = List.iter (check_formal_type old_fname) func.formals in
+
+    (* Check return type is valid *)
+    let err =
+      "illegal return type " ^ string_of_typ func.typ ^
+      " for the function " ^ old_fname
+    in
+    let _ = if not (check_type func.typ) then make_err err in
+
     (* Add function decl to parent scope *)
     let parent_scope = env.scope in
     let parent_scope = add_func_decl parent_scope func in
-
-    (* Check formals have valid type *)
-    let _ = List.iter (check_formal_type old_fname) func.formals in
 
     (* Build local symbol table of variables for this function *)
     let scope = { variables = StringMap.empty; parent = Some parent_scope } in
@@ -557,7 +606,7 @@ let check (globals, functions) =
               "function " ^ old_fname ^ " has return type " ^
               string_of_typ func.typ ^ " but no return statement found"
             in
-            if func.typ != Void then make_err err else (env, sl)
+            if func.typ <> Void then make_err err else (env, sl)
         | _ ->
             let err = "internal error: block didn't become a block?" in
             make_err err

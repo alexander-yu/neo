@@ -212,21 +212,21 @@ int iexp(int e1, int e2){
 }
 
 double fexp(double e1, double e2){
-    return pow(e1,e2);
+    return pow(e1, e2);
 }
 
-void matmult(matrix_t * a, matrix_t * b, matrix_t * res){
+void matmult(matrix_t *a, matrix_t *b, matrix_t *res){
     int rows = res->rows;
     int cols = res->cols;
     for (int i = 0; i < rows; i++){
-        for (int j = 0; j<cols; j++){
+        for (int j = 0; j < cols; j++){
             switch (res->type) {
                 case Int: res->body.ibody[i][j] = 0; break;
                 case Float: res->body.fbody[i][j] = 0.; break;
             }
             for (int k = 0; k < a->cols; k++){
                 switch (res->type) {
-                    case Int: 
+                    case Int:
                          res->body.ibody[i][j] += a->body.ibody[i][k] * b->body.ibody[k][j];
                          break;
                     case Float:
@@ -234,15 +234,15 @@ void matmult(matrix_t * a, matrix_t * b, matrix_t * res){
                          break;
                 }
             }
-        }    
+        }
     }
 }
 
-void transpose(matrix_t *a, matrix_t* res){
+void transpose(matrix_t *a, matrix_t *res){
     int rows = res->rows;
     int cols = res->cols;
-    for (int i = 0; i<rows; i++){
-        for (int j = 0; j<cols; j++){
+    for (int i = 0; i < rows; i++){
+        for (int j = 0; j < cols; j++){
             switch (res->type){
                 case Int:
                     res->body.ibody[i][j] = a->body.ibody[j][i];
