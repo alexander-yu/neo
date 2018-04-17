@@ -37,7 +37,7 @@ void free_matrix(matrix_t *);
  */
 void print_array(array_t *, void(*)(void *));
 /* Same as above, but to free an element */
-void free_array(array_t *, void(*)(void *));
+void deep_free_array(array_t *, void(*)(void *));
 
 void init_matrix(matrix_t *);
 void set_ptrs_matrix(matrix_t *, void *);
@@ -53,7 +53,7 @@ void set_matrix(matrix_t *, int, int, void *);
 void slice_matrix(matrix_t *, slice_t *, slice_t *, matrix_t *);
 void set_slice_matrix(matrix_t *, slice_t *, slice_t *, matrix_t *);
 
-int iexp(int, int); 
+int iexp(int, int);
 double fexp(double, double);
 
 void matmult(matrix_t *, matrix_t *, matrix_t *);

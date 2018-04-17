@@ -110,11 +110,14 @@ let translate (array_types, program) =
   in
   let print_array_func = L.declare_function "print_array" print_array_t the_module in
 
+  let free_array_t = L.function_type void_t [| pointer_t array_t |] in
+  let free_array_func = L.declare_function "free_array" free_array_t the_module in
+
   let free_element_t = L.function_type void_t [| pointer_t i8_t |] in
-  let free_array_t =
+  let deep_free_array_t =
     L.function_type void_t [| pointer_t array_t ; pointer_t free_element_t |]
   in
-  let free_array_func = L.declare_function "free_array" free_array_t the_module in
+  let deep_free_array_func = L.declare_function "deep_free_array" deep_free_array_t the_module in
 
   let print_matrix_t = L.function_type void_t [| pointer_t matrix_t ; i1_t |] in
   let print_matrix_func = L.declare_function "print_matrix" print_matrix_t the_module in
@@ -252,7 +255,7 @@ let translate (array_types, program) =
           A.Int | A.Bool | A.Float | A.String -> ()
         | A.Array _ ->
             let _ =
-              L.build_call free_array_func
+              L.build_call deep_free_array_func
               [| param ; TypeMap.find typ element_free_funcs |] "" builder
             in
             ()
@@ -737,7 +740,16 @@ let translate (array_types, program) =
                 A.Matrix _ ->
                   L.build_call free_matrix_func [| e' |] "" builder
               | A.Array _ ->
-                  L.build_call free_array_func
+                  L.build_call free_array_func [| e' |] "" builder
+              | _ -> make_err "internal error: semant should have rejected invalid free parameter"
+          )
+      | SCall("deep_free", [e]) ->
+          let t, _ = e in
+          let e' = expr scope builder e in
+          (
+            match t with
+                A.Array _ ->
+                  L.build_call deep_free_array_func
                   [| e' ; TypeMap.find t element_free_funcs |] "" builder
               | _ -> make_err "internal error: semant should have rejected invalid free parameter"
           )

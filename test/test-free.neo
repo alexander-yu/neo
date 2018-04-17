@@ -28,8 +28,13 @@ void main() {
 
     free(a);
     free(b);
+
+    for (var int i = 0; i < 2; i++) {
+        free(c[i]);
+    }
+
     free(c);
-    free(d);
+    deep_free(d);
     free(e);
 
     print("Done!");

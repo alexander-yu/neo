@@ -75,7 +75,14 @@ void print_array(array_t *arr, void(*print_element)(void *)) {
     printf("|}");
 }
 
-void free_array(array_t *arr, void(*free_element)(void *)) {
+void free_array(array_t *arr) {
+    void **body = arr->body;
+    free(body[0]);
+    free(body);
+    free(arr);
+}
+
+void deep_free_array(array_t *arr, void(*free_element)(void *)) {
     void **body = arr->body;
     int length = arr->length;
 
@@ -83,9 +90,7 @@ void free_array(array_t *arr, void(*free_element)(void *)) {
         free_element(body[i]);
     }
 
-    free(body[0]);
-    free(body);
-    free(arr);
+    free_array(arr);
 }
 
 void init_matrix(matrix_t *mat) {

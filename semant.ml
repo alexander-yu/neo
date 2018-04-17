@@ -34,6 +34,7 @@ let check (globals, functions) =
     in
     List.fold_left add_built_in_func StringMap.empty [
       ("print", Void);
+      ("deep_free", Void);
       ("free", Void);
       ("transpose", Void);
     ]
@@ -381,6 +382,16 @@ let check (globals, functions) =
                     Matrix _ | Array _ ->
                       (env, (Void, SCall("free", [(t, arg)])))
                   | _ -> make_err ("unsupported free argument type in " ^ expr_s)
+              )
+        | Call("deep_free", args) ->
+            if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            else
+              let env, (t, arg) = List.hd (List.map (check_expr env) args) in
+              (
+                match t with
+                    Array _ ->
+                      (env, (Void, SCall("deep_free", [(t, arg)])))
+                  | _ -> make_err ("unsupported deep_free argument type in " ^ expr_s)
               )
         | Call("transpose", args) ->
             if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)

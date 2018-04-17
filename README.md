@@ -34,7 +34,7 @@ by Alex Yu, Andrés Aguayo, Ani Bezjian, Dominique Gordon, and Mohamed Abedelmal
 - **test-assign.neo**: checks that various types of variable assignments work, such as standard assignments, index assignments, and block/slice assignments
 - **test-decls.neo**: checks that local/global declarations work, in particular with initializer expressions
 - **test-exp.neo**:  checks that the exponent operator (`^`) works on integers and floats
-- **test-free.neo**: checks that the `free` built-in function properly frees memory for different container types
+- **test-free.neo**: checks that the `free` and `deep_free` built-in functions properly free memory for different container types
 - **test-hello.neo**: basic Hello World program that prints a matrix
 - **test-index-slice.neo**: checks that index/slice expressions work
 - **test-matmult.neo**: checks that the matrix multiplication operator (`@`) works
