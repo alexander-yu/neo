@@ -335,7 +335,7 @@ let check (globals, functions) =
           (* Determine expression type based on operator and operand types *)
           let ty = match op with
               Add | Sub | Mult | Div | Mod | Exp ->
-                (* Since we're supporting broadcasting, we just need to
+                (* Since we're implementing broadcasting, we just need to
                  * check that the base types are the same *)
                 let base_t1 = check_arith_operand t1 in
                 let base_t2 = check_arith_operand t2 in
@@ -349,7 +349,7 @@ let check (globals, functions) =
                   let base_t1 = check_arith_operand t1 in
                   let base_t2 = check_arith_operand t2 in
                   let _ = if base_t1 <> base_t2 then make_err err in
-                  Matrix Int
+                  Matrix base_t1
                 else make_err err
             | Less | Leq | Greater | Geq ->
                 let base_t1 = check_arith_operand t1 in
@@ -357,7 +357,7 @@ let check (globals, functions) =
                 let _ = if base_t1 <> base_t2 then make_err err in
                 (* Instead of returning matrix of bools, we return a
                 * matrix of 0s and 1s *)
-                if is_matrix then Matrix Int else Bool
+                if is_matrix then Matrix base_t1 else Bool
             | And | Or when t1 = t2 && t1 = Bool -> Bool
             | MatMult when t1 = t2 && is_matrix -> t1
             | _ -> make_err err
@@ -371,7 +371,7 @@ let check (globals, functions) =
                 match t with
                     Int | Float | Bool | String | Matrix _ | Array _ ->
                       (env, (Void, SCall("print", [(t, arg)])))
-                  | _ -> make_err ("unsupported print argument type in " ^ expr_s)
+                  | _ -> make_err "not supported yet in print"
               )
         | Call("free", args) ->
             if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
@@ -381,7 +381,7 @@ let check (globals, functions) =
                 match t with
                     Matrix _ | Array _ ->
                       (env, (Void, SCall("free", [(t, arg)])))
-                  | _ -> make_err ("unsupported free argument type in " ^ expr_s)
+                  | _ -> make_err ("non-container argument in " ^ expr_s)
               )
         | Call("deep_free", args) ->
             if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
@@ -391,7 +391,7 @@ let check (globals, functions) =
                 match t with
                     Array _ ->
                       (env, (Void, SCall("deep_free", [(t, arg)])))
-                  | _ -> make_err ("unsupported deep_free argument type in " ^ expr_s)
+                  | _ -> make_err ("non-array argument in " ^ expr_s)
               )
         | Call("transpose", args) ->
             if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)

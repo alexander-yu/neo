@@ -4,6 +4,26 @@
 #include <math.h>
 #include "native.h"
 
+/* Some versions of stdlib.h may have max/min macros,
+ * like Visual C++'s version. If they exist, undefine them
+ * for consistency. */
+#ifdef max
+    #undef max
+#endif
+
+#ifdef min
+    #undef min
+#endif
+
+int max(int a, int b) {
+    return (a > b) ? a : b;
+}
+
+int min(int a, int b) {
+    return (a < b) ? a : b;
+}
+
+/* Pretty-printing functions */
 void print_bool(bool b) {
     if (b) {
         printf("True");
@@ -50,18 +70,6 @@ void print_matrix(matrix_t *mat, bool flat) {
     printf("]");
 }
 
-void free_matrix(matrix_t *mat) {
-    union mat_body body = mat->body;
-    enum mat_type type = mat->type;
-
-    switch (type) {
-        case Int: free(body.ibody[0]); free(body.ibody); break;
-        case Float: free(body.fbody[0]); free(body.fbody); break;
-    }
-
-    free(mat);
-}
-
 void print_array(array_t *arr, void(*print_element)(void *)) {
     void **body = arr->body;
     int length = arr->length;
@@ -73,6 +81,19 @@ void print_array(array_t *arr, void(*print_element)(void *)) {
         }
     }
     printf("|}");
+}
+
+/* Array/matrix memory functions */
+void free_matrix(matrix_t *mat) {
+    union mat_body body = mat->body;
+    enum mat_type type = mat->type;
+
+    switch (type) {
+        case Int: free(body.ibody[0]); free(body.ibody); break;
+        case Float: free(body.fbody[0]); free(body.fbody); break;
+    }
+
+    free(mat);
 }
 
 void free_array(array_t *arr) {
@@ -91,19 +112,6 @@ void deep_free_array(array_t *arr, void(*free_element)(void *)) {
     }
 
     free_array(arr);
-}
-
-void init_matrix(matrix_t *mat) {
-    int rows = mat->rows;
-    int cols = mat->cols;
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            switch (mat->type) {
-                case Int: mat->body.ibody[i][j] = 0; break;
-                case Float: mat->body.fbody[i][j] = 0.0; break;
-        }
-    }
-}
 }
 
 void set_ptrs_matrix(matrix_t *mat, void *body) {
@@ -129,6 +137,7 @@ void set_ptrs_array(array_t *arr, void *body) {
     }
 }
 
+/* Array index/slice functions */
 void *get_array(array_t *arr, int i) {
     return arr->body[i];
 }
@@ -153,6 +162,7 @@ void set_slice_array(array_t *arr, slice_t *slice, array_t *data) {
     }
 }
 
+/* Matrix index/slice functions */
 void * get_matrix(matrix_t *mat, int i, int j) {
     switch (mat->type) {
         case Int: return (void *)&mat->body.ibody[i][j];
@@ -212,12 +222,13 @@ void set_slice_matrix(matrix_t *mat, slice_t *row_slice, slice_t *col_slice, mat
     }
 }
 
-int iexp(int e1, int e2){
-    return (int) pow((double) e1, (double) e2);
+/* Binary operations */
+int iexp(int a, int b){
+    return (int) pow((double) a, (double) b);
 }
 
-double fexp(double e1, double e2){
-    return pow(e1, e2);
+double fexp(double a, double b){
+    return pow(a, b);
 }
 
 void matmult(matrix_t *a, matrix_t *b, matrix_t *res){
@@ -232,12 +243,81 @@ void matmult(matrix_t *a, matrix_t *b, matrix_t *res){
             for (int k = 0; k < a->cols; k++){
                 switch (res->type) {
                     case Int:
-                         res->body.ibody[i][j] += a->body.ibody[i][k] * b->body.ibody[k][j];
-                         break;
+                        res->body.ibody[i][j] += a->body.ibody[i][k] * b->body.ibody[k][j];
+                        break;
                     case Float:
-                         res->body.fbody[i][j] += a->body.fbody[i][k] * b->body.fbody[k][j];
-                         break;
+                        res->body.fbody[i][j] += a->body.fbody[i][k] * b->body.fbody[k][j];
+                        break;
                 }
+            }
+        }
+    }
+}
+
+void mat_binop(matrix_t *a, enum mat_op op, matrix_t *b, matrix_t *res) {
+    int rows = res->rows;
+    int cols = res->cols;
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            int a_i = min(a->rows - 1, i);
+            int a_j = min(a->cols - 1, j);
+            int b_i = min(b->rows - 1, i);
+            int b_j = min(b->cols - 1, j);
+            switch (res->type) {
+                case Int: {
+                    int **r_body = res->body.ibody;
+                    int a_ij = a->body.ibody[a_i][a_j];
+                    int b_ij = b->body.ibody[b_i][b_j];
+                    switch (op) {
+                        case Add: r_body[i][j] = a_ij + b_ij; break;
+                        case Sub: r_body[i][j] = a_ij - b_ij; break;
+                        case Mult: r_body[i][j] = a_ij * b_ij; break;
+                        case Div: r_body[i][j] = a_ij / b_ij; break;
+                        case Mod: r_body[i][j] = a_ij % b_ij; break;
+                        case Exp: r_body[i][j] = iexp(a_ij, b_ij); break;
+                        case Equal: r_body[i][j] = a_ij == b_ij; break;
+                        case Neq: r_body[i][j] = a_ij != b_ij; break;
+                        case Less: r_body[i][j] = a_ij < b_ij; break;
+                        case Leq: r_body[i][j] = a_ij <= b_ij; break;
+                        case Greater: r_body[i][j] = a_ij > b_ij; break;
+                        case Geq: r_body[i][j] = a_ij >= b_ij; break;
+                    }
+                    break;
+                }
+                case Float: {
+                    double **r_body = res->body.fbody;
+                    double a_ij = a->body.fbody[a_i][a_j];
+                    double b_ij = b->body.fbody[b_i][b_j];
+                    switch (op) {
+                        case Add: r_body[i][j] = a_ij + b_ij; break;
+                        case Sub: r_body[i][j] = a_ij - b_ij; break;
+                        case Mult: r_body[i][j] = a_ij * b_ij; break;
+                        case Div: r_body[i][j] = a_ij / b_ij; break;
+                        case Mod: r_body[i][j] = fmod(a_ij, b_ij); break;
+                        case Exp: r_body[i][j] = fexp(a_ij, b_ij); break;
+                        case Equal: r_body[i][j] = (a_ij == b_ij) ? 1. : 0.; break;
+                        case Neq: r_body[i][j] = (a_ij != b_ij) ? 1. : 0.; break;
+                        case Less: r_body[i][j] = (a_ij < b_ij) ? 1. : 0.; break;
+                        case Leq: r_body[i][j] = (a_ij <= b_ij) ? 1. : 0.; break;
+                        case Greater: r_body[i][j] = (a_ij > b_ij) ? 1. : 0.; break;
+                        case Geq: r_body[i][j] = (a_ij >= b_ij) ? 1. : 0.; break;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/* Miscellaneous helpers/built-ins */
+void init_matrix(matrix_t *mat) {
+    int rows = mat->rows;
+    int cols = mat->cols;
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            switch (mat->type) {
+                case Int: mat->body.ibody[i][j] = 0; break;
+                case Float: mat->body.fbody[i][j] = 0.0; break;
             }
         }
     }
