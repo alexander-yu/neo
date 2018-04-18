@@ -98,6 +98,7 @@ let translate (array_types, program) =
   let float_format_str = L.build_global_stringptr "%g" "fmt" main_builder in
 
   (* Declare built-in functions *)
+  (* Pretty-printing functions *)
   let print_bool_t = L.function_type void_t [| i1_t |] in
   let print_bool_func = L.declare_function "print_bool" print_bool_t the_module in
 
@@ -110,20 +111,21 @@ let translate (array_types, program) =
   in
   let print_array_func = L.declare_function "print_array" print_array_t the_module in
 
-  let free_element_t = L.function_type void_t [| pointer_t i8_t |] in
-  let free_array_t =
-    L.function_type void_t [| pointer_t array_t ; pointer_t free_element_t |]
-  in
-  let free_array_func = L.declare_function "free_array" free_array_t the_module in
-
   let print_matrix_t = L.function_type void_t [| pointer_t matrix_t ; i1_t |] in
   let print_matrix_func = L.declare_function "print_matrix" print_matrix_t the_module in
 
+  (* Array/matrix memory functions *)
+  let free_array_t = L.function_type void_t [| pointer_t array_t |] in
+  let free_array_func = L.declare_function "free_array" free_array_t the_module in
+
+  let free_element_t = L.function_type void_t [| pointer_t i8_t |] in
+  let deep_free_array_t =
+    L.function_type void_t [| pointer_t array_t ; pointer_t free_element_t |]
+  in
+  let deep_free_array_func = L.declare_function "deep_free_array" deep_free_array_t the_module in
+
   let free_matrix_t = L.function_type void_t [| pointer_t matrix_t |] in
   let free_matrix_func = L.declare_function "free_matrix" free_matrix_t the_module in
-
-  let init_matrix_t = L.function_type void_t [| pointer_t matrix_t |] in
-  let init_matrix_func = L.declare_function "init_matrix" init_matrix_t the_module in
 
   let set_ptrs_matrix_t = L.function_type void_t [| pointer_t matrix_t ; pointer_t i8_t |] in
   let set_ptrs_matrix_func = L.declare_function "set_ptrs_matrix" set_ptrs_matrix_t the_module in
@@ -131,6 +133,7 @@ let translate (array_types, program) =
   let set_ptrs_array_t = L.function_type void_t [| pointer_t array_t ; pointer_t i8_t |] in
   let set_ptrs_array_func = L.declare_function "set_ptrs_array" set_ptrs_array_t the_module in
 
+  (* Array index/slice functions *)
   let get_array_t = L.function_type (pointer_t i8_t) [| pointer_t array_t ; i32_t |] in
   let get_array_func = L.declare_function "get_array" get_array_t the_module in
 
@@ -149,6 +152,7 @@ let translate (array_types, program) =
   in
   let set_slice_array_func = L.declare_function "set_slice_array" set_slice_array_t the_module in
 
+  (* Matrix index/slice functions *)
   let get_matrix_t = L.function_type (pointer_t i8_t) [| pointer_t matrix_t ; i32_t ; i32_t |] in
   let get_matrix_func = L.declare_function "get_matrix" get_matrix_t the_module in
 
@@ -167,16 +171,27 @@ let translate (array_types, program) =
   in
   let set_slice_matrix_func = L.declare_function "set_slice_matrix" set_slice_matrix_t the_module in
 
+  (* Binary operations *)
   let iexp_t = L.function_type i32_t [| i32_t ; i32_t |] in
   let iexp_func = L.declare_function "iexp" iexp_t the_module in
 
   let fexp_t = L.function_type float_t [| float_t ; float_t |] in
   let fexp_func = L.declare_function "fexp" fexp_t the_module in
-  
-  let matmult_t = L.function_type void_t [| pointer_t matrix_t; pointer_t matrix_t; pointer_t matrix_t |] in
+
+  let matmult_t = L.function_type void_t [| pointer_t matrix_t ; pointer_t matrix_t ; pointer_t matrix_t |] in
   let matmult_func = L.declare_function "matmult" matmult_t the_module in
 
-  let transpose_t = L.function_type void_t [| pointer_t matrix_t; pointer_t matrix_t |] in
+  let mat_binop_t =
+    L.function_type void_t
+    [| pointer_t matrix_t ; i32_t ; pointer_t matrix_t ; pointer_t matrix_t |]
+  in
+  let mat_binop_func = L.declare_function "mat_binop" mat_binop_t the_module in
+
+  (* Miscellaneous helper/built-ins *)
+  let init_matrix_t = L.function_type void_t [| pointer_t matrix_t |] in
+  let init_matrix_func = L.declare_function "init_matrix" init_matrix_t the_module in
+
+  let transpose_t = L.function_type void_t [| pointer_t matrix_t ; pointer_t matrix_t |] in
   let transpose_func = L.declare_function "transpose" transpose_t the_module in
 
   (* Build any necessary element-printing functions for array types *)
@@ -248,11 +263,9 @@ let translate (array_types, program) =
         | _ -> element_free_funcs
       in
       let _ = match typ with
-          (* In these cases, don't do anything *)
-          A.Int | A.Bool | A.Float | A.String -> ()
-        | A.Array _ ->
+          A.Array _ ->
             let _ =
-              L.build_call free_array_func
+              L.build_call deep_free_array_func
               [| param ; TypeMap.find typ element_free_funcs |] "" builder
             in
             ()
@@ -261,8 +274,8 @@ let translate (array_types, program) =
               L.build_call free_matrix_func [| param |] "" builder
             in
             ()
-        | A.Void -> make_err "internal error: semant should have rejected void data (build free)"
-        | _ -> make_err "not supported yet in build_element_free_func"
+        (* Otherwise, do nothing *)
+        | _ -> ()
       in
       let _ = L.build_ret_void builder in
       TypeMap.add array_type free_func element_free_funcs
@@ -372,10 +385,14 @@ let translate (array_types, program) =
       | _ -> L.const_int i32_t 1
     in
 
-    let build_matrix typ rows cols builder =
+    let build_matrix ?on_heap:(on_heap=true) typ rows cols builder =
+      (* Get allocating functions *)
+      let array_alloc = if on_heap then L.build_array_malloc else L.build_array_alloca in
+      let alloc = if on_heap then L.build_malloc else L.build_alloca in
+
       (* Allocate required space *)
-        let row_ptrs = L.build_array_malloc (pointer_t float_t) rows "row_ptrs" builder in
-        let mat_ptr = L.build_malloc matrix_t "mat_ptr" builder in
+      let row_ptrs = array_alloc (pointer_t float_t) rows "row_ptrs" builder in
+      let mat_ptr = alloc matrix_t "mat_ptr" builder in
 
       (* Set fields *)
       let mat_body = L.build_struct_gep mat_ptr 0 "mat_body" builder in
@@ -389,18 +406,21 @@ let translate (array_types, program) =
       mat_ptr
     in
 
-    let build_matrix_lit typ raw_elements builder =
+    let build_matrix_lit ?on_heap:(on_heap=true) typ raw_elements builder =
+      (* Get allocating function *)
+      let array_alloc = if on_heap then L.build_array_malloc else L.build_array_alloca in
+
       let ltype = ltype_of_typ typ in
       let rows = L.const_int i32_t (Array.length raw_elements) in
       let cols = L.const_int i32_t (Array.length raw_elements.(0)) in
       let size = L.build_mul rows cols "size" builder in
-      let mat_ptr = build_matrix typ rows cols builder in
+      let mat_ptr = build_matrix ~on_heap:on_heap typ rows cols builder in
 
       (* Flatten elements into one array *)
       let raw_elements = Array.concat (Array.to_list raw_elements) in
 
       (* Allocate and fill matrix body *)
-        let body_ptr = L.build_array_malloc ltype size "body_ptr" builder in
+      let body_ptr = array_alloc ltype size "body_ptr" builder in
       let set_element i element =
         let ptr =
           L.build_in_bounds_gep body_ptr
@@ -433,6 +453,16 @@ let translate (array_types, program) =
       (* Set body pointers *)
       let _ = L.build_call set_ptrs_matrix_func [| mat_ptr ; body_ptr |] "" builder in
       mat_ptr
+    in
+
+    let get_rows mat builder =
+      let rows_ptr = L.build_struct_gep mat 1 "rows_ptr" builder in
+      L.build_load rows_ptr "rows" builder
+    in
+
+    let get_cols mat builder =
+      let cols_ptr = L.build_struct_gep mat 2 "cols_ptr" builder in
+      L.build_load cols_ptr "cols" builder
     in
 
     let build_sgl_slice arr slice builder = match slice with
@@ -469,9 +499,7 @@ let translate (array_types, program) =
                 SInt_Lit _ -> expr scope builder j1
               | SSlice_Inc -> L.build_add i1' (L.const_int i32_t 1) "row_slice_inc" builder
               (* Otherwise, it's SEnd *)
-              | _ ->
-                  let rows_ptr = L.build_struct_gep mat 1 "rows_ptr" builder in
-                  L.build_load rows_ptr "rows" builder
+              | _ -> get_rows mat builder
           in
           let i2' = expr scope builder i2 in
           let j2' =
@@ -479,9 +507,7 @@ let translate (array_types, program) =
                 SInt_Lit _ -> expr scope builder j2
               | SSlice_Inc -> L.build_add i2' (L.const_int i32_t 1) "col_slice_inc" builder
               (* Otherwise, it's SEnd *)
-              | _ ->
-                  let cols_ptr = L.build_struct_gep mat 2 "cols_ptr" builder in
-                  L.build_load cols_ptr "cols" builder
+              | _ -> get_cols mat builder
           in
           let _ = L.build_store i1' row_slice_start builder in
           let _ = L.build_store j1' row_slice_end builder in
@@ -513,6 +539,27 @@ let translate (array_types, program) =
     let sexpr_of_sindex = function
         SIndex e -> e
       | _ -> make_err "internal error: sexpr_of_sindex given non-index"
+    in
+
+    (* Used for element-wise matrix operations *)
+    let get_mat_opcode op =
+      match op with
+          A.Add     -> 0
+        | A.Sub     -> 1
+        | A.Mult    -> 2
+        | A.Div     -> 3
+        | A.Mod     -> 4
+        | A.Exp     -> 5
+        | A.Equal   -> 6
+        | A.Neq     -> 7
+        | A.Less    -> 8
+        | A.Leq     -> 9
+        | A.Greater -> 10
+        | A.Geq     -> 11
+        | _       -> make_err (
+            "internal error: op " ^ A.string_of_op op ^
+            " is not an element-wise matrix op"
+          )
     in
 
     (* TODO: perform runtime checks; division by zero, index out of bounds,
@@ -583,7 +630,7 @@ let translate (array_types, program) =
       | SNoexpr -> init t
       | SId s -> L.build_load (lookup s scope) s builder
       | SAssign(e1, e2) ->
-          let _, e1 = e1 in
+          let t, e1 = e1 in
           let e2' = expr scope builder e2 in
           let _ =
             match e1 with
@@ -638,75 +685,107 @@ let translate (array_types, program) =
                 )
               | _ -> make_err "internal error: semant should have rejected invalid assignment"
           in
-          e2'
+          expr scope builder (t, e1)
       | SBinop(e1, op, e2) ->
-          let t, _ = e1
-          and e1' = expr scope builder e1
-          and e2' = expr scope builder e2
+          let err =
+            "internal error: semant should have rejected " ^
+            A.string_of_op op ^ " on " ^ A.string_of_typ t
           in
-          if t = A.Float then (match op with
-            A.Add     -> L.build_fadd e1' e2' "temp" builder
-          | A.Sub     -> L.build_fsub e1' e2' "temp" builder 
-          | A.Mult    -> L.build_fmul e1' e2' "temp" builder
-          | A.Div     -> L.build_fdiv e1' e2' "temp" builder
-          | A.Mod     -> L.build_frem e1' e2' "temp" builder
-          | A.Exp     -> L.build_call fexp_func [| e1'; e2'|] "temp" builder
-          | A.Equal   -> L.build_fcmp L.Fcmp.Oeq e1' e2' "temp" builder
-          | A.Neq     -> L.build_fcmp L.Fcmp.One e1' e2' "temp" builder
-          | A.Less    -> L.build_fcmp L.Fcmp.Olt e1' e2' "temp" builder
-          | A.Leq     -> L.build_fcmp L.Fcmp.Ole e1' e2' "temp" builder
-          | A.Greater -> L.build_fcmp L.Fcmp.Ogt e1' e2' "temp" builder
-          | A.Geq     -> L.build_fcmp L.Fcmp.Oge e1' e2' "temp" builder
-          | A.And | A.Or ->
-              make_err "internal error: semant should have rejected and/or on float"
-          | _ -> make_err "binop not supported yet"
+          let t1 = fst e1 and t2 = fst e2 in
+          let e1' = expr scope builder e1
+          and e2' = expr scope builder e2 in
+          if t1 = A.Float && t2 = A.Float then
+           (
+            match op with
+                A.Add     -> L.build_fadd e1' e2' "temp" builder
+              | A.Sub     -> L.build_fsub e1' e2' "temp" builder
+              | A.Mult    -> L.build_fmul e1' e2' "temp" builder
+              | A.Div     -> L.build_fdiv e1' e2' "temp" builder
+              | A.Mod     -> L.build_frem e1' e2' "temp" builder
+              | A.Exp     -> L.build_call fexp_func [| e1'; e2'|] "temp" builder
+              | A.Equal   -> L.build_fcmp L.Fcmp.Oeq e1' e2' "temp" builder
+              | A.Neq     -> L.build_fcmp L.Fcmp.One e1' e2' "temp" builder
+              | A.Less    -> L.build_fcmp L.Fcmp.Olt e1' e2' "temp" builder
+              | A.Leq     -> L.build_fcmp L.Fcmp.Ole e1' e2' "temp" builder
+              | A.Greater -> L.build_fcmp L.Fcmp.Ogt e1' e2' "temp" builder
+              | A.Geq     -> L.build_fcmp L.Fcmp.Oge e1' e2' "temp" builder
+              | _         -> make_err err
           )
-          else if t = A.Int then (match op with
-          | A.Add     -> L.build_add e1' e2' "temp" builder
-          | A.Sub     -> L.build_sub e1' e2' "temp" builder
-          | A.Mult    -> L.build_mul e1' e2' "temp" builder
-          | A.Div     -> L.build_sdiv e1' e2' "temp" builder
-          | A.And     -> L.build_and e1' e2' "temp" builder
-          | A.Or      -> L.build_or e1' e2' "temp" builder
-          | A.Mod     -> L.build_srem e1' e2' "temp" builder
-          | A.Exp     -> L.build_call iexp_func [| e1'; e2'|] "temp" builder
-          | A.Equal   -> L.build_icmp L.Icmp.Eq e1' e2' "temp" builder
-          | A.Neq     -> L.build_icmp L.Icmp.Ne e1' e2' "temp" builder
-          | A.Less    -> L.build_icmp L.Icmp.Slt e1' e2' "temp" builder
-          | A.Leq     -> L.build_icmp L.Icmp.Sle e1' e2' "temp" builder
-          | A.Greater -> L.build_icmp L.Icmp.Sgt e1' e2' "temp" builder
-          | A.Geq     -> L.build_icmp L.Icmp.Sge e1' e2' "temp" builder
-          | _ -> make_err "binop not supported yet"
+          else if t1 = A.Int && t2 = A.Int then
+          (
+            match op with
+                A.Add     -> L.build_add e1' e2' "temp" builder
+              | A.Sub     -> L.build_sub e1' e2' "temp" builder
+              | A.Mult    -> L.build_mul e1' e2' "temp" builder
+              | A.Div     -> L.build_sdiv e1' e2' "temp" builder
+              | A.Mod     -> L.build_srem e1' e2' "temp" builder
+              | A.Exp     -> L.build_call iexp_func [| e1'; e2'|] "temp" builder
+              | A.Equal   -> L.build_icmp L.Icmp.Eq e1' e2' "temp" builder
+              | A.Neq     -> L.build_icmp L.Icmp.Ne e1' e2' "temp" builder
+              | A.Less    -> L.build_icmp L.Icmp.Slt e1' e2' "temp" builder
+              | A.Leq     -> L.build_icmp L.Icmp.Sle e1' e2' "temp" builder
+              | A.Greater -> L.build_icmp L.Icmp.Sgt e1' e2' "temp" builder
+              | A.Geq     -> L.build_icmp L.Icmp.Sge e1' e2' "temp" builder
+              | _         -> make_err err
           )
-          else if t = A.Matrix A.Int then (match op with
-          | A.MatMult -> let rows_ptr = L.build_struct_gep e1' 1 "rows_ptr" builder in
-                let rows = L.build_load rows_ptr "rows" builder in
-                let cols_ptr = L.build_struct_gep e2' 2 "cols_ptr" builder in
-                let cols = L.build_load cols_ptr "cols" builder in
-                let mat = build_empty_matrix A.Int rows cols builder in
-                let _ = L.build_call matmult_func [|e1'; e2'; mat|] "" builder in 
-                mat
-          | _ -> make_err "matrix operation not supported yet"
+          else if t1 = A.Bool && t2 = A.Bool then
+          (
+            match op with
+                A.And -> L.build_and e1' e2' "temp" builder
+              | A.Or  -> L.build_or e1' e2' "temp" builder
+              | _     -> make_err err
           )
-          else if t = A.Matrix A.Float then (match op with
-          | A.MatMult -> let rows_ptr = L.build_struct_gep e1' 1 "rows_ptr" builder in
-                let rows = L.build_load rows_ptr "rows" builder in
-                let cols_ptr = L.build_struct_gep e2' 2 "cols_ptr" builder in
-                let cols = L.build_load cols_ptr "cols" builder in
-                let mat = build_empty_matrix A.Float rows cols builder in
-                let _ = L.build_call matmult_func [|e1'; e2'; mat|] "" builder in
-                mat
-          | _ -> make_err "matrix operation not supported yet"
-          )
-          else make_err "else error"
+          (* Otherwise, it's a matrix result (either int or float) *)
+          else
+            let t = A.typ_of_container t in
+            (* Wrap broadcasted scalars into temp 1x1 matrices stored on the stack *)
+            let e1' =
+              if t1 == A.Int || t1 == A.Float
+              then build_matrix_lit ~on_heap:false t1 [| [| e1' |] |] builder
+              else e1'
+            in
+            let e2' =
+              if t2 == A.Int || t2 == A.Float
+              then build_matrix_lit ~on_heap:false t2 [| [| e2' |] |] builder
+              else e2'
+            in
+            (
+              match op with
+                  A.MatMult ->
+                    let rows = get_rows e1' builder in
+                    let cols = get_cols e2' builder in
+                    let mat = build_empty_matrix t rows cols builder in
+                    let _ = L.build_call matmult_func [| e1' ; e2' ; mat|] "" builder in
+                    mat
+                | A.And | A.Or -> make_err err
+                | _ ->
+                    let max e1' e2' builder =
+                      let cond = L.build_icmp L.Icmp.Sgt e1' e2' "max_cond" builder in
+                      L.build_select cond e1' e2' "max_v" builder
+                    in
+                    let opcode = L.const_int i32_t (get_mat_opcode op) in
+                    let rows_1 = get_rows e1' builder in
+                    let cols_1 = get_cols e1' builder in
+                    let rows_2 = get_rows e2' builder in
+                    let cols_2 = get_cols e2' builder in
+                    let rows = max rows_1 rows_2 builder in
+                    let cols = max cols_1 cols_2 builder in
+                    let mat = build_empty_matrix t rows cols builder in
+                    let _ =
+                      L.build_call mat_binop_func
+                      [| e1' ; opcode ; e2' ; mat |] ""  builder
+                    in
+                    mat
+            )
       | SUnop(op, e) ->
-          let (t, _) = e in
+          let t, _ = e in
           let e' = expr scope builder e in
           (match op with
               A.Neg when t = A.Float -> L.build_fneg
             | A.Neg                  -> L.build_neg
             | A.Not                  -> L.build_not) e' "tmp" builder
       | SCall("print", [e]) ->
+          let t, _ = e in
           let e' = expr scope builder e in
           (
             match t with
@@ -729,25 +808,33 @@ let translate (array_types, program) =
               | _ -> make_err "not supported yet in print"
           )
       | SCall("free", [e]) ->
+          let t, _ = e in
           let e' = expr scope builder e in
           (
             match t with
                 A.Matrix _ ->
                   L.build_call free_matrix_func [| e' |] "" builder
               | A.Array _ ->
-                  L.build_call free_array_func
+                  L.build_call free_array_func [| e' |] "" builder
+              | _ -> make_err "internal error: semant should have rejected invalid free parameter"
+          )
+      | SCall("deep_free", [e]) ->
+          let t, _ = e in
+          let e' = expr scope builder e in
+          (
+            match t with
+                A.Array _ ->
+                  L.build_call deep_free_array_func
                   [| e' ; TypeMap.find t element_free_funcs |] "" builder
               | _ -> make_err "internal error: semant should have rejected invalid free parameter"
           )
       | SCall("transpose", [e]) ->
           let e' = expr scope builder e in
-          let rows_ptr = L.build_struct_gep e' 1 "rows_ptr" builder in
-          let rows = L.build_load rows_ptr "rows" builder in
-          let cols_ptr = L.build_struct_gep e' 2 "cols_ptr" builder in
-          let cols = L.build_load cols_ptr "cols" builder in
+          let rows = get_rows e' builder in
+          let cols = get_cols e' builder in
           let typ = A.typ_of_container (fst e) in
           let mat = build_empty_matrix typ cols rows builder in
-          let _ = L.build_call transpose_func [|e'; mat|] "" builder in 
+          let _ = L.build_call transpose_func [| e' ; mat|] "" builder in
           mat
       | SCall(fname, args) ->
           let f = lookup fname scope in
