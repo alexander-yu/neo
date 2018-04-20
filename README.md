@@ -42,4 +42,3 @@ by Alex Yu, Andrés Aguayo, Ani Bezjian, Dominique Gordon, and Mohamed Abedelmal
 - **test-mod.neo**: checks that the modulus operator (`%`) works
 - **test-print.neo**: checks that the `print` built-in function properly prints various data types
 - **test-return-container.neo**: checks that functions can properly return container types
-- **test-transpose.neo**: checks that the `transpose` built-in functions works

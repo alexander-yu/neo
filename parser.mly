@@ -107,11 +107,11 @@ stmt_list:
 /* Implement for loops as while loops */
 for_loop:
     FOR LPAREN expr_opt SEMI expr SEMI expr_opt RPAREN stmt
-      { Block [Expr $3 ; While($5, Block [$9 ; Expr $7])] }
+      { Block [Expr $3; While($5, Block [$9; Expr $7])] }
   | FOR LPAREN decl SEMI expr SEMI expr_opt RPAREN stmt
       /* Implement declaration initializer as declaration
        * followed by loop in a block */
-      { Block [Decl $3 ; While($5, Block [$9 ; Expr $7])] }
+      { Block [Decl $3; While($5, Block [$9; Expr $7])] }
 
 /* This is to prevent if/else statements from containing
  * single-line declarations in their bodies; declarations
@@ -196,10 +196,10 @@ postfix_expr:
                                       Slice_Expr(Dbl_Slice($1, $3, $5))
                               }
   /* Function Call */
-  | ID LPAREN args_opt RPAREN { Call($1, $3) }
+  | postfix_expr LPAREN args_opt RPAREN { Call($1, $3) }
 
 prefix_expr:
-    postfix_expr       { $1 }
+    postfix_expr      { $1 }
 
   /* Unary ops */
   | MINUS prefix_expr { Unop(Neg, $2) }

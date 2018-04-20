@@ -24,12 +24,32 @@ int min(int a, int b) {
 }
 
 /* Pretty-printing functions */
-void print_bool(bool b) {
+void _print_bool(bool b) {
     if (b) {
         printf("True");
     } else {
         printf("False");
     }
+}
+
+void _print_int(int i) {
+    printf("%d", i);
+}
+
+void _print_float(double d) {
+    printf("%g", d);
+}
+
+void _print_string(char *s) {
+    printf("%s", s);
+}
+
+void _print_matrix(matrix_t *m) {
+    print_matrix(m, false);
+}
+
+void print_function(void *p) {
+    printf("function at %p", p);
 }
 
 void print_matrix(matrix_t *mat, bool flat) {
@@ -84,7 +104,7 @@ void print_array(array_t *arr, void(*print_element)(void *)) {
 }
 
 /* Array/matrix memory functions */
-void free_matrix(matrix_t *mat) {
+void _free_matrix(matrix_t *mat) {
     union mat_body body = mat->body;
     enum mat_type type = mat->type;
 
@@ -96,7 +116,7 @@ void free_matrix(matrix_t *mat) {
     free(mat);
 }
 
-void free_array(array_t *arr) {
+void _free_array(array_t *arr) {
     void **body = arr->body;
     free(body[0]);
     free(body);
@@ -111,7 +131,7 @@ void deep_free_array(array_t *arr, void(*free_element)(void *)) {
         free_element(body[i]);
     }
 
-    free_array(arr);
+    _free_array(arr);
 }
 
 void set_ptrs_matrix(matrix_t *mat, void *body) {
@@ -318,23 +338,6 @@ void init_matrix(matrix_t *mat) {
             switch (mat->type) {
                 case Int: mat->body.ibody[i][j] = 0; break;
                 case Float: mat->body.fbody[i][j] = 0.0; break;
-            }
-        }
-    }
-}
-
-void transpose(matrix_t *a, matrix_t *res){
-    int rows = res->rows;
-    int cols = res->cols;
-    for (int i = 0; i < rows; i++){
-        for (int j = 0; j < cols; j++){
-            switch (res->type){
-                case Int:
-                    res->body.ibody[i][j] = a->body.ibody[j][i];
-                    break;
-                case Float:
-                    res->body.fbody[i][j] = a->body.fbody[j][i];
-                    break;
             }
         }
     }

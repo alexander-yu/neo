@@ -51,8 +51,11 @@ SignalError() {
 # Compares the outfile with reffile.  Differences, if any, written to difffile
 Compare() {
     generatedfiles="$generatedfiles $3"
-    echo diff -b $1 $2 ">" $3 1>&2
-    diff -b "$1" "$2" > "$3" 2>&1 || {
+    hexpattern="0x[a-z0-9]\+"
+    # Ignore any printing of memory addresses, since this will
+    # vary by test, possibly
+    echo diff -b <(sed "s/$hexpattern//g" $1) <(sed "s/$hexpattern//g" $2) ">" $3 1>&2
+    diff -b <(sed "s/$hexpattern//g" $1) <(sed "s/$hexpattern//g" $2) > "$3" 2>&1 || {
 	SignalError "$1 differs"
 	echo "FAILED $1 differs from $2" 1>&2
     }

@@ -21,6 +21,7 @@ type symbol_table = {
 type translation_environment = {
   scope : symbol_table;
   array_types : TypeSet.t;
+  func_types : TypeSet.t;
 }
 
 let make_err err = raise (Failure err)
@@ -28,15 +29,13 @@ let make_err err = raise (Failure err)
 let check (globals, functions) =
   (* add built-in functions *)
   let built_in_funcs =
-    let add_built_in_func map (name, typ) =
-      let f_type = Func([], typ) in
-      StringMap.add name (f_type, true) map
+    let add_built_in_func map name =
+      StringMap.add name (BuiltInFunc, true) map
     in
     List.fold_left add_built_in_func StringMap.empty [
-      ("print", Void);
-      ("deep_free", Void);
-      ("free", Void);
-      ("transpose", Void);
+      "print";
+      "deep_free";
+      "free";
     ]
   in
 
@@ -47,18 +46,114 @@ let check (globals, functions) =
   let sys_main = "main" in
   let prog_main = "prog_main" in
 
-  let add_decl scope name typ has_value =
-    let built_in_err = "identifier " ^ name ^ " may not be defined" in
-    let dup_err = "duplicate identifier " ^ name in
+  (* Check if a built-in function can be restricted to a given type *)
+  let check_builtin_restrict typ err fname =
+    (* First check typ is actually a function type *)
+    let arg_types, ret_type =
+      match typ with
+          Func(arg_types, ret_type) -> (arg_types, ret_type)
+        | _ -> make_err err
+    in
+    let n_args = List.length arg_types in
+    match fname with
+        "print" ->
+          if n_args = 1 && ret_type = Void then ()
+          else make_err err
+      | "deep_free" ->
+          let arg_is_array =
+            match List.hd arg_types with
+                Array _ -> true
+              | _ -> false
+          in
+          if n_args = 1 && arg_is_array && ret_type = Void then ()
+          else make_err err
+      | "free" ->
+          let arg_is_container =
+            match List.hd arg_types with
+                Matrix _ | Array _ -> true
+              | _ -> false
+          in
+          if n_args = 1 && arg_is_container && ret_type = Void then ()
+          else make_err err
+      | _ -> make_err err
+  in
 
-    (* Cannot redefine built-ins *)
-    let is_built_in = StringMap.mem name built_in_funcs in
-    let _ = if is_built_in then make_err built_in_err in
+  let get_native_of_builtin fname arg_types =
+    let suffix_of_typ typ =
+      match typ with
+        (* No need to include int/float; our native matrix structs already
+         * embed type information, meaning our native functions for matrices
+         * already account for the two different types at the same time,
+         * that's why we have _print_matrix and _free_matrix rather than
+         * _print_matrix<int> or _free_matrix<int> *)
+          Matrix _ -> "matrix"
+        (* Similar as the above case, but this only applies to our free
+         * function, as that doesn't care about the array type; our
+         * deep_Free built-in does, however *)
+        | Array _ when fname = "free" -> "array"
+        | _ -> string_of_typ typ
+    in
+    let type_suffix = String.concat "_" (List.map suffix_of_typ arg_types) in
+    "_" ^ fname ^ "_" ^ type_suffix
+  in
 
-    (* Cannot declare duplicate in same scope *)
-    let is_dup = StringMap.mem name scope.variables in
-    let _ = if is_dup then make_err dup_err in
-    { scope with variables = StringMap.add name (typ, has_value) scope.variables }
+  (* Find all function types embedded within a type *)
+  let rec add_func_type func_types typ =
+    match typ with
+        Func(arg_types, ret_type) ->
+          let func_types = TypeSet.add typ func_types in
+          let func_types = List.fold_left add_func_type func_types arg_types in
+          add_func_type func_types ret_type
+      | Array t -> add_func_type func_types t
+      | _ -> func_types
+  in
+
+  (* Find all array types embedded within a type *)
+  let rec add_array_type array_types typ =
+    match typ with
+        Func(arg_types, ret_type) ->
+          let array_types = List.fold_left add_array_type array_types arg_types in
+          add_array_type array_types ret_type
+      | Array t ->
+          let array_types = TypeSet.add typ array_types in
+          add_array_type array_types t
+      | _ -> array_types
+  in
+
+  (* Raise an exception if the given rvalue type cannot be assigned to
+  * the given lvalue type *)
+  let check_assign lvaluet (rvaluet, rexpr) err =
+    if lvaluet = rvaluet then (rvaluet, rexpr)
+    (* Alternatively, there's a built-in reference somewhere; see if we can restrict the
+     * built-in type to the assigned type *)
+    else
+      let rec is_builtin_assign lvaluet rvaluet =
+        match lvaluet, rvaluet with
+            (Func(_, _), BuiltInFunc) -> true
+          (* If not both function types, alternatively these are built-in literals
+           * embedded in arrays; dig down until we find a match *)
+          | (Array t1, Array t2) -> is_builtin_assign t1 t2
+          | _ -> false
+      in
+      if is_builtin_assign lvaluet rvaluet then
+        (* In this case, rexpr must be of the form SId, since it's a
+         * direct reference to a built-in *)
+        match rexpr with
+            SId fname ->
+              let _ = check_builtin_restrict lvaluet err fname in
+              (* Replace built-in function with the underlying native function *)
+              let arg_types =
+                match lvaluet with
+                    Func(arg_types, _) -> arg_types
+                  | _ ->
+                      make_err ("internal error: " ^ string_of_typ lvaluet ^
+                      " = " ^ string_of_typ rvaluet ^ " should have been rejected" ^
+                      " by check_builtin_restrict")
+              in
+              (lvaluet, SId (get_native_of_builtin fname arg_types))
+          | _ -> make_err ("internal error: only direct references to " ^
+              "built-in functions should have type BuiltInFunc")
+      else make_err err
   in
 
   let rec lookup name scope =
@@ -73,22 +168,26 @@ let check (globals, functions) =
   let rec check_expr env expr =
     (* check all elements in container literal have valid type and have valid sizes *)
     let check_container_lit env e =
+      let expr_s = string_of_expr e in
       let check_size e = match e with
           Array_Lit l ->
             if Array.length(l) > 0 then e
-            else make_err ("array has zero length in " ^ string_of_expr e)
+            else make_err ("array has zero length in " ^ expr_s)
         | Matrix_Lit l ->
             if Array.length(l) > 0 && Array.length(l.(0)) > 0 then e
-            else make_err ("matrix has a dimension of size 0 in " ^ string_of_expr e)
+            else make_err ("matrix has a dimension of size 0 in " ^ expr_s)
         | _ -> make_err "internal error: check_container_lit passed non-container type"
       in
 
       (* Note: this returns a reversed list *)
       let check_equal_type t (env, checked) e =
         let env, (t', e') = check_expr env e in
-        if t = t' then (env, (t', e') :: checked)
-        else make_err ("container expected type " ^ string_of_typ t ^
-          " but saw type " ^ string_of_typ t' ^ " in " ^ string_of_expr e)
+        let err =
+          "container expected type " ^ string_of_typ t ^
+          " but saw type " ^ string_of_typ t' ^ " in " ^ expr_s
+        in
+        let (t', e') = check_assign t (t', e') err in
+        (env, (t', e') :: checked)
       in
 
       (* Note: this returns a reversed list of reversed lists *)
@@ -100,12 +199,21 @@ let check (globals, functions) =
       let _ = check_size e in
       match e with
           Array_Lit l ->
-            let env, (t, _) = check_expr env l.(0) in
+            (* Get type of first element that isn't BuiltInFunc (i.e. explicitly typed) *)
+            let rec find_typed l n =
+              let _, (t, _) = check_expr env l.(n) in
+              if t <> BuiltInFunc then t
+              else if n + 1 < Array.length l then find_typed l (n + 1)
+              else make_err ("array containing only built-in functions in " ^ expr_s)
+            in
+            let t = find_typed l 0 in
             let env, checked = Array.fold_left (check_equal_type t) (env, []) l in
             let checked = Array.of_list (List.rev checked) in
             (* Add array type to set *)
-            let array_types = TypeSet.add (Array t) env.array_types in
-            let env = { env with array_types } in
+            let array_types = add_array_type env.array_types (Array t) in
+            (* Add possible function types to set *)
+            let func_types = add_func_type env.func_types t in
+            let env = { env with array_types; func_types } in
             (env, (Array t, SArray_Lit(checked)))
         | Matrix_Lit l ->
             let env, (t, _) = check_expr env l.(0).(0) in
@@ -115,12 +223,6 @@ let check (globals, functions) =
             let checked = Array.map Array.of_list checked in
             (env, (Matrix t, SMatrix_Lit(checked)))
         | _ -> make_err "internal error: check_container_lit passed non-container type"
-    in
-
-    (* Raise an exception if the given rvalue type cannot be assigned to
-      * the given lvalue type *)
-    let check_assign lvaluet rvaluet err =
-      if lvaluet = rvaluet then lvaluet else make_err err
     in
 
     let get_idx_err e =
@@ -210,6 +312,64 @@ let check (globals, functions) =
             let sslice = SSlice_Expr(SDbl_Slice((t, e'), ss1, ss2)) in
             (env, (t, sslice))
     in
+
+    (* Check calls for built-in functions *)
+    let check_builtin_call fname args expr_s =
+      let n_args = List.length args in
+      let check_arg (env, checked) arg =
+        let env, arg' = check_expr env arg in
+        (env, arg' :: checked)
+      in
+      let env, args' = List.fold_left check_arg (env, []) args in
+      let args' = List.rev args' in
+      let arg_types = List.map fst args' in
+      match fname with
+          "print" ->
+            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            else
+              let native_fname = get_native_of_builtin fname arg_types in
+              (
+                match arg_types with
+                    [Void] -> make_err ("void argument in " ^ expr_s)
+                  (* If for some reason we want to print a built-in function, this is the only
+                   * case where it doesn't become restricted to an explicitly typed function;
+                   * in this case, just print a specialized string *)
+                  | [BuiltInFunc] ->
+                      let arg_name =
+                        match snd (List.hd args') with
+                            SId s -> s
+                          | _ ->
+                              make_err "internal error: BuiltInFunc " ^
+                              "should be direct reference to built-in"
+                      in
+                      let str = "built-in function " ^ arg_name in
+                      (env, (Void, SCall((Func([String], Void), SId "_print_string"),
+                        [(String, SString_Lit str)])))
+                  | _ -> (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+              )
+        | "deep_free" ->
+            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            else
+              let native_fname = get_native_of_builtin fname arg_types in
+              (
+                match arg_types with
+                    [Array _] ->
+                      (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+                  | _ -> make_err ("non-array argument in " ^ expr_s)
+              )
+        | "free" ->
+            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            else
+              let native_fname = get_native_of_builtin fname arg_types in
+              (
+                match arg_types with
+                    [Matrix _] | [Array _] ->
+                      (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+                  | _ -> make_err ("non-container argument in " ^ expr_s)
+              )
+        | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
+    in
+
     let expr_s = string_of_expr expr in
     match expr with
         Int_Lit l -> (env, (Int, SInt_Lit l))
@@ -270,7 +430,8 @@ let check (globals, functions) =
                     "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ expr_s
                   in
-                  (env, (check_assign lt rt err, SAssign((lt, SId s), (rt, e'))))
+                  let (rt, e') = check_assign lt (rt, e') err  in
+                  (env, (lt, SAssign((lt, SId s), (rt, e'))))
               | Index_Expr i ->
                   let env, (lt, i') = check_index_expr env i in
                   let env, (rt, e') = check_expr env e2 in
@@ -278,7 +439,8 @@ let check (globals, functions) =
                     "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ expr_s
                   in
-                  (env, (check_assign lt rt err, SAssign((lt, i'), (rt, e'))))
+                  let (rt, e') = check_assign lt (rt, e') err in
+                  (env, (lt, SAssign((lt, i'), (rt, e'))))
               | Slice_Expr s ->
                   let env, (lt, s') = check_slice_expr env s in
                   let env, (rt, e') = check_expr env e2 in
@@ -286,7 +448,8 @@ let check (globals, functions) =
                     "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ expr_s
                   in
-                  (env, (check_assign lt rt err, SAssign((lt, s'), (rt, e'))))
+                  let (rt, e') = check_assign lt (rt, e') err in
+                  (env, (lt, SAssign((lt, s'), (rt, e'))))
               | _ -> make_err (expr_s ^ " is not assignable")
           )
       | Unop(op, e) ->
@@ -363,82 +526,75 @@ let check (globals, functions) =
             | _ -> make_err err
           in
           (env, (ty, SBinop((t1, e1'), op, (t2, e2'))))
-        | Call("print", args) ->
-            if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
-            else
-              let env, (t, arg) = List.hd (List.map (check_expr env) args) in
-              (
-                match t with
-                    Int | Float | Bool | String | Matrix _ | Array _ ->
-                      (env, (Void, SCall("print", [(t, arg)])))
-                  | _ -> make_err "not supported yet in print"
-              )
-        | Call("free", args) ->
-            if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
-            else
-              let env, (t, arg) = List.hd (List.map (check_expr env) args) in
-              (
-                match t with
-                    Matrix _ | Array _ ->
-                      (env, (Void, SCall("free", [(t, arg)])))
-                  | _ -> make_err ("non-container argument in " ^ expr_s)
-              )
-        | Call("deep_free", args) ->
-            if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
-            else
-              let env, (t, arg) = List.hd (List.map (check_expr env) args) in
-              (
-                match t with
-                    Array _ ->
-                      (env, (Void, SCall("deep_free", [(t, arg)])))
-                  | _ -> make_err ("non-array argument in " ^ expr_s)
-              )
-        | Call("transpose", args) ->
-            if List.length args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
-            else
-              let env, (t, arg) = List.hd (List.map (check_expr env) args) in
-              (
-                match t with
-                    Matrix _ ->
-                      (env, (t, SCall("transpose", [(t, arg)])))
-                  | _ -> make_err ("non-matrix argument in " ^ expr_s)
-              )
-        | Call(fname, args) ->
-            let typ, _ = lookup fname env.scope in
-            let formals, return_type = match typ with
-                Func(formals, return_type) -> (formals, return_type)
-              | _ -> make_err (fname ^ " is not a function in " ^ expr_s)
-            in
-            let param_length = List.length formals in
-            if List.length args <> param_length then
-              make_err ("expecting " ^ string_of_int param_length ^
-                " arguments in " ^ expr_s)
-            else
-              let check_arg (env, checked) arg_type arg_expr =
-                let env, (expr_type, arg') = check_expr env arg_expr in
-                let err =
-                  "illegal argument " ^ string_of_expr arg_expr ^
-                  ", found " ^ string_of_typ expr_type ^
-                  ", expected " ^ string_of_typ arg_type ^
-                  " in " ^ expr_s
-                in
-                let checked_arg = (check_assign arg_type expr_type err, arg') in
-                (env, checked_arg :: checked)
+        | Call(f, args) ->
+            let env, (t, f') = check_expr env f in
+
+            (* Next, check if function here is a direct built-in call; otherwise,
+             * if passed via function parameter/assignment to a variable, they will
+             * be restricted to explicitly typed functions, so no need to perform
+             * special checks *)
+            let is_builtin = t = BuiltInFunc in
+            if is_builtin then
+              (* In this case, it's a direct call, meaning f' is a SId *)
+              let fname =
+                match f' with
+                    SId s -> s
+                  | _ ->
+                      make_err ("internal error: only direct calls to " ^
+                      "built-in functions should have type BuiltInFunc")
               in
-              let env, args' = List.fold_left2 check_arg (env, []) formals args in
-              (env, (return_type, SCall(fname, List.rev args')))
+              check_builtin_call fname args expr_s
+            else
+              let formals, return_type = match t with
+                  Func(formals, return_type) -> (formals, return_type)
+                | _ -> make_err (string_of_expr f ^ " is not a function in " ^ expr_s)
+              in
+              let param_length = List.length formals in
+              if List.length args <> param_length then
+                make_err ("expecting " ^ string_of_int param_length ^
+                  " arguments in " ^ expr_s)
+              else
+                let check_arg (env, checked) arg_type expr =
+                  let env, (expr_type, expr') = check_expr env expr in
+                  let err =
+                    "illegal argument " ^ string_of_expr expr ^
+                    ", found " ^ string_of_typ expr_type ^
+                    ", expected " ^ string_of_typ arg_type ^
+                    " in " ^ expr_s
+                  in
+                  let checked_arg = check_assign arg_type (expr_type, expr') err in
+                  (env, checked_arg :: checked)
+                in
+                let env, args' = List.fold_left2 check_arg (env, []) formals args in
+                (env, (return_type, SCall((t, f'), List.rev args')))
         | One -> make_err "internal error: One should not be passed to check_expr"
         | Slice_Inc -> make_err "internal error: Slice_Inc should not be passed to check_expr"
         | End -> (env, (Int, SEnd))
   in
 
   (* Check that a type is validly formed; basically, just check that
-   * there are no invalid matrix types; everything else is fair game *)
+   * there are no invalid matrix types and no void function args;
+   * everything else is fair game *)
   let rec check_type = function
       Matrix t when t <> Int && t <> Float -> false
     | Array t -> check_type t
-    | Func(args, ret) -> List.for_all check_type args && check_type ret
+    | Func(args, ret) ->
+        List.for_all check_type args && check_type ret && List.for_all (fun x -> x != Void) args
     | _ -> true
+  in
+
+  let add_decl scope name typ has_value =
+    let built_in_err = "identifier " ^ name ^ " may not be defined" in
+    let dup_err = "duplicate identifier " ^ name in
+
+    (* Cannot redefine built-ins *)
+    let is_built_in = StringMap.mem name built_in_funcs in
+    let _ = if is_built_in then make_err built_in_err in
+
+    (* Cannot declare duplicate in same scope *)
+    let is_dup = StringMap.mem name scope.variables in
+    let _ = if is_dup then make_err dup_err in
+    { scope with variables = StringMap.add name (typ, has_value) scope.variables }
   in
 
   (* Return semantically checked declaration *)
@@ -451,7 +607,7 @@ let check (globals, functions) =
       in
       let _ = if not (check_type t) then make_err err in
       match t with
-          Void | Func(_, _) -> make_err err
+          Void -> make_err err
         | _ -> ()
     in
     let add_v_decl scope decl =
@@ -471,7 +627,7 @@ let check (globals, functions) =
 
     (* Check keyword matches type *)
     let expr_kw = match t with
-        Int | Bool | Float | String -> Var
+        Int | Bool | Float | String | Func(_, _) -> Var
       | Exc -> Exception
       | Array _ | Matrix _ -> Create
       | _ -> make_err "internal error: check_v_decl_type should have rejected"
@@ -480,31 +636,33 @@ let check (globals, functions) =
       "illegal use of declaration keyword " ^ string_of_decl_kw kw ^
       " for type " ^ string_of_typ t ^ " in " ^ string_of_vdecl decl
     in
-    let _ = if kw <> expr_kw then make_err kw_err in
+    let _ = if kw <> Nokw && kw <> expr_kw then make_err kw_err in
 
     (* Check initialization type is valid; note that an empty initialization
      * is valid, as this means we're declaring but not initializing *)
     let env, (et, expr') = check_expr env expr in
     let typ_err =
-      "declared type " ^ string_of_typ t ^
-      " but initialized with type " ^ string_of_typ et ^
-      " in " ^ string_of_vdecl decl
+      "illegal initialization " ^ string_of_typ t ^
+      " = " ^ string_of_typ et ^ " in " ^ string_of_vdecl decl
     in
-    let _ = if expr <> Noexpr && t <> et then make_err typ_err in
+    let expr' =
+      if expr' = SNoexpr then expr'
+      else snd (check_assign t (et, expr') typ_err)
+    in
 
     (* Add decl to scope *)
     let scope = add_v_decl env.scope decl in
 
     (* Add array type to set if we declared an array type *)
-    let array_types = match t with
-        Array _ -> TypeSet.add t env.array_types
-      | _ -> env.array_types
-    in
+    let array_types = add_array_type env.array_types t in
+
+    (* Add function types to set if function types were part of declaration *)
+    let func_types = add_func_type env.func_types t in
 
     (* After type check, we explicitly add decl's type to the sexpr,
      * to handle the case where we have a void initialization (i.e.
      * declaration but not initialization) *)
-    ({ scope ; array_types }, (kw, t, s, (t, expr')) :: checked)
+    ({ scope; array_types; func_types }, (kw, t, s, (t, expr')) :: checked)
   in
 
   (* Return semantically checked function *)
@@ -553,9 +711,12 @@ let check (globals, functions) =
             (env, SWhile(p', s'), ret)
         | Return e ->
             let env, (t, e') = check_expr env e in
-            if t = func.typ then (env, SReturn(t, e'), true)
-            else make_err ("return gives " ^ string_of_typ t ^ " expected " ^
-              string_of_typ func.typ ^ " in " ^ string_of_expr e)
+            let err =
+              "return gives " ^ string_of_typ t ^ " expected " ^
+              string_of_typ func.typ ^ " in " ^ string_of_expr e
+            in
+            let (t, e') = check_assign func.typ (t, e') err in
+            (env, SReturn(t, e'), true)
         (* A block is correct if each statement is correct and nothing
         * follows any return statement. Blocks define their own scope. *)
         | Block sl ->
@@ -622,6 +783,17 @@ let check (globals, functions) =
             let err = "internal error: block didn't become a block?" in
             make_err err
     in
+
+    (* Add array/function types from return type *)
+    let array_types = add_array_type env.array_types func.typ in
+    let func_types = add_func_type env.func_types func.typ in
+
+    (* Add own function type *)
+    let func_type = fst (lookup func.fname env.scope) in
+    let func_types = add_func_type func_types func_type in
+
+    let env = { env with array_types; func_types } in
+
     (
       (* Return to parent scope *)
       { env with scope = parent_scope },
@@ -635,7 +807,7 @@ let check (globals, functions) =
   in
 
   let global_scope = { variables = built_in_funcs; parent = None } in
-  let env = { scope = global_scope; array_types = TypeSet.empty; } in
+  let env = { scope = global_scope; array_types = TypeSet.empty; func_types = TypeSet.empty } in
   (* Set override_true; globals will have a default value generated at declaration *)
   let env, globals' = List.fold_left (check_v_decl true) (env, []) globals in
   let env, functions' = List.fold_left check_func_decl (env, []) functions in
@@ -652,4 +824,4 @@ let check (globals, functions) =
   in
 
   let program = (List.rev globals', List.rev functions') in
-  (env.array_types, program)
+  (env, program)

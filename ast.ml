@@ -6,7 +6,8 @@ type op = Add | Sub | Mult | Div | Equal | Neq | Less | Leq | Greater | Geq |
 type uop = Neg | Not
 
 type typ = Int | Bool | Float | String | Void | Exc |
-           Array of typ | Matrix of typ | Func of typ list * typ
+           Array of typ | Matrix of typ |
+           Func of typ list * typ | BuiltInFunc
 
 type decl_kw = Var | Create | Exception | Nokw
 
@@ -25,7 +26,7 @@ type expr =
   | Binop of expr * op * expr
   | Unop of uop * expr
   | Assign of expr * expr
-  | Call of string * expr list
+  | Call of expr * expr list
   | One
   (* Used to indicate slice endpoint is +1 of previous endpoint *)
   | Slice_Inc
@@ -63,7 +64,7 @@ type func_decl = {
     fname : string;
     formals : decl list;
     body : stmt list;
-  }
+}
 
 type program = decl list * func_decl list
 
@@ -119,6 +120,7 @@ let rec string_of_typ = function
 | Matrix t -> "matrix<"  ^ string_of_typ t ^ ">"
 | Func(args, ret) -> "func<(" ^ String.concat ", " (List.map string_of_typ args) ^
     "):" ^ string_of_typ ret ^ ">"
+| BuiltInFunc -> "func<built-in>"
 
 let rec string_of_expr expr =
   let string_of_islice = function
@@ -168,7 +170,7 @@ let rec string_of_expr expr =
     | Unop(o, e) -> string_of_uop o ^ string_of_expr e
     | Assign(e1, e2) -> string_of_expr e1 ^ " = " ^ string_of_expr e2
     | Call(f, el) ->
-        f ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
+        string_of_expr f ^ "(" ^ String.concat ", " (List.map string_of_expr el) ^ ")"
     | One -> "[1]"
     | Slice_Inc -> "prev+1"
     | End -> "END"

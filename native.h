@@ -31,7 +31,12 @@ typedef struct slice {
 } slice_t;
 
 /* Pretty-print functions */
-void print_bool(bool);
+void _print_bool(bool);
+void _print_int(int);
+void _print_float(double);
+void _print_string(char *);
+void _print_matrix(matrix_t *);
+void print_function(void *);
 void print_matrix(matrix_t *, bool);
 /**
  * Second argument should be a function that prints out
@@ -42,8 +47,9 @@ void print_matrix(matrix_t *, bool);
 void print_array(array_t *, void(*)(void *));
 
 /* Array/matrix memory functions */
-void free_matrix(matrix_t *);
-void free_array(array_t *);
+void _free_matrix(matrix_t *);
+void _free_array(array_t *);
+void deep_free_array(array_t *, void(*)(void *));
 /* Same as print_array, but to free an element */
 void set_ptrs_matrix(matrix_t *, void *);
 void set_ptrs_array(array_t *, void *);
@@ -68,4 +74,3 @@ void mat_binop(matrix_t *, enum mat_op, matrix_t *, matrix_t *);
 
 /* Miscellaneous helpers/built-ins */
 void init_matrix(matrix_t *);
-void transpose(matrix_t *, matrix_t *);
