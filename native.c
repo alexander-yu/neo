@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 #include <math.h>
 #include "native.h"
@@ -163,7 +164,8 @@ void *get_array(array_t *arr, int i) {
 }
 
 void set_array(array_t *arr, int i, void *data) {
-    arr->body[i] = data;
+    /* Perform a shallow copy */
+    memcpy(arr->body[i], data, arr->size);
 }
 
 void slice_array(array_t *arr, slice_t *slice, array_t *res) {
