@@ -572,14 +572,12 @@ let check (globals, functions) =
         | End -> (env, (Int, SEnd))
   in
 
-  (* Check that a type is validly formed; basically, just check that
-   * there are no invalid matrix types and no void function args;
-   * everything else is fair game *)
+  (* Check that a type is validly formed *)
   let rec check_type = function
       Matrix t when t <> Int && t <> Float -> false
-    | Array t -> check_type t
+    | Array t -> t <> Void && check_type t
     | Func(args, ret) ->
-        List.for_all check_type args && check_type ret && List.for_all (fun x -> x != Void) args
+        List.for_all check_type args && check_type ret && List.for_all (fun x -> x <> Void) args
     | _ -> true
   in
 
@@ -605,10 +603,7 @@ let check (globals, functions) =
         "illegal declaration type " ^ string_of_typ t ^
         " in " ^ string_of_vdecl decl
       in
-      let _ = if not (check_type t) then make_err err in
-      match t with
-          Void -> make_err err
-        | _ -> ()
+      if t = Void || not (check_type t) then make_err err
     in
     let add_v_decl scope decl =
       let _, t, s, expr = decl in
@@ -684,7 +679,7 @@ let check (globals, functions) =
         "illegal argument type " ^ string_of_typ t ^ " in " ^
         string_of_vdecl formal ^ " for the function " ^ fname
       in
-      if t = Exc || t = Void || not (check_type t) then make_err err
+      if t = Void || not (check_type t) then make_err err
     in
     (* Return a semantically-checked statement, along with a bool
      * indicating if there was at least one return statement
