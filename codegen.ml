@@ -175,6 +175,18 @@ let translate (env, program) =
   in
   let set_slice_array_func = L.declare_function "set_slice_array" set_slice_array_t the_module in
 
+  let insert_array_t =
+    L.function_type (pointer_t array_t)
+    [| pointer_t array_t; i32_t; pointer_t i8_t |]
+  in
+  let insert_array_func = L.declare_function "insert_array" insert_array_t the_module in
+
+  let _delete_array_t = L.function_type (pointer_t array_t) [| pointer_t array_t; i32_t |] in
+  let _delete_array_func = L.declare_function "_delete_array" _delete_array_t the_module in
+
+  let append_array_t = L.function_type (pointer_t array_t) [| pointer_t array_t; pointer_t i8_t |] in
+  let append_array_func = L.declare_function "append_array" append_array_t the_module in
+
   (* Matrix index/slice functions *)
   let get_matrix_t = L.function_type (pointer_t i8_t) [| pointer_t matrix_t; i32_t; i32_t |] in
   let get_matrix_func = L.declare_function "get_matrix" get_matrix_t the_module in
@@ -193,6 +205,21 @@ let translate (env, program) =
     [| pointer_t matrix_t; pointer_t slice_t; pointer_t slice_t; pointer_t matrix_t |]
   in
   let set_slice_matrix_func = L.declare_function "set_slice_matrix" set_slice_matrix_t the_module in
+
+  let _insert_matrix_t =
+    L.function_type (pointer_t matrix_t)
+    [| pointer_t matrix_t; i32_t; pointer_t matrix_t |]
+  in
+  let _insert_matrix_func = L.declare_function "_insert_matrix" _insert_matrix_t the_module in
+
+  let _delete_matrix_t = L.function_type (pointer_t matrix_t) [| pointer_t matrix_t; i32_t|] in
+  let _delete_matrix_func = L.declare_function "_delete_matrix" _delete_matrix_t the_module in
+
+  let _append_matrix_t =
+    L.function_type (pointer_t matrix_t)
+    [| pointer_t matrix_t; pointer_t matrix_t |]
+  in
+  let _append_matrix_func = L.declare_function "_append_matrix" _append_matrix_t the_module in
 
   (* Binary operations *)
   let iexp_t = L.function_type i32_t [| i32_t; i32_t |] in
@@ -229,7 +256,7 @@ let translate (env, program) =
   let to_float_t = L.function_type float_t [| i32_t |] in
   let to_float_func = L.declare_function "to_float" to_float_t the_module in
 
-  (* Collect native print/free functions *)
+  (* Collect native functions *)
   let print_funcs =
     let print_funcs = StringMap.empty in
     let print_funcs = StringMap.add "_print_int" _print_int_func print_funcs in
@@ -246,6 +273,10 @@ let translate (env, program) =
     let free_funcs = StringMap.add "_free_array" _free_array_func free_funcs in
     free_funcs
   in
+
+  let insert_funcs = StringMap.add "_insert_matrix" _insert_matrix_func StringMap.empty in
+
+  let append_funcs = StringMap.add "_append_matrix" _append_matrix_func StringMap.empty in
 
   (* Build any necessary element-printing functions for array types *)
   let rec build_print_element_func array_type print_element_funcs =
@@ -295,7 +326,7 @@ let translate (env, program) =
   let print_element_funcs = S.TypeSet.fold build_print_element_func array_types TypeMap.empty in
 
   (* Build any necessary single-argument array-printing functions *)
-  let build_print_array_func array_type print_array_funcs =
+  let build_print_array_func array_type print_funcs =
     let fname = "_print_" ^ A.string_of_typ array_type in
     let print_t = L.function_type void_t [| ltype_of_typ array_type |] in
     let print_func = L.define_function fname print_t the_module in
@@ -310,12 +341,12 @@ let translate (env, program) =
       [| param; TypeMap.find array_type print_element_funcs |] "" builder
     in
     let _ = L.build_ret_void builder in
-    StringMap.add fname print_func print_array_funcs
+    StringMap.add fname print_func print_funcs
   in
   let print_funcs = S.TypeSet.fold build_print_array_func array_types print_funcs in
 
   (* Build any necessary function-printing functions *)
-  let build_print_function_func func_type print_function_funcs =
+  let build_print_function_func func_type print_funcs =
     let fname = "_print_" ^ A.string_of_typ func_type in
     let print_t = L.function_type void_t [| ltype_of_typ func_type |] in
     let print_func = L.define_function fname print_t the_module in
@@ -328,7 +359,7 @@ let translate (env, program) =
     let param = L.build_bitcast param (pointer_t i8_t) "param" builder in
     let _ = L.build_call print_function_func [| param |] "" builder in
     let _ = L.build_ret_void builder in
-    StringMap.add fname print_func print_function_funcs
+    StringMap.add fname print_func print_funcs
   in
   let print_funcs = S.TypeSet.fold build_print_function_func func_types print_funcs in
 
@@ -402,12 +433,10 @@ let translate (env, program) =
   let build_deep_free_func array_type deep_free_funcs =
     let fname = "_deep_free_" ^ A.string_of_typ array_type in
     let deep_free_t = L.function_type void_t [| ltype_of_typ array_type |] in
-    let deep_free_func =
-      L.define_function fname deep_free_t the_module
-    in
+    let deep_free_func = L.define_function fname deep_free_t the_module in
     let builder = L.builder_at_end context (L.entry_block deep_free_func) in
 
-    (* Cast and load param *)
+    (* Get param *)
     let param = (L.params deep_free_func).(0) in
 
     (* Call deep_free_array *)
@@ -419,6 +448,60 @@ let translate (env, program) =
     StringMap.add fname deep_free_func deep_free_funcs
   in
   let deep_free_funcs = S.TypeSet.fold build_deep_free_func array_types StringMap.empty in
+
+  (* Build any necessary array-inserting functions *)
+  let build_insert_array_func array_type insert_funcs =
+    let fname = "_insert_" ^ A.string_of_typ array_type in
+    let element_t = ltype_of_typ (A.typ_of_container array_type) in
+    let insert_t =
+      L.function_type (pointer_t array_t)
+      [| pointer_t array_t; i32_t; element_t |]
+    in
+    let insert_func = L.define_function fname insert_t the_module in
+    let builder = L.builder_at_end context (L.entry_block insert_func) in
+
+    (* Get params *)
+    let params = L.params insert_func in
+    (* Store pointer to element, cast to "void pointer" *)
+    let element_ptr = L.build_alloca element_t "element_ptr" builder in
+    let _ = L.build_store params.(2) element_ptr builder in
+    let element_ptr = L.build_bitcast element_ptr (pointer_t i8_t) "element_ptr" builder in
+    (* Replace element with its pointer *)
+    let _ = Array.set params 2 element_ptr in
+
+    (* Call insert_array *)
+    let res = L.build_call insert_array_func params "res" builder in
+    let _ = L.build_ret res builder in
+    StringMap.add fname insert_func insert_funcs
+  in
+  let insert_funcs = S.TypeSet.fold build_insert_array_func array_types insert_funcs in
+
+  (* Build any necessary array-appending functions *)
+  let build_append_array_func array_type append_funcs =
+    let fname = "_append_" ^ A.string_of_typ array_type in
+    let element_t = ltype_of_typ (A.typ_of_container array_type) in
+    let append_t =
+      L.function_type (pointer_t array_t)
+      [| pointer_t array_t; element_t |]
+    in
+    let append_func = L.define_function fname append_t the_module in
+    let builder = L.builder_at_end context (L.entry_block append_func) in
+
+    (* Get params *)
+    let params = L.params append_func in
+    (* Store pointer to element, cast to "void pointer" *)
+    let element_ptr = L.build_alloca element_t "element_ptr" builder in
+    let _ = L.build_store params.(1) element_ptr builder in
+    let element_ptr = L.build_bitcast element_ptr (pointer_t i8_t) "element_ptr" builder in
+    (* Replace element with its pointer *)
+    let _ = Array.set params 1 element_ptr in
+
+    (* Call append_array *)
+    let res = L.build_call append_array_func params "res" builder in
+    let _ = L.build_ret res builder in
+    StringMap.add fname append_func append_funcs
+  in
+  let append_funcs = S.TypeSet.fold build_append_array_func array_types append_funcs in
 
   (* Returns initial value for an empty declaration of a given type *)
   let init t = match t with
@@ -1098,11 +1181,15 @@ let translate (env, program) =
     let global_scope = StringMap.fold add_native_funcs println_funcs global_scope in
     let global_scope = StringMap.fold add_native_funcs free_funcs global_scope in
     let global_scope = StringMap.fold add_native_funcs deep_free_funcs global_scope in
+    let global_scope = StringMap.fold add_native_funcs insert_funcs global_scope in
+    let global_scope = StringMap.fold add_native_funcs append_funcs global_scope in
     let global_scope = add_native_funcs "length" length_func global_scope in
     let global_scope = add_native_funcs "rows" rows_func global_scope in
     let global_scope = add_native_funcs "cols" cols_func global_scope in
     let global_scope = add_native_funcs "to_int" to_int_func global_scope in
     let global_scope = add_native_funcs "to_float" to_float_func global_scope in
+    let global_scope = add_native_funcs "_delete_array" _delete_array_func global_scope in
+    let global_scope = add_native_funcs "_delete_matrix" _delete_matrix_func global_scope in
     global_scope
   in
   (* Add global variables to scope *)

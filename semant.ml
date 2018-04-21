@@ -26,6 +26,10 @@ type translation_environment = {
 
 let make_err err = raise (Failure err)
 
+let nth_opt l n =
+  try Some (List.nth l n)
+  with Failure _ -> None
+
 let check (globals, functions) =
   (* add built-in functions *)
   let built_in_funcs =
@@ -42,6 +46,9 @@ let check (globals, functions) =
       "cols";
       "to_int";
       "to_float";
+      "insert";
+      "delete";
+      "append";
     ]
   in
 
@@ -67,43 +74,77 @@ let check (globals, functions) =
           else make_err err
       | "deep_free" ->
           let arg_is_array =
-            match List.hd arg_types with
-                Array _ -> true
+            match nth_opt arg_types 0 with
+                Some (Array _) -> true
               | _ -> false
           in
           if n_args = 1 && arg_is_array && ret_type = Void then ()
           else make_err err
       | "free" ->
           let arg_is_container =
-            match List.hd arg_types with
-                Matrix _ | Array _ -> true
+            match nth_opt arg_types 0 with
+                Some (Matrix _) | Some (Array _) -> true
               | _ -> false
           in
           if n_args = 1 && arg_is_container && ret_type = Void then ()
           else make_err err
       | "length" ->
           let arg_is_array =
-            match List.hd arg_types with
-                Array _ -> true
+            match nth_opt arg_types 0 with
+                Some (Array _) -> true
               | _ -> false
           in
           if n_args = 1 && arg_is_array && ret_type = Int then ()
           else make_err err
       | "rows" | "cols" ->
           let arg_is_matrix =
-            match List.hd arg_types with
-                Matrix _ -> true
+            match nth_opt arg_types 0 with
+                Some (Matrix _) -> true
               | _ -> false
           in
           if n_args = 1 && arg_is_matrix && ret_type = Int then ()
           else make_err err
       | "to_int" ->
-          let arg_is_float = List.hd arg_types = Float in
+          let arg_is_float = (nth_opt arg_types 0) = Some Float in
           if n_args = 1 && arg_is_float && ret_type = Int then ()
           else make_err err
       | "to_float" ->
-          let arg_is_int = List.hd arg_types = Int in
+          let arg_is_int = (nth_opt arg_types 0) = Some Int in
           if n_args = 1 && arg_is_int && ret_type = Float then ()
+          else make_err err
+      | "insert" ->
+          let cont_type = nth_opt arg_types 0 in
+          let valid_args =
+            match cont_type with
+                Some (Array t) ->
+                  let index_is_int = (nth_opt arg_types 1) = Some Int in
+                  index_is_int && (nth_opt arg_types 2) = Some t
+              | Some (Matrix _) ->
+                  let index_is_int = (nth_opt arg_types 1) = Some Int in
+                  index_is_int && (nth_opt arg_types 2) = cont_type
+              | _ -> false
+            in
+          if n_args = 3 && valid_args && Some ret_type = cont_type then ()
+          else make_err err
+      | "delete" ->
+          let cont_type = nth_opt arg_types 0 in
+          let valid_args =
+            match cont_type with
+                Some (Array _) -> (nth_opt arg_types 1) = Some Int
+              | Some (Matrix _) -> (nth_opt arg_types 1) = Some Int
+              | _ -> false
+            in
+          if n_args = 2 && valid_args && Some ret_type = cont_type then ()
+          else make_err err
+      | "append" ->
+          let cont_type = nth_opt arg_types 0 in
+          let valid_args =
+            match cont_type with
+                Some (Array t) -> (nth_opt arg_types 1) = Some t
+              | Some (Matrix _) -> (nth_opt arg_types 1) = cont_type
+              | _ -> false
+            in
+          if n_args = 2 && valid_args && Some ret_type = cont_type then ()
           else make_err err
       | _ -> make_err err
   in
@@ -117,13 +158,19 @@ let check (globals, functions) =
          * that's why we have _print_matrix and _free_matrix rather than
          * _print_matrix<int> or _free_matrix<int> *)
           Matrix _ -> "matrix"
-        (* Similar as the above case, but this only applies to our free
-         * function, as that doesn't care about the array type; our
-         * deep_Free built-in does, however *)
-        | Array _ when fname = "free" -> "array"
+        (* Similar as the above case, but while we don't account for type
+         * in our native arrays, these functions don't care about the element types *)
+        | Array _ when fname = "free" || fname = "delete" -> "array"
         | _ -> string_of_typ typ
     in
-    let type_suffix = String.concat "_" (List.map suffix_of_typ arg_types) in
+    let type_suffix =
+      match fname with
+        (* The signatures of these functions are dependent only on the first
+         * argument, which is the container type; everything else can be
+         * inferred *)
+          "insert" | "delete" | "append" -> suffix_of_typ (List.hd arg_types)
+        | _ -> String.concat "_" (List.map suffix_of_typ arg_types)
+    in
     match fname with
       (* These functions already only take one type class, so no need for a suffix *)
         "length" | "rows" | "cols" | "to_int" | "to_float" -> fname
@@ -219,7 +266,7 @@ let check (globals, functions) =
           "container expected type " ^ string_of_typ t ^
           " but saw type " ^ string_of_typ t' ^ " in " ^ expr_s
         in
-        let (t', e') = check_assign t (t', e') err in
+        let t', e' = check_assign t (t', e') err in
         (env, (t', e') :: checked)
       in
 
@@ -433,6 +480,60 @@ let check (globals, functions) =
                     (env, (Float, SCall((Func(arg_types, Float), SId native_fname), args')))
                 | _ -> make_err ("non-int argument " ^ expr_s)
             )
+
+        | "insert" ->
+            let _ = check_n_args 3 n_args expr_s in
+            (
+              let e' = List.nth args' 2 in
+              let err = "illegal insertion in " ^ expr_s in
+              match arg_types with
+                  [Array t; Int; _] ->
+                    let e' = check_assign t e' err in
+                    let args' = Array.of_list args' in
+                    let _ = Array.set args' 2 e' in
+                    let args' = Array.to_list args' in
+                    let arg_types = Array.of_list arg_types in
+                    let _ = Array.set arg_types 2 (fst e') in
+                    let arg_types = Array.to_list arg_types in
+                    let native_fname = get_native_of_builtin fname arg_types in
+                    (env, (Array t, SCall((Func(arg_types, Array t), SId native_fname), args')))
+                | [Matrix t; Int; Matrix _] ->
+                    let _ = check_assign (Matrix t) e' err in
+                    (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
+                | _ -> make_err ("non-int argument " ^ expr_s)
+            )
+
+        | "delete" ->
+            let _ = check_n_args 2 n_args expr_s in
+            (
+              match arg_types with
+                  [Array t; Int] ->
+                    (env, (Array t, SCall((Func(arg_types, Array t), SId native_fname), args')))
+                | [Matrix t; Int] ->
+                    (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
+                | _ -> make_err ("non-int argument " ^ expr_s)
+            )
+        | "append" ->
+            let _ = check_n_args 2 n_args expr_s in
+            (
+              let e' = List.nth args' 1 in
+              let err = "illegal append in " ^ expr_s in
+              match arg_types with
+                  [Array t; _] ->
+                    let e' = check_assign t e' err in
+                    let args' = Array.of_list args' in
+                    let _ = Array.set args' 1 e' in
+                    let args' = Array.to_list args' in
+                    let arg_types = Array.of_list arg_types in
+                    let _ = Array.set arg_types 1 (fst e') in
+                    let arg_types = Array.to_list arg_types in
+                    let native_fname = get_native_of_builtin fname arg_types in
+                    (env, (Array t, SCall((Func(arg_types, Array t), SId native_fname), args')))
+                | [Matrix t; Matrix _] ->
+                    let _ = check_assign (Matrix t) e' err in
+                    (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
+                | _ -> make_err ("non-int argument " ^ expr_s)
+            )
         | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
     in
 
@@ -496,7 +597,7 @@ let check (globals, functions) =
                     "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ expr_s
                   in
-                  let (rt, e') = check_assign lt (rt, e') err  in
+                  let rt, e' = check_assign lt (rt, e') err  in
                   (env, (lt, SAssign((lt, SId s), (rt, e'))))
               | Index_Expr i ->
                   let env, (lt, i') = check_index_expr env i in
@@ -505,7 +606,7 @@ let check (globals, functions) =
                     "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ expr_s
                   in
-                  let (rt, e') = check_assign lt (rt, e') err in
+                  let rt, e' = check_assign lt (rt, e') err in
                   (env, (lt, SAssign((lt, i'), (rt, e'))))
               | Slice_Expr s ->
                   let env, (lt, s') = check_slice_expr env s in
@@ -514,7 +615,7 @@ let check (globals, functions) =
                     "illegal assignment " ^ string_of_typ lt ^ " = " ^
                     string_of_typ rt ^ " in " ^ expr_s
                   in
-                  let (rt, e') = check_assign lt (rt, e') err in
+                  let rt, e' = check_assign lt (rt, e') err in
                   (env, (lt, SAssign((lt, s'), (rt, e'))))
               | _ -> make_err (expr_s ^ " is not assignable")
           )
@@ -776,7 +877,7 @@ let check (globals, functions) =
               "return gives " ^ string_of_typ t ^ " expected " ^
               string_of_typ func.typ ^ " in " ^ string_of_expr e
             in
-            let (t, e') = check_assign func.typ (t, e') err in
+            let t, e' = check_assign func.typ (t, e') err in
             (env, SReturn(t, e'), true)
         (* A block is correct if each statement is correct and nothing
         * follows any return statement. Blocks define their own scope. *)

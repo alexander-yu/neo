@@ -158,6 +158,31 @@ void set_ptrs_array(array_t *arr, void *body) {
     }
 }
 
+array_t * malloc_array(int length, size_t size) {
+    array_t *arr = malloc(sizeof(array_t));
+    arr->body = malloc(length * sizeof(void *));
+    arr->length = length;
+    arr->size = size;
+    return arr;
+}
+
+matrix_t * malloc_matrix(int rows, int cols, enum mat_type type) {
+    matrix_t *mat = malloc(sizeof(matrix_t));
+    mat->rows = rows;
+    mat->cols = cols;
+    mat->type = type;
+
+    union mat_body body;
+
+    switch (type) {
+        case Int: body.ibody = malloc(rows * sizeof(int *)); break;
+        case Float: body.fbody = malloc(rows * sizeof(double *)); break;
+    }
+
+    mat->body = body;
+    return mat;
+}
+
 /* Array index/slice functions */
 void *get_array(array_t *arr, int i) {
     return arr->body[i];
@@ -180,8 +205,67 @@ void set_slice_array(array_t *arr, slice_t *slice, array_t *data) {
     int start_i = slice->start;
     int end_i = slice->end;
     for (int i = start_i; i < end_i; i++) {
-        arr->body[i] = data->body[i - start_i];
+        set_array(arr, i, data->body[i - start_i]);
     }
+}
+
+array_t * insert_array(array_t *arr, int pos_i, void *data) {
+    int length = arr->length + 1;
+    size_t size = arr->size;
+    array_t *res = malloc_array(length, size);
+
+    void *body = malloc(length * sizeof(void *));
+    set_ptrs_array(res, body);
+
+    for (int i = 0; i < length; i++) {
+        if (i < pos_i) {
+            set_array(res, i, arr->body[i]);
+        } else if (i == pos_i) {
+            set_array(res, i, data);
+        } else {
+            set_array(res, i, arr->body[i - 1]);
+        }
+    }
+
+    return res;
+}
+
+array_t * _delete_array(array_t *arr, int pos_i) {
+    int length = arr->length - 1;
+    size_t size = arr->size;
+    array_t *res = malloc_array(length, size);
+
+    void *body = malloc(length * sizeof(void *));
+    set_ptrs_array(res, body);
+
+    for (int i = 0; i < length; i++) {
+        if (i < pos_i) {
+            set_array(res, i, arr->body[i]);
+        } else {
+            set_array(res, i, arr->body[i + 1]);
+        }
+    }
+
+    return res;
+}
+
+array_t * append_array(array_t *arr, void *data) {
+    int length = arr->length + 1;
+    size_t size = arr->size;
+    array_t *res = malloc_array(length, size);
+
+    void *body = malloc(length * sizeof(void *));
+    set_ptrs_array(res, body);
+
+    for (int i = 0; i < length; i++) {
+        if (i == length - 1) {
+            set_array(res, i, data);
+        } else {
+            set_array(res, i, arr->body[i]);
+        }
+    }
+
+    return res;
 }
 
 /* Matrix index/slice functions */
@@ -242,6 +326,113 @@ void set_slice_matrix(matrix_t *mat, slice_t *row_slice, slice_t *col_slice, mat
             }
         }
     }
+}
+
+matrix_t * _insert_matrix(matrix_t *mat, int row_i, matrix_t *row) {
+    int rows = mat->rows + 1;
+    int cols = mat->cols;
+    enum mat_type type = mat->type;
+    matrix_t *res = malloc_matrix(rows, cols, type);
+
+    void *body;
+
+    switch (type) {
+        case Int: body = malloc(rows * cols * sizeof(int)); break;
+        case Float: body = malloc(rows * cols * sizeof(double)); break;
+    }
+
+    set_ptrs_matrix(res, body);
+
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            if (i < row_i) {
+                switch (type) {
+                    case Int: res->body.ibody[i][j] = mat->body.ibody[i][j]; break;
+                    case Float: res->body.fbody[i][j] = mat->body.fbody[i][j]; break;
+                }
+            } else if (i == row_i) {
+                switch (type) {
+                    case Int: res->body.ibody[i][j] = row->body.ibody[0][j]; break;
+                    case Float: res->body.fbody[i][j] = row->body.fbody[0][j]; break;
+                }
+            } else {
+                switch (type) {
+                    case Int: res->body.ibody[i][j] = mat->body.ibody[i - 1][j]; break;
+                    case Float: res->body.fbody[i][j] = mat->body.fbody[i - 1][j]; break;
+                }
+            }
+        }
+    }
+
+    return res;
+}
+
+matrix_t * _delete_matrix(matrix_t *mat, int row_i) {
+    int rows = mat->rows - 1;
+    int cols = mat->cols;
+    enum mat_type type = mat->type;
+    matrix_t *res = malloc_matrix(rows, cols, type);
+
+    void *body;
+
+    switch (type) {
+        case Int: body = malloc(rows * cols * sizeof(int)); break;
+        case Float: body = malloc(rows * cols * sizeof(double)); break;
+    }
+
+    set_ptrs_matrix(res, body);
+
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            if (i < row_i) {
+                switch (type) {
+                    case Int: res->body.ibody[i][j] = mat->body.ibody[i][j]; break;
+                    case Float: res->body.fbody[i][j] = mat->body.fbody[i][j]; break;
+                }
+            } else {
+                switch (type) {
+                    case Int: res->body.ibody[i][j] = mat->body.ibody[i + 1][j]; break;
+                    case Float: res->body.fbody[i][j] = mat->body.fbody[i + 1][j]; break;
+                }
+            }
+        }
+    }
+
+    return res;
+}
+
+matrix_t * _append_matrix(matrix_t *mat, matrix_t *row) {
+    int rows = mat->rows + 1;
+    int cols = mat->cols;
+    enum mat_type type = mat->type;
+    matrix_t *res = malloc_matrix(rows, cols, type);
+
+    void *body;
+
+    switch (type) {
+        case Int: body = malloc(rows * cols * sizeof(int)); break;
+        case Float: body = malloc(rows * cols * sizeof(double)); break;
+    }
+
+    set_ptrs_matrix(res, body);
+
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            if (i == rows - 1) {
+                switch (type) {
+                    case Int: res->body.ibody[i][j] = row->body.ibody[0][j]; break;
+                    case Float: res->body.fbody[i][j] = row->body.fbody[0][j]; break;
+                }
+            } else {
+                switch (type) {
+                    case Int: res->body.ibody[i][j] = mat->body.ibody[i][j]; break;
+                    case Float: res->body.fbody[i][j] = mat->body.fbody[i][j]; break;
+                }
+            }
+        }
+    }
+
+    return res;
 }
 
 /* Binary operations */

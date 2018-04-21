@@ -1,0 +1,6 @@
+void main() {
+    create matrix<int> a = [[1, 2], [3, 4], [5, 6]];
+    println(insert(a, 1, [[7, 8]]));
+    println(delete(a, 0));
+    println(append(a, [[9, 10]]));
+}

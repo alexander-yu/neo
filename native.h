@@ -53,18 +53,26 @@ void deep_free_array(array_t *, void(*)(void *));
 /* Same as print_array, but to free an element */
 void set_ptrs_matrix(matrix_t *, void *);
 void set_ptrs_array(array_t *, void *);
+array_t *malloc_array(int, size_t);
+matrix_t *malloc_matrix(int, int, enum mat_type);
 
 /* Array index/slice functions */
 void * get_array(array_t *, int);
 void set_array(array_t *, int, void *);
 void slice_array(array_t *, slice_t *, array_t *);
 void set_slice_array(array_t *, slice_t *, array_t *);
+array_t * insert_array(array_t *, int, void *);
+array_t * _delete_array(array_t *, int);
+array_t * append_array(array_t *, void *);
 
 /* Matrix index/slice functions */
 void * get_matrix(matrix_t *, int, int);
 void set_matrix(matrix_t *, int, int, void *);
 void slice_matrix(matrix_t *, slice_t *, slice_t *, matrix_t *);
 void set_slice_matrix(matrix_t *, slice_t *, slice_t *, matrix_t *);
+matrix_t * _insert_matrix(matrix_t *, int, matrix_t *);
+matrix_t * _delete_matrix(matrix_t *, int);
+matrix_t * _append_matrix(matrix_t *, matrix_t *);
 
 /* Binary operations */
 int iexp(int, int);

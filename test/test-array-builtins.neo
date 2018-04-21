@@ -1,0 +1,13 @@
+array<int> foo() {
+    create array<int> a = {|1|};
+    return insert(a, 1, 2);
+}
+
+void main() {
+    create array<matrix<int>> a = {| [[1]] |};
+    a = insert(a, 0, [[2]]);
+    println(a);
+    println(delete(a, 1));
+    println(append(a, [[3]]));
+    println(foo());
+}
