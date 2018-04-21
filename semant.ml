@@ -34,6 +34,7 @@ let check (globals, functions) =
     in
     List.fold_left add_built_in_func StringMap.empty [
       "print";
+      "println";
       "deep_free";
       "free";
       "length";
@@ -59,7 +60,7 @@ let check (globals, functions) =
     in
     let n_args = List.length arg_types in
     match fname with
-        "print" ->
+        "print" | "println" ->
           if n_args = 1 && ret_type = Void then ()
           else make_err err
       | "deep_free" ->
@@ -346,7 +347,7 @@ let check (globals, functions) =
       let args' = List.rev args' in
       let arg_types = List.map fst args' in
       match fname with
-          "print" ->
+          "print" | "println" ->
             if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
             else
               let native_fname = get_native_of_builtin fname arg_types in
@@ -365,7 +366,8 @@ let check (globals, functions) =
                               "should be direct reference to built-in"
                       in
                       let str = "built-in function " ^ arg_name in
-                      (env, (Void, SCall((Func([String], Void), SId "_print_string"),
+                      let native_fname = get_native_of_builtin fname [String] in
+                      (env, (Void, SCall((Func([String], Void), SId native_fname),
                         [(String, SString_Lit str)])))
                   | _ -> (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
               )

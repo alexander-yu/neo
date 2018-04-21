@@ -136,7 +136,7 @@ nondecl_stmt:
                                               exc_var = $8;
                                               catch_block = $11;
                                             }) }
-  | PROTEST expr WITH expr_opt SEMI  { Protest($2, $4) }
+  | PROTEST expr WITH expr SEMI  { Protest($2, $4) }
 
 stmt:
     nondecl_stmt { $1 }

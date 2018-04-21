@@ -6,28 +6,23 @@ int foo(int i) {
 
 void print_name(string s) {
     print("My name is ");
-    print(s);
+    println(s);
 }
 
 void main() {
-    print(print);
-    print("\n");
-    print(foo);
-    print("\n");
+    println(print);
+    println(foo);
 
     create array<func<(int):int>> a = {| foo, foo |};
     create array<array<func<(string):void>>> b =
         {| {| print, print_name |}, {| print_name |} |};
 
-    print(a);
-    print("\n");
-    print(b[0]);
-    print("\n");
+    println(a);
+    println(b[0]);
     b[0][0]("Hello!\n");
 
     var func<(int):int> g = a[0];
-    print(g(3));
-    print("\n");
+    println(g(3));
 
     f = b[1][0];
     f("Alex");

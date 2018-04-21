@@ -106,6 +106,7 @@ let translate (env, program) =
 
   (* Built-in format strings *)
   let empty_str = L.build_global_stringptr "" "empty_string" main_builder in
+  let newline_str = L.build_global_stringptr "\n" "newline_string" main_builder in
 
   (* Declare built-in functions *)
   (* Pretty-printing functions *)
@@ -324,6 +325,29 @@ let translate (env, program) =
     StringMap.add fname print_func print_function_funcs
   in
   let print_funcs = S.TypeSet.fold build_print_function_func func_types print_funcs in
+
+  (* Build println functions; note that all necessary print functions should be built
+   * at this point; it takes each print function and makes a corresponding println
+   * variant *)
+  let build_println_func print_fname print_func println_funcs =
+    let regexp = Str.regexp "_print" in
+    let println_fname = Str.replace_first regexp "_println" print_fname in
+    (* Note that print_func is actually a function pointer, so we need to get the
+     * "dereferenced" type *)
+    let println_t = L.element_type (L.type_of print_func) in
+    let println_func = L.define_function println_fname println_t the_module in
+    let builder = L.builder_at_end context (L.entry_block println_func) in
+
+    (* Get param *)
+    let param = (L.params println_func).(0) in
+
+    (* First print param, then print newline *)
+    let _ = L.build_call print_func [| param |] "" builder in
+    let _ = L.build_call _print_string_func [| newline_str |] "" builder in
+    let _ = L.build_ret_void builder in
+    StringMap.add println_fname println_func println_funcs
+  in
+  let println_funcs = StringMap.fold build_println_func print_funcs StringMap.empty in
 
   (* Build any necessary element-freeing functions for array types *)
   let rec build_free_element_func array_type free_element_funcs =
@@ -1065,6 +1089,7 @@ let translate (env, program) =
       { scope with variables = StringMap.add fname f_ptr scope.variables }
     in
     let global_scope = StringMap.fold add_native_funcs print_funcs global_scope in
+    let global_scope = StringMap.fold add_native_funcs println_funcs global_scope in
     let global_scope = StringMap.fold add_native_funcs free_funcs global_scope in
     let global_scope = StringMap.fold add_native_funcs deep_free_funcs global_scope in
     let global_scope = add_native_funcs "length" length_func global_scope in

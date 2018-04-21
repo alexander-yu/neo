@@ -21,11 +21,8 @@ void main() {
     create array<matrix<int>> c = f();
     create array<array<array<int>>> d = g();
 
-    print(a);
-    print("\n");
-    print(b);
-    print("\n");
-    print(c);
-    print("\n");
-    print(d);
+    println(a);
+    println(b);
+    println(c);
+    println(d);
 }
