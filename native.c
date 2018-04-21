@@ -350,6 +350,15 @@ int length(array_t *arr) {
 int rows(matrix_t *mat) {
     return mat->rows;
 }
+
 int cols(matrix_t *mat) {
     return mat->cols;
+}
+
+int to_int(double d) {
+    return (int) d;
+}
+
+double to_float(int i) {
+    return (double) i;
 }

@@ -40,6 +40,8 @@ let check (globals, functions) =
       "length";
       "rows";
       "cols";
+      "to_int";
+      "to_float";
     ]
   in
 
@@ -95,6 +97,14 @@ let check (globals, functions) =
           in
           if n_args = 1 && arg_is_matrix && ret_type = Int then ()
           else make_err err
+      | "to_int" ->
+          let arg_is_float = List.hd arg_types = Float in
+          if n_args = 1 && arg_is_float && ret_type = Int then ()
+          else make_err err
+      | "to_float" ->
+          let arg_is_int = List.hd arg_types = Int in
+          if n_args = 1 && arg_is_int && ret_type = Float then ()
+          else make_err err
       | _ -> make_err err
   in
 
@@ -116,7 +126,7 @@ let check (globals, functions) =
     let type_suffix = String.concat "_" (List.map suffix_of_typ arg_types) in
     match fname with
       (* These functions already only take one type class, so no need for a suffix *)
-        "length" | "rows" | "cols" -> fname
+        "length" | "rows" | "cols" | "to_int" | "to_float" -> fname
       | _ -> "_" ^ fname ^ "_" ^ type_suffix
   in
 
@@ -338,79 +348,91 @@ let check (globals, functions) =
 
     (* Check calls for built-in functions *)
     let check_builtin_call fname args expr_s =
-      let n_args = List.length args in
       let check_arg (env, checked) arg =
         let env, arg' = check_expr env arg in
         (env, arg' :: checked)
       in
+      let check_n_args fn_args n_args expr_s =
+        if fn_args <> n_args then
+          if fn_args = 1 then make_err ("expecting 1 argument in " ^ expr_s)
+          else make_err ("expecting " ^ string_of_int fn_args ^ " arguments in " ^ expr_s)
+      in
+      let n_args = List.length args in
       let env, args' = List.fold_left check_arg (env, []) args in
       let args' = List.rev args' in
       let arg_types = List.map fst args' in
+      let native_fname = get_native_of_builtin fname arg_types in
       match fname with
           "print" | "println" ->
-            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
-            else
-              let native_fname = get_native_of_builtin fname arg_types in
-              (
-                match arg_types with
-                    [Void] -> make_err ("void argument in " ^ expr_s)
-                  (* If for some reason we want to print a built-in function, this is the only
-                   * case where it doesn't become restricted to an explicitly typed function;
-                   * in this case, just print a specialized string *)
-                  | [BuiltInFunc] ->
-                      let arg_name =
-                        match snd (List.hd args') with
-                            SId s -> s
-                          | _ ->
-                              make_err "internal error: BuiltInFunc " ^
-                              "should be direct reference to built-in"
-                      in
-                      let str = "built-in function " ^ arg_name in
-                      let native_fname = get_native_of_builtin fname [String] in
-                      (env, (Void, SCall((Func([String], Void), SId native_fname),
-                        [(String, SString_Lit str)])))
-                  | _ -> (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
-              )
+            let _ = check_n_args 1 n_args expr_s in
+            (
+              match arg_types with
+                  [Void] -> make_err ("void argument in " ^ expr_s)
+                (* If for some reason we want to print a built-in function, this is the only
+                  * case where it doesn't become restricted to an explicitly typed function;
+                  * in this case, just print a specialized string *)
+                | [BuiltInFunc] ->
+                    let arg_name =
+                      match snd (List.hd args') with
+                          SId s -> s
+                        | _ ->
+                            make_err "internal error: BuiltInFunc " ^
+                            "should be direct reference to built-in"
+                    in
+                    let str = "built-in function " ^ arg_name in
+                    let native_fname = get_native_of_builtin fname [String] in
+                    (env, (Void, SCall((Func([String], Void), SId native_fname),
+                      [(String, SString_Lit str)])))
+                | _ -> (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+            )
         | "deep_free" ->
-            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
-            else
-              let native_fname = get_native_of_builtin fname arg_types in
-              (
-                match arg_types with
-                    [Array _] ->
-                      (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
-                  | _ -> make_err ("non-array argument in " ^ expr_s)
-              )
+            let _ = check_n_args 1 n_args expr_s in
+            (
+              match arg_types with
+                  [Array _] ->
+                    (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+                | _ -> make_err ("non-array argument in " ^ expr_s)
+            )
         | "free" ->
-            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
-            else
-              let native_fname = get_native_of_builtin fname arg_types in
-              (
-                match arg_types with
-                    [Matrix _] | [Array _] ->
-                      (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
-                  | _ -> make_err ("non-container argument in " ^ expr_s)
-              )
+            let _ = check_n_args 1 n_args expr_s in
+            (
+              match arg_types with
+                  [Matrix _] | [Array _] ->
+                    (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+                | _ -> make_err ("non-container argument in " ^ expr_s)
+            )
         | "length" ->
-            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
-            else
-              let native_fname = get_native_of_builtin fname arg_types in
-              (
-                match arg_types with
-                    [Array _] ->
-                      (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
-                  | _ -> make_err ("non-array argument in " ^ expr_s)
-              )
+            let _ = check_n_args 1 n_args expr_s in
+            (
+              match arg_types with
+                  [Array _] ->
+                    (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                | _ -> make_err ("non-array argument in " ^ expr_s)
+            )
         | "rows" | "cols" ->
-            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
-            else
-              let native_fname = get_native_of_builtin fname arg_types in
-              (
-                match arg_types with
-                    [Matrix _] ->
-                      (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
-                  | _ -> make_err ("non-matrix argument in " ^ expr_s)
-              )
+            let _ = check_n_args 1 n_args expr_s in
+            (
+              match arg_types with
+                  [Matrix _] ->
+                    (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                | _ -> make_err ("non-matrix argument in " ^ expr_s)
+            )
+        | "to_int" ->
+            let _ = check_n_args 1 n_args expr_s in
+            (
+              match arg_types with
+                  [Float] ->
+                    (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                | _ -> make_err ("non-float argument in " ^ expr_s)
+            )
+        | "to_float" ->
+            let _ = check_n_args 1 n_args expr_s in
+            (
+              match arg_types with
+                  [Int] ->
+                    (env, (Float, SCall((Func(arg_types, Float), SId native_fname), args')))
+                | _ -> make_err ("non-int argument " ^ expr_s)
+            )
         | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
     in
 

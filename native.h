@@ -77,3 +77,5 @@ void init_matrix(matrix_t *);
 int length(array_t *);
 int rows(matrix_t *);
 int cols(matrix_t *);
+int to_int(double);
+double to_float(int);

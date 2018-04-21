@@ -1,0 +1,10 @@
+void main() {
+    var float f = 3.7;
+    var int i = 3;
+
+    var int int_of_f = to_int(f);
+    var float float_of_i = to_float(i);
+
+    println(int_of_f);
+    println(float_of_i);
+}

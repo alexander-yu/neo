@@ -223,6 +223,12 @@ let translate (env, program) =
   let cols_t = L.function_type i32_t [| pointer_t matrix_t |] in
   let cols_func = L.declare_function "cols" cols_t the_module in
 
+  let to_int_t = L.function_type i32_t [| float_t |] in
+  let to_int_func = L.declare_function "to_int" to_int_t the_module in
+
+  let to_float_t = L.function_type float_t [| i32_t |] in
+  let to_float_func = L.declare_function "to_float" to_float_t the_module in
+
   (* Collect native print/free functions *)
   let print_funcs =
     let print_funcs = StringMap.empty in
@@ -1095,6 +1101,8 @@ let translate (env, program) =
     let global_scope = add_native_funcs "length" length_func global_scope in
     let global_scope = add_native_funcs "rows" rows_func global_scope in
     let global_scope = add_native_funcs "cols" cols_func global_scope in
+    let global_scope = add_native_funcs "to_int" to_int_func global_scope in
+    let global_scope = add_native_funcs "to_float" to_float_func global_scope in
     global_scope
   in
   (* Add global variables to scope *)
