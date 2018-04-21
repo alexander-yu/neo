@@ -73,6 +73,7 @@ rule token = parse
 | "try"     { TRY }
 | "catch"   { CATCH }
 | "protest" { PROTEST }
+| "with"    { WITH }
 
 (* Declaration *)
 | "var"       { VAR }

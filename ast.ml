@@ -50,7 +50,7 @@ type stmt =
   | While of expr * stmt
   | Decl of decl
   | Try_Catch of try_catch
-  | Protest of string * expr
+  | Protest of expr * expr
 
 and try_catch = {
   try_block : stmt list;
@@ -195,7 +195,7 @@ let rec string_of_stmt = function
   | Try_Catch tc -> "try {\n" ^ String.concat "" (List.map string_of_stmt tc.try_block) ^
     "} catch " ^ tc.exc_type ^ "(" ^ tc.exc_var ^ ") {\n" ^
     String.concat "" (List.map string_of_stmt tc.catch_block) ^ "}\n"
-  | Protest(t, e) -> "protest " ^ t ^ "(" ^ string_of_expr e ^ ");\n"
+  | Protest(t, e) -> "protest " ^ string_of_expr t ^ "(" ^ string_of_expr e ^ ");\n"
 
 let string_of_fdecl fdecl =
   string_of_typ fdecl.typ ^ " " ^

@@ -20,7 +20,7 @@ open Ast
 %token NOT AND OR
 
 /* Control flow */
-%token RETURN IF ELSE FOR WHILE TRY CATCH PROTEST
+%token RETURN IF ELSE FOR WHILE TRY CATCH PROTEST WITH
 
 /* Declaration */
 %token VAR CREATE EXCEPTION
@@ -136,7 +136,7 @@ nondecl_stmt:
                                               exc_var = $8;
                                               catch_block = $11;
                                             }) }
-  | PROTEST ID LPAREN expr_opt RPAREN SEMI  { Protest($2, $4) }
+  | PROTEST expr WITH expr_opt SEMI  { Protest($2, $4) }
 
 stmt:
     nondecl_stmt { $1 }
