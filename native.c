@@ -342,3 +342,14 @@ void init_matrix(matrix_t *mat) {
         }
     }
 }
+
+int length(array_t *arr) {
+    return arr->length;
+}
+
+int rows(matrix_t *mat) {
+    return mat->rows;
+}
+int cols(matrix_t *mat) {
+    return mat->cols;
+}

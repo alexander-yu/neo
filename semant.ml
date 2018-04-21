@@ -36,6 +36,9 @@ let check (globals, functions) =
       "print";
       "deep_free";
       "free";
+      "length";
+      "rows";
+      "cols";
     ]
   in
 
@@ -75,6 +78,22 @@ let check (globals, functions) =
           in
           if n_args = 1 && arg_is_container && ret_type = Void then ()
           else make_err err
+      | "length" ->
+          let arg_is_array =
+            match List.hd arg_types with
+                Array _ -> true
+              | _ -> false
+          in
+          if n_args = 1 && arg_is_array && ret_type = Int then ()
+          else make_err err
+      | "rows" | "cols" ->
+          let arg_is_matrix =
+            match List.hd arg_types with
+                Matrix _ -> true
+              | _ -> false
+          in
+          if n_args = 1 && arg_is_matrix && ret_type = Int then ()
+          else make_err err
       | _ -> make_err err
   in
 
@@ -94,7 +113,10 @@ let check (globals, functions) =
         | _ -> string_of_typ typ
     in
     let type_suffix = String.concat "_" (List.map suffix_of_typ arg_types) in
-    "_" ^ fname ^ "_" ^ type_suffix
+    match fname with
+      (* These functions already only take one type class, so no need for a suffix *)
+        "length" | "rows" | "cols" -> fname
+      | _ -> "_" ^ fname ^ "_" ^ type_suffix
   in
 
   (* Find all function types embedded within a type *)
@@ -366,6 +388,26 @@ let check (globals, functions) =
                     [Matrix _] | [Array _] ->
                       (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
                   | _ -> make_err ("non-container argument in " ^ expr_s)
+              )
+        | "length" ->
+            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            else
+              let native_fname = get_native_of_builtin fname arg_types in
+              (
+                match arg_types with
+                    [Array _] ->
+                      (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                  | _ -> make_err ("non-array argument in " ^ expr_s)
+              )
+        | "rows" | "cols" ->
+            if n_args <> 1 then make_err ("expecting 1 argument in " ^ expr_s)
+            else
+              let native_fname = get_native_of_builtin fname arg_types in
+              (
+                match arg_types with
+                    [Matrix _] ->
+                      (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                  | _ -> make_err ("non-matrix argument in " ^ expr_s)
               )
         | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
     in

@@ -74,3 +74,6 @@ void mat_binop(matrix_t *, enum mat_op, matrix_t *, matrix_t *);
 
 /* Miscellaneous helpers/built-ins */
 void init_matrix(matrix_t *);
+int length(array_t *);
+int rows(matrix_t *);
+int cols(matrix_t *);
