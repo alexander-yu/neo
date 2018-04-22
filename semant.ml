@@ -238,15 +238,12 @@ let check (globals, functions) =
   * the given lvalue type *)
   let check_assign lvaluet (rvaluet, rexpr) err =
     if lvaluet = rvaluet then (rvaluet, rexpr)
-    (* Alternatively, there's a built-in reference somewhere; see if we can restrict the
-     * built-in type to the assigned type *)
+    (* Alternatively, there's a built-in reference; see if we can restrict
+     * the built-in type to the assigned type *)
     else
-      let rec is_builtin_assign lvaluet rvaluet =
+      let is_builtin_assign lvaluet rvaluet =
         match lvaluet, rvaluet with
             (Func(_, _), BuiltInFunc) -> true
-          (* If not both function types, alternatively these are built-in literals
-           * embedded in arrays; dig down until we find a match *)
-          | (Array t1, Array t2) -> is_builtin_assign t1 t2
           | _ -> false
       in
       if is_builtin_assign lvaluet rvaluet then
@@ -830,6 +827,7 @@ let check (globals, functions) =
         Int | Bool | Float | String | Func(_, _) -> Var
       | Exc -> Exception
       | Array _ | Matrix _ -> Create
+      | Notyp -> Auto
       | _ -> make_err "internal error: check_v_decl_type should have rejected"
     in
     let kw_err =
@@ -845,12 +843,22 @@ let check (globals, functions) =
       "illegal initialization " ^ string_of_typ t ^
       " = " ^ string_of_typ et ^ " in " ^ string_of_vdecl decl
     in
-    let expr' =
-      if expr' = SNoexpr then expr'
-      else snd (check_assign t (et, expr') typ_err)
+    let t, expr' =
+      if expr' = SNoexpr then (t, expr')
+      (* Auto variables must be initialized to explicitly typed expressions;
+       * built-in functions require the presence of other explicitly typed
+       * expressions to be explicitly typed, so clearly we cannot have both here *)
+      else if t = Notyp && et = BuiltInFunc then
+        make_err ("illegal initialization of auto variable in " ^
+        string_of_vdecl decl)
+      (* Otherwise, set the auto variable to the type of its initializer *)
+      else if t = Notyp then (et, expr')
+      else check_assign t (et, expr') typ_err
     in
 
-    (* Add decl to scope *)
+    (* Add decl to scope; we redefine decl here in case the variable was
+     * an auto variable, meaning that the type is now changed *)
+    let decl = (kw, t, s, expr) in
     let scope = add_v_decl env.scope decl in
 
     (* Add array type to set if we declared an array type *)

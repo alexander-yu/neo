@@ -26,7 +26,7 @@ open Ast
 %token VAR CREATE EXCEPTION
 
 /* Types */
-%token INT BOOL FLOAT VOID STRING ARRAY MATRIX FUNC
+%token INT BOOL FLOAT VOID STRING ARRAY MATRIX FUNC AUTO EXC
 
 /* Literals */
 %token <int> INT_LIT
@@ -87,6 +87,7 @@ typ:
   | MATRIX LANGLE typ RANGLE { Matrix $3 }
   | FUNC LANGLE LPAREN typ_opt RPAREN COLON typ RANGLE
                              { Func($4, $7) }
+  | EXC                      { Exc }
 
 typ_opt:
     /* nothing */ { [] }
@@ -152,6 +153,7 @@ decl:
   | CREATE typ ID LBRACKET expr RBRACKET LBRACKET expr RBRACKET
                                          { (Create, $2, $3,
                                             Empty_Matrix(typ_of_container $2, $5, $8)) }
+  | AUTO ID ASSIGN expr                  { (Auto, Notyp, $2, $4) }
   | EXCEPTION ID                         { (Exception, Exc, $2, Noexpr) }
 
 expr_opt:

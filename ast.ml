@@ -7,9 +7,9 @@ type uop = Neg | Not
 
 type typ = Int | Bool | Float | String | Void | Exc |
            Array of typ | Matrix of typ |
-           Func of typ list * typ | BuiltInFunc
+           Func of typ list * typ | BuiltInFunc | Notyp
 
-type decl_kw = Var | Create | Exception | Nokw
+type decl_kw = Var | Create | Exception | Nokw | Auto
 
 type expr =
     Id of string
@@ -108,6 +108,7 @@ let string_of_decl_kw = function
   | Create -> "create"
   | Exception -> "exception"
   | Nokw -> ""
+  | Auto -> "auto"
 
 let rec string_of_typ = function
   Int -> "int"
@@ -121,6 +122,7 @@ let rec string_of_typ = function
 | Func(args, ret) -> "func<(" ^ String.concat ", " (List.map string_of_typ args) ^
     "):" ^ string_of_typ ret ^ ">"
 | BuiltInFunc -> "func<built-in>"
+| Notyp -> ""
 
 let rec string_of_expr expr =
   let string_of_islice = function
@@ -178,7 +180,9 @@ let rec string_of_expr expr =
 
 let string_of_vdecl (kw, t, id, expr) = match t, expr with
     (Exc, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | (Notyp, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
   | (_, Noexpr) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
+  | (Notyp, _) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
   | (_, _) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
       string_of_expr expr ^ ";\n"
 

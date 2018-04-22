@@ -79,6 +79,7 @@ rule token = parse
 | "var"       { VAR }
 | "create"    { CREATE }
 | "exception" { EXCEPTION }
+| "auto"      { AUTO }
 
 (* Types *)
 | "int"    { INT }
@@ -89,6 +90,7 @@ rule token = parse
 | "array"  { ARRAY }
 | "matrix" { MATRIX }
 | "func"   { FUNC }
+| "exc"    { EXC }
 
 (* Literals *)
 | "True"   { BOOL_LIT(true)  }
