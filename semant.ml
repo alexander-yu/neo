@@ -45,6 +45,7 @@ let check (globals, functions) =
       "insert";
       "delete";
       "append";
+      "die";
     ]
   in
 
@@ -169,6 +170,9 @@ let check (globals, functions) =
           in
           if n_args = 2 && check_types arg_types ret_type then ()
           else make_err err
+      | "die" ->
+          if n_args = 0 && ret_type = Void then ()
+          else make_err err
       | _ -> make_err err
   in
 
@@ -194,8 +198,8 @@ let check (globals, functions) =
         | _ -> String.concat "_" (List.map abbrev_of_type arg_types)
     in
     match fname with
-      (* These functions already only take one type class, so no need for a suffix *)
-        "length" | "rows" | "cols" -> fname
+      (* These functions already only take one/no type class, so no need for a suffix *)
+        "length" | "rows" | "cols" | "die" -> fname
       (* For these, if it's a matrix then we only need one native function to
        * achieve both, since we're really just flipping the matrix type *)
       | "to_int" | "to_float" ->
@@ -513,7 +517,7 @@ let check (globals, functions) =
                     (env, (Float, SCall((Func(arg_types, Float), SId native_fname), args')))
                 | [Matrix Int] ->
                     (env, (Matrix Float, SCall((Func(arg_types, Matrix Float), SId native_fname), args')))
-                | _ -> make_err ("non-int argument " ^ expr_s)
+                | _ -> make_err ("non-int argument in " ^ expr_s)
             )
 
         | "insert" ->
@@ -535,7 +539,7 @@ let check (globals, functions) =
                 | [Matrix t; Int; Matrix _] ->
                     let _ = check_assign (Matrix t) e' err in
                     (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
-                | _ -> make_err ("non-int argument " ^ expr_s)
+                | _ -> make_err ("non-container argument in " ^ expr_s)
             )
 
         | "delete" ->
@@ -546,7 +550,7 @@ let check (globals, functions) =
                     (env, (Array t, SCall((Func(arg_types, Array t), SId native_fname), args')))
                 | [Matrix t; Int] ->
                     (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
-                | _ -> make_err ("non-int argument " ^ expr_s)
+                | _ -> make_err ("non-container argument in " ^ expr_s)
             )
         | "append" ->
             let _ = check_n_args 2 n_args expr_s in
@@ -567,8 +571,11 @@ let check (globals, functions) =
                 | [Matrix t; Matrix _] ->
                     let _ = check_assign (Matrix t) e' err in
                     (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
-                | _ -> make_err ("non-int argument " ^ expr_s)
+                | _ -> make_err ("non-container argument in " ^ expr_s)
             )
+        | "die" ->
+            let _ = check_n_args 0 n_args expr_s in
+            (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
         | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
     in
 

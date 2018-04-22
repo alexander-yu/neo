@@ -131,8 +131,15 @@ CheckFail() {
 
     generatedfiles=""
 
-    generatedfiles="$generatedfiles ${basename}.err ${basename}.diff" &&
-    RunFail "$NEO" "<" $1 "2>" "${basename}.err" ">>" $globallog &&
+    generatedfiles="$generatedfiles ${basename}.err ${basename}.diff"
+    if [ $2 -eq 0 ] ; then
+        RunFail "$NEO" "<" $1 "2>" "${basename}.err" ">>" $globallog
+    else
+        Run "$NEO" "$1" ">" "${basename}.ll" &&
+        Run "$LLC" "${basename}.ll" ">" "${basename}.s" &&
+        Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" "-lm" &&
+        RunFail "./${basename}.exe" ">" "${basename}.err"
+    fi
     Compare ${basename}.err ${reffile}.err ${basename}.diff
 
     # Report the status and clean up the generated files
@@ -190,8 +197,11 @@ do
 	*test-*)
 	    Check $file 2>> $globallog
 	    ;;
+    *runtime-fail-*)
+        CheckFail $file 1 2>> $globallog
+        ;;
 	*fail-*)
-	    CheckFail $file 2>> $globallog
+	    CheckFail $file 0 2>> $globallog
 	    ;;
 	*)
 	    echo "unknown file type $file"

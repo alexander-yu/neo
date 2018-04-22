@@ -23,7 +23,7 @@ clean :
 	ocamlbuild -clean
 	rm -rf testall.log *.diff neo scanner.ml parser.ml parser.mli
 	rm -rf native
-	rm -rf *.cmx *.cmi *.cmo *.cmx *.o *.s *.ll *.out *.exe
+	rm -rf *.cmx *.cmi *.cmo *.cmx *.o *.s *.ll *.out *.exe *.err
 
 # More detailed: build using ocamlc/ocamlopt + ocamlfind to locate LLVM
 

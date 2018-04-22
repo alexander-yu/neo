@@ -587,3 +587,7 @@ matrix_t * _flip_matrix_type(matrix_t *mat) {
 
     return res;
 }
+
+void die() {
+    exit(EXIT_FAILURE);
+}

@@ -261,6 +261,9 @@ let translate (env, program) =
     L.declare_function "_flip_matrix_type" _flip_matrix_type_t the_module
   in
 
+  let die_t = L.function_type void_t [||] in
+  let die_func = L.declare_function "die" die_t the_module in
+
   (* Collect native functions *)
   let print_funcs =
     let print_funcs = StringMap.empty in
@@ -1196,6 +1199,7 @@ let translate (env, program) =
     let global_scope = add_native_funcs "_flip_matrix_type" _flip_matrix_type_func global_scope in
     let global_scope = add_native_funcs "_delete_array" _delete_array_func global_scope in
     let global_scope = add_native_funcs "_delete_matrix" _delete_matrix_func global_scope in
+    let global_scope = add_native_funcs "die" die_func global_scope in
     global_scope
   in
   (* Add global variables to scope *)

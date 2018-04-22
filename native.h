@@ -88,3 +88,4 @@ int cols(matrix_t *);
 int _float_to_int(double);
 double _int_to_float(int);
 matrix_t *_flip_matrix_type(matrix_t *);
+void die();
