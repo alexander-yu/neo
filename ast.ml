@@ -177,23 +177,27 @@ let rec string_of_expr expr =
   | End -> "END"
   | Noexpr -> ""
 
-let string_of_vdecl (kw, t, id, expr) = match t, expr with
-  | (Exc, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
-  | (Notyp, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
-  | (_, Noexpr) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
-  | (Notyp, _) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
-  | (_, _) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
+let string_of_vdecl (kw, t, id, expr) =
+  match kw, t, expr with
+  | (Nokw, _, Noexpr) -> string_of_typ t ^ " " ^ id
+  | (_, Exc, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | (_, Notyp, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | (_, _, Noexpr) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
+  | (_, Notyp, _) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | (_, _, _) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
       string_of_expr expr ^ ";\n"
 
 let rec string_of_stmt = function
   | Block stmts ->
       "{\n" ^ String.concat "" (List.map string_of_stmt stmts) ^ "}\n"
-  | Expr expr -> string_of_expr expr ^ ";\n";
-  | Return expr -> "return " ^ string_of_expr expr ^ ";\n";
+  | Expr expr -> string_of_expr expr ^ ";\n"
+  | Return expr ->
+      if expr = Noexpr then "return;\n"
+      else "return " ^ string_of_expr expr ^ ";\n"
   | If(e, s, Block []) -> "if (" ^ string_of_expr e ^ ")\n" ^ string_of_stmt s
   | If(e, s1, s2) ->  "if (" ^ string_of_expr e ^ ")\n" ^
       string_of_stmt s1 ^ "else\n" ^ string_of_stmt s2
-  | While(e, s) -> "while (" ^ string_of_expr e ^ ") " ^ string_of_stmt s
+  | While(e, s) -> "while (" ^ string_of_expr e ^ ")\n" ^ string_of_stmt s
   | Decl decl -> string_of_vdecl decl
   | Try_Catch tc -> "try {\n" ^ String.concat "" (List.map string_of_stmt tc.try_block) ^
     "} catch " ^ tc.exc_type ^ "(" ^ tc.exc_var ^ ") {\n" ^
@@ -202,7 +206,7 @@ let rec string_of_stmt = function
 
 let string_of_fdecl fdecl =
   string_of_typ fdecl.typ ^ " " ^
-  fdecl.fname ^ "(" ^ String.concat ", " (List.map get_id_of_decl fdecl.formals) ^
+  fdecl.fname ^ "(" ^ String.concat ", " (List.map string_of_vdecl fdecl.formals) ^
   ")\n{\n" ^ String.concat "" (List.map string_of_stmt fdecl.body) ^ "}\n"
 
 let string_of_program (vars, funcs) =
