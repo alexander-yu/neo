@@ -58,16 +58,16 @@ program:
   decls EOF { (List.rev (fst $1), List.rev (snd $1)) }
 
 decls:
-   /* nothing */   { ([], []) }
- | decls decl SEMI { (($2 :: fst $1), snd $1) }
- | decls fdecl     { (fst $1, ($2 :: snd $1)) }
+    /* nothing */   { ([], []) }
+  | decls decl SEMI { (($2 :: fst $1), snd $1) }
+  | decls fdecl     { (fst $1, ($2 :: snd $1)) }
 
 fdecl:
-   typ ID LPAREN formals_opt RPAREN LBRACE stmts_opt RBRACE
-     { { typ = $1;
-	 fname = $2;
-	 formals = $4;
-	 body = $7 } }
+  typ ID LPAREN formals_opt RPAREN LBRACE stmts_opt RBRACE
+    { { typ = $1;
+  fname = $2;
+  formals = $4;
+  body = $7 } }
 
 formals_opt:
     /* nothing */ { [] }

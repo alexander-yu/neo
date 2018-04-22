@@ -22,9 +22,9 @@ module StringMap = Map.Make(String)
 module TypeMap = Map.Make(struct type t = A.typ let compare = compare end)
 
 type symbol_table = {
-  variables : L.llvalue StringMap.t;
-  parent : symbol_table option
-}
+    variables : L.llvalue StringMap.t;
+    parent : symbol_table option
+  }
 
 let make_err err = raise (Failure err)
 
@@ -71,12 +71,12 @@ let translate (env, program) =
   in
 
   let rec ltype_of_typ = function
-      A.Int      -> i32_t
-    | A.Bool     -> i1_t
-    | A.Float    -> float_t
-    | A.Void     -> void_t
-    | A.String   -> pointer_t i8_t
-    | A.Array _  -> pointer_t array_t
+    | A.Int -> i32_t
+    | A.Bool -> i1_t
+    | A.Float -> float_t
+    | A.Void -> void_t
+    | A.String -> pointer_t i8_t
+    | A.Array _ -> pointer_t array_t
     | A.Matrix _ -> pointer_t matrix_t
     | A.Func(arg_types, ret_type) ->
         let func_t =
@@ -302,12 +302,14 @@ let translate (env, program) =
       let param = L.build_load param_ptr "param" builder in
 
       (* Call corresponding print function; if we have another array, recursively make it *)
-      let print_element_funcs = match typ with
-          A.Array _ -> build_print_element_func typ print_element_funcs
+      let print_element_funcs =
+        match typ with
+        | A.Array _ -> build_print_element_func typ print_element_funcs
         | _ -> print_element_funcs
       in
-      let _ = match typ with
-          A.Int -> L.build_call _print_int_func [| param |] "" builder
+      let _ =
+        match typ with
+        | A.Int -> L.build_call _print_int_func [| param |] "" builder
         | A.Bool -> L.build_call _print_bool_func [| param |] "" builder
         | A.Float -> L.build_call _print_float_func [| param |] "" builder
         | A.String -> L.build_call _print_string_func [| param |] "" builder
@@ -413,12 +415,14 @@ let translate (env, program) =
 
       (* Perform corresponding free action; if we have another array,
        * recursively make it *)
-      let free_element_funcs = match typ with
-          A.Array _ -> build_free_element_func typ free_element_funcs
+      let free_element_funcs =
+        match typ with
+        | A.Array _ -> build_free_element_func typ free_element_funcs
         | _ -> free_element_funcs
       in
-      let _ = match typ with
-          A.Array _ ->
+      let _ =
+        match typ with
+        | A.Array _ ->
             let _ =
               L.build_call deep_free_array_func
               [| param; TypeMap.find typ free_element_funcs |] "" builder
@@ -512,8 +516,9 @@ let translate (env, program) =
   let append_funcs = S.TypeSet.fold build_append_array_func array_types append_funcs in
 
   (* Returns initial value for an empty declaration of a given type *)
-  let init t = match t with
-      A.Float -> L.const_float float_t 0.0
+  let init t =
+    match t with
+    | A.Float -> L.const_float float_t 0.0
     | A.Int -> L.const_int i32_t 0
     | A.Bool -> L.const_int i1_t 0
     | A.String -> empty_str
@@ -532,10 +537,12 @@ let translate (env, program) =
     (* Redirect any attempt to call the program main through it's raw "main" name
      * to the renamed program main *)
     let name = if name = sys_main then prog_main else name in
-    try StringMap.find name scope.variables
-    with Not_found ->
-      match scope.parent with
-          None -> make_err ("internal error: semant should have rejected on undeclared identifier " ^ name)
+    try StringMap.find name scope.variables with
+    | Not_found ->
+        match scope.parent with
+        | None ->
+            make_err ("internal error: semant should have rejected " ^
+            "on undeclared identifier " ^ name)
         | Some parent -> lookup name parent
   in
 
@@ -615,7 +622,7 @@ let translate (env, program) =
       in
 
       let get_mat_type = function
-          A.Int -> L.const_int i32_t 0
+        | A.Int -> L.const_int i32_t 0
         (* Otherwise, it's A.Float *)
         | _ -> L.const_int i32_t 1
       in
@@ -700,19 +707,20 @@ let translate (env, program) =
         L.build_load cols_ptr "cols" builder
       in
 
-      let build_sgl_slice arr slice builder = match slice with
-          SSlice(i, j) ->
+      let build_sgl_slice arr slice builder =
+        match slice with
+        | SSlice(i, j) ->
             let slice_ptr = L.build_alloca slice_t "slice_ptr" builder in
             let slice_start = L.build_struct_gep slice_ptr 0 "slice_start" builder in
             let slice_end = L.build_struct_gep slice_ptr 1 "slice_end" builder in
             let i' = expr scope builder i in
             let j' =
               match snd j with
-                  SInt_Lit _ -> expr scope builder j
-                (* Otherwise, it's SEnd *)
-                | _ ->
-                      let length_ptr = L.build_struct_gep arr 1 "length_ptr" builder in
-                    L.build_load length_ptr "length" builder
+              | SInt_Lit _ -> expr scope builder j
+              (* Otherwise, it's SEnd *)
+              | _ ->
+                    let length_ptr = L.build_struct_gep arr 1 "length_ptr" builder in
+                  L.build_load length_ptr "length" builder
             in
             let _ = L.build_store i' slice_start builder in
             let _ = L.build_store j' slice_end builder in
@@ -720,8 +728,9 @@ let translate (env, program) =
         | _ -> make_err "internal error: build_sgl_slice given non-slice"
       in
 
-      let build_dbl_slice mat row_slice col_slice builder = match (row_slice, col_slice) with
-          (SSlice(i1, j1), SSlice(i2, j2)) ->
+      let build_dbl_slice mat row_slice col_slice builder =
+        match (row_slice, col_slice) with
+        | (SSlice(i1, j1), SSlice(i2, j2)) ->
             let row_slice_ptr = L.build_alloca slice_t "row_slice_ptr" builder in
             let row_slice_start = L.build_struct_gep row_slice_ptr 0 "row_slice_start" builder in
             let row_slice_end = L.build_struct_gep row_slice_ptr 1 "row_slice_end" builder in
@@ -731,18 +740,18 @@ let translate (env, program) =
             let i1' = expr scope builder i1 in
             let j1' =
               match snd j1 with
-                  SInt_Lit _ -> expr scope builder j1
-                | SSlice_Inc -> L.build_add i1' (L.const_int i32_t 1) "row_slice_inc" builder
-                (* Otherwise, it's SEnd *)
-                | _ -> get_rows mat builder
+              | SInt_Lit _ -> expr scope builder j1
+              | SSlice_Inc -> L.build_add i1' (L.const_int i32_t 1) "row_slice_inc" builder
+              (* Otherwise, it's SEnd *)
+              | _ -> get_rows mat builder
             in
             let i2' = expr scope builder i2 in
             let j2' =
               match snd j2 with
-                  SInt_Lit _ -> expr scope builder j2
-                | SSlice_Inc -> L.build_add i2' (L.const_int i32_t 1) "col_slice_inc" builder
-                (* Otherwise, it's SEnd *)
-                | _ -> get_cols mat builder
+              | SInt_Lit _ -> expr scope builder j2
+              | SSlice_Inc -> L.build_add i2' (L.const_int i32_t 1) "col_slice_inc" builder
+              (* Otherwise, it's SEnd *)
+              | _ -> get_cols mat builder
             in
             let _ = L.build_store i1' row_slice_start builder in
             let _ = L.build_store j1' row_slice_end builder in
@@ -772,263 +781,267 @@ let translate (env, program) =
       in
 
       let sexpr_of_sindex = function
-          SIndex e -> e
+        | SIndex e -> e
         | _ -> make_err "internal error: sexpr_of_sindex given non-index"
       in
 
       (* Used for element-wise matrix operations *)
       let get_mat_opcode op =
         match op with
-            A.Add     -> 0
-          | A.Sub     -> 1
-          | A.Mult    -> 2
-          | A.Div     -> 3
-          | A.Mod     -> 4
-          | A.Exp     -> 5
-          | A.Equal   -> 6
-          | A.Neq     -> 7
-          | A.Less    -> 8
-          | A.Leq     -> 9
-          | A.Greater -> 10
-          | A.Geq     -> 11
-          | _       -> make_err (
-              "internal error: op " ^ A.string_of_op op ^
-              " is not an element-wise matrix op"
-            )
+        | A.Add -> 0
+        | A.Sub -> 1
+        | A.Mult -> 2
+        | A.Div -> 3
+        | A.Mod -> 4
+        | A.Exp -> 5
+        | A.Equal -> 6
+        | A.Neq -> 7
+        | A.Less -> 8
+        | A.Leq -> 9
+        | A.Greater -> 10
+        | A.Geq -> 11
+        | _ -> make_err (
+            "internal error: op " ^ A.string_of_op op ^
+            " is not an element-wise matrix op"
+          )
       in
 
       (* TODO: perform runtime checks; division by zero, index out of bounds,
       * working with null arrays/matrices (i.e. global array/matrix that hasn't
       * been assigned a real value) *)
       match e with
-          SInt_Lit i -> L.const_int i32_t i
-        | SBool_Lit b -> L.const_int i1_t (if b then 1 else 0)
-        | SFloat_Lit l -> L.const_float_of_string float_t l
-        | SString_Lit s -> L.build_global_stringptr (Scanf.unescaped s) "str" builder
-        | SArray_Lit l ->
-            let raw_array = Array.map (expr scope builder) l in
-            let typ = A.typ_of_container t in
-            build_array_lit typ raw_array builder
-        | SEmpty_Array(t, n) ->
-            let length = expr scope builder n in
-            build_empty_array t length builder
-        | SMatrix_Lit l ->
-            let raw_elements = Array.map (Array.map (expr scope builder)) l in
-            let typ = A.typ_of_container t in
-            build_matrix_lit typ raw_elements builder
-        | SEmpty_Matrix(t, r, c) ->
-            let rows = expr scope builder r in
-            let cols = expr scope builder c in
-            let mat_ptr = build_empty_matrix t rows cols builder in
-            let _ = L.build_call init_matrix_func [| mat_ptr |] "" builder in
-            mat_ptr
-        | SIndex_Expr i ->
-            (
-              match i with
-                  SSgl_Index(e, i) ->
-                    let ltype = ltype_of_typ t in
-                    let e' = expr scope builder e in
-                    let i' = expr scope builder (sexpr_of_sindex i) in
-                    let ptr = L.build_call get_array_func [| e'; i' |] "ptr" builder in
-                    let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
-                    L.build_load ptr "arr_element" builder
-                | SDbl_Index(e, i, j) ->
-                    let ltype = ltype_of_typ t in
-                    let e' = expr scope builder e in
-                    let i' = expr scope builder (sexpr_of_sindex i) in
-                    let j' = expr scope builder (sexpr_of_sindex j) in
-                    let ptr =
-                      L.build_call get_matrix_func [| e'; i'; j' |] "mat_element" builder
-                    in
-                    let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
-                    L.build_load ptr "mat_element" builder
-            )
-        | SSlice_Expr s ->
-            let typ = A.typ_of_container t in
-            (
-              match s with
-                  SSgl_Slice(e, s) ->
+      | SInt_Lit i -> L.const_int i32_t i
+      | SBool_Lit b -> L.const_int i1_t (if b then 1 else 0)
+      | SFloat_Lit l -> L.const_float_of_string float_t l
+      | SString_Lit s -> L.build_global_stringptr (Scanf.unescaped s) "str" builder
+      | SArray_Lit l ->
+          let raw_array = Array.map (expr scope builder) l in
+          let typ = A.typ_of_container t in
+          build_array_lit typ raw_array builder
+      | SEmpty_Array(t, n) ->
+          let length = expr scope builder n in
+          build_empty_array t length builder
+      | SMatrix_Lit l ->
+          let raw_elements = Array.map (Array.map (expr scope builder)) l in
+          let typ = A.typ_of_container t in
+          build_matrix_lit typ raw_elements builder
+      | SEmpty_Matrix(t, r, c) ->
+          let rows = expr scope builder r in
+          let cols = expr scope builder c in
+          let mat_ptr = build_empty_matrix t rows cols builder in
+          let _ = L.build_call init_matrix_func [| mat_ptr |] "" builder in
+          mat_ptr
+      | SIndex_Expr i ->
+          (
+            match i with
+            | SSgl_Index(e, i) ->
+                let ltype = ltype_of_typ t in
+                let e' = expr scope builder e in
+                let i' = expr scope builder (sexpr_of_sindex i) in
+                let ptr = L.build_call get_array_func [| e'; i' |] "ptr" builder in
+                let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
+                L.build_load ptr "arr_element" builder
+            | SDbl_Index(e, i, j) ->
+                let ltype = ltype_of_typ t in
+                let e' = expr scope builder e in
+                let i' = expr scope builder (sexpr_of_sindex i) in
+                let j' = expr scope builder (sexpr_of_sindex j) in
+                let ptr =
+                  L.build_call get_matrix_func [| e'; i'; j' |] "mat_element" builder
+                in
+                let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
+                L.build_load ptr "mat_element" builder
+          )
+      | SSlice_Expr s ->
+          let typ = A.typ_of_container t in
+          (
+            match s with
+            | SSgl_Slice(e, s) ->
+                let e' = expr scope builder e in
+                let s' = build_sgl_slice e' s builder in
+                let res_ptr = build_slice_array typ s' builder in
+                let _ = L.build_call slice_array_func [| e'; s'; res_ptr |] "" builder in
+                res_ptr
+            | SDbl_Slice(e, s1, s2) ->
+                let e' = expr scope builder e in
+                let s1', s2' = build_dbl_slice e' s1 s2 builder in
+                let res_ptr = build_slice_matrix typ s1' s2' builder in
+                let _ =
+                  L.build_call slice_matrix_func [| e'; s1'; s2'; res_ptr |] "" builder
+                in
+                res_ptr
+          )
+      | SNoexpr -> init t
+      | SId s -> L.build_load (lookup s scope) s builder
+      | SAssign(e1, e2) ->
+          let t, e1 = e1 in
+          let e2' = expr scope builder e2 in
+          let _ =
+            match e1 with
+            | SId s ->
+                let _ = L.build_store e2' (lookup s scope) builder in
+                ()
+            | SIndex_Expr i ->
+                (
+                  match i with
+                  | SSgl_Index(e, i) ->
+                      let ltype = ltype_of_typ t in
+                      let e' = expr scope builder e in
+                      let i' = expr scope builder (sexpr_of_sindex i) in
+                      let ptr = L.build_alloca ltype "ptr" builder in
+                      let _ = L.build_store e2' ptr builder in
+                      let ptr = L.build_bitcast ptr (pointer_t i8_t) "ptr" builder in
+                      let _ = L.build_call set_array_func [| e'; i'; ptr |] "" builder in
+                      ()
+                  | SDbl_Index(e, i, j) ->
+                      let ltype = ltype_of_typ t in
+                      let e' = expr scope builder e in
+                      let i' = expr scope builder (sexpr_of_sindex i) in
+                      let j' = expr scope builder (sexpr_of_sindex j) in
+                      let ptr = L.build_alloca ltype "ptr" builder in
+                      let _ = L.build_store e2' ptr builder in
+                      let ptr = L.build_bitcast ptr (pointer_t i8_t) "ptr" builder in
+                      let _ =
+                        L.build_call set_matrix_func
+                        [| e'; i'; j'; ptr |] "" builder
+                      in
+                      ()
+                )
+            | SSlice_Expr s ->
+              (
+                match s with
+                | SSgl_Slice(e, s) ->
                     let e' = expr scope builder e in
                     let s' = build_sgl_slice e' s builder in
-                    let res_ptr = build_slice_array typ s' builder in
-                    let _ = L.build_call slice_array_func [| e'; s'; res_ptr |] "" builder in
-                    res_ptr
+                    let _ =
+                      L.build_call set_slice_array_func
+                      [| e'; s'; e2' |] "" builder
+                    in
+                    ()
                 | SDbl_Slice(e, s1, s2) ->
                     let e' = expr scope builder e in
                     let s1', s2' = build_dbl_slice e' s1 s2 builder in
-                    let res_ptr = build_slice_matrix typ s1' s2' builder in
                     let _ =
-                      L.build_call slice_matrix_func [| e'; s1'; s2'; res_ptr |] "" builder
+                      L.build_call set_slice_matrix_func
+                      [| e'; s1'; s2'; e2' |] "" builder
                     in
-                    res_ptr
-            )
-        | SNoexpr -> init t
-        | SId s -> L.build_load (lookup s scope) s builder
-        | SAssign(e1, e2) ->
-            let t, e1 = e1 in
-            let e2' = expr scope builder e2 in
-            let _ =
-              match e1 with
-                  SId s ->
-                    let _ = L.build_store e2' (lookup s scope) builder in
                     ()
-                | SIndex_Expr i ->
-                    (
-                      match i with
-                          SSgl_Index(e, i) ->
-                            let ltype = ltype_of_typ t in
-                            let e' = expr scope builder e in
-                            let i' = expr scope builder (sexpr_of_sindex i) in
-                            let ptr = L.build_alloca ltype "ptr" builder in
-                            let _ = L.build_store e2' ptr builder in
-                            let ptr = L.build_bitcast ptr (pointer_t i8_t) "ptr" builder in
-                            let _ = L.build_call set_array_func [| e'; i'; ptr |] "" builder in
-                            ()
-                        | SDbl_Index(e, i, j) ->
-                            let ltype = ltype_of_typ t in
-                            let e' = expr scope builder e in
-                            let i' = expr scope builder (sexpr_of_sindex i) in
-                            let j' = expr scope builder (sexpr_of_sindex j) in
-                            let ptr = L.build_alloca ltype "ptr" builder in
-                            let _ = L.build_store e2' ptr builder in
-                            let ptr = L.build_bitcast ptr (pointer_t i8_t) "ptr" builder in
-                            let _ =
-                              L.build_call set_matrix_func
-                              [| e'; i'; j'; ptr |] "" builder
-                            in
-                            ()
-                    )
-                | SSlice_Expr s ->
-                  (
-                    match s with
-                        SSgl_Slice(e, s) ->
-                          let e' = expr scope builder e in
-                          let s' = build_sgl_slice e' s builder in
-                          let _ =
-                            L.build_call set_slice_array_func
-                            [| e'; s'; e2' |] "" builder
-                          in
-                          ()
-                      | SDbl_Slice(e, s1, s2) ->
-                          let e' = expr scope builder e in
-                          let s1', s2' = build_dbl_slice e' s1 s2 builder in
-                          let _ =
-                            L.build_call set_slice_matrix_func
-                            [| e'; s1'; s2'; e2' |] "" builder
-                          in
-                          ()
-                  )
-                | _ -> make_err "internal error: semant should have rejected invalid assignment"
-            in
-            expr scope builder (t, e1)
-        | SBinop(e1, op, e2) ->
-            let err =
-              "internal error: semant should have rejected " ^
-              A.string_of_op op ^ " on " ^ A.string_of_typ t
-            in
-            let t1 = fst e1 and t2 = fst e2 in
-            let e1' = expr scope builder e1
-            and e2' = expr scope builder e2 in
-            if t1 = A.Float && t2 = A.Float then
-            (
-              match op with
-                  A.Add     -> L.build_fadd e1' e2' "temp" builder
-                | A.Sub     -> L.build_fsub e1' e2' "temp" builder
-                | A.Mult    -> L.build_fmul e1' e2' "temp" builder
-                | A.Div     -> L.build_fdiv e1' e2' "temp" builder
-                | A.Mod     -> L.build_frem e1' e2' "temp" builder
-                | A.Exp     -> L.build_call fexp_func [| e1'; e2'|] "temp" builder
-                | A.Equal   -> L.build_fcmp L.Fcmp.Oeq e1' e2' "temp" builder
-                | A.Neq     -> L.build_fcmp L.Fcmp.One e1' e2' "temp" builder
-                | A.Less    -> L.build_fcmp L.Fcmp.Olt e1' e2' "temp" builder
-                | A.Leq     -> L.build_fcmp L.Fcmp.Ole e1' e2' "temp" builder
-                | A.Greater -> L.build_fcmp L.Fcmp.Ogt e1' e2' "temp" builder
-                | A.Geq     -> L.build_fcmp L.Fcmp.Oge e1' e2' "temp" builder
-                | _         -> make_err err
-            )
-            else if t1 = A.Int && t2 = A.Int then
-            (
-              match op with
-                  A.Add     -> L.build_add e1' e2' "temp" builder
-                | A.Sub     -> L.build_sub e1' e2' "temp" builder
-                | A.Mult    -> L.build_mul e1' e2' "temp" builder
-                | A.Div     -> L.build_sdiv e1' e2' "temp" builder
-                | A.Mod     -> L.build_srem e1' e2' "temp" builder
-                | A.Exp     -> L.build_call iexp_func [| e1'; e2'|] "temp" builder
-                | A.Equal   -> L.build_icmp L.Icmp.Eq e1' e2' "temp" builder
-                | A.Neq     -> L.build_icmp L.Icmp.Ne e1' e2' "temp" builder
-                | A.Less    -> L.build_icmp L.Icmp.Slt e1' e2' "temp" builder
-                | A.Leq     -> L.build_icmp L.Icmp.Sle e1' e2' "temp" builder
-                | A.Greater -> L.build_icmp L.Icmp.Sgt e1' e2' "temp" builder
-                | A.Geq     -> L.build_icmp L.Icmp.Sge e1' e2' "temp" builder
-                | _         -> make_err err
-            )
-            else if t1 = A.Bool && t2 = A.Bool then
-            (
-              match op with
-                  A.And -> L.build_and e1' e2' "temp" builder
-                | A.Or  -> L.build_or e1' e2' "temp" builder
-                | _     -> make_err err
-            )
-            (* Otherwise, it's a matrix result (either int or float) *)
-            else
-              let t = A.typ_of_container t in
-              (* Wrap broadcasted scalars into temp 1x1 matrices stored on the stack *)
-              let e1' =
-                if t1 == A.Int || t1 == A.Float
-                then build_matrix_lit ~on_heap:false t1 [| [| e1' |] |] builder
-                else e1'
-              in
-              let e2' =
-                if t2 == A.Int || t2 == A.Float
-                then build_matrix_lit ~on_heap:false t2 [| [| e2' |] |] builder
-                else e2'
-              in
-              (
-                match op with
-                    A.MatMult ->
-                      let rows = get_rows e1' builder in
-                      let cols = get_cols e2' builder in
-                      let mat = build_empty_matrix t rows cols builder in
-                      let _ = L.build_call matmult_func [| e1'; e2'; mat|] "" builder in
-                      mat
-                  | A.And | A.Or -> make_err err
-                  | _ ->
-                      let max e1' e2' builder =
-                        let cond = L.build_icmp L.Icmp.Sgt e1' e2' "max_cond" builder in
-                        L.build_select cond e1' e2' "max_v" builder
-                      in
-                      let opcode = L.const_int i32_t (get_mat_opcode op) in
-                      let rows_1 = get_rows e1' builder in
-                      let cols_1 = get_cols e1' builder in
-                      let rows_2 = get_rows e2' builder in
-                      let cols_2 = get_cols e2' builder in
-                      let rows = max rows_1 rows_2 builder in
-                      let cols = max cols_1 cols_2 builder in
-                      let mat = build_empty_matrix t rows cols builder in
-                      let _ =
-                        L.build_call mat_binop_func
-                        [| e1'; opcode; e2'; mat |] ""  builder
-                      in
-                      mat
               )
-        | SUnop(op, e) ->
-            let t, _ = e in
-            let e' = expr scope builder e in
-            (match op with
-                A.Neg when t = A.Float -> L.build_fneg
-              | A.Neg                  -> L.build_neg
-              | A.Not                  -> L.build_not) e' "tmp" builder
-        | SCall(f, args) ->
-            let f' = expr scope builder f in
-            let args' = List.map (expr scope builder) args in
-            let result = (match t with
-                A.Void -> ""
-              | _ -> "result")
+            | _ -> make_err "internal error: semant should have rejected invalid assignment"
+          in
+          expr scope builder (t, e1)
+      | SBinop(e1, op, e2) ->
+          let err =
+            "internal error: semant should have rejected " ^
+            A.string_of_op op ^ " on " ^ A.string_of_typ t
+          in
+          let t1 = fst e1 and t2 = fst e2 in
+          let e1' = expr scope builder e1
+          and e2' = expr scope builder e2 in
+          if t1 = A.Float && t2 = A.Float then
+          (
+            match op with
+            | A.Add -> L.build_fadd e1' e2' "temp" builder
+            | A.Sub -> L.build_fsub e1' e2' "temp" builder
+            | A.Mult -> L.build_fmul e1' e2' "temp" builder
+            | A.Div -> L.build_fdiv e1' e2' "temp" builder
+            | A.Mod -> L.build_frem e1' e2' "temp" builder
+            | A.Exp -> L.build_call fexp_func [| e1'; e2'|] "temp" builder
+            | A.Equal -> L.build_fcmp L.Fcmp.Oeq e1' e2' "temp" builder
+            | A.Neq -> L.build_fcmp L.Fcmp.One e1' e2' "temp" builder
+            | A.Less -> L.build_fcmp L.Fcmp.Olt e1' e2' "temp" builder
+            | A.Leq -> L.build_fcmp L.Fcmp.Ole e1' e2' "temp" builder
+            | A.Greater -> L.build_fcmp L.Fcmp.Ogt e1' e2' "temp" builder
+            | A.Geq -> L.build_fcmp L.Fcmp.Oge e1' e2' "temp" builder
+            | _ -> make_err err
+          )
+          else if t1 = A.Int && t2 = A.Int then
+          (
+            match op with
+            | A.Add -> L.build_add e1' e2' "temp" builder
+            | A.Sub -> L.build_sub e1' e2' "temp" builder
+            | A.Mult -> L.build_mul e1' e2' "temp" builder
+            | A.Div -> L.build_sdiv e1' e2' "temp" builder
+            | A.Mod -> L.build_srem e1' e2' "temp" builder
+            | A.Exp -> L.build_call iexp_func [| e1'; e2'|] "temp" builder
+            | A.Equal -> L.build_icmp L.Icmp.Eq e1' e2' "temp" builder
+            | A.Neq -> L.build_icmp L.Icmp.Ne e1' e2' "temp" builder
+            | A.Less -> L.build_icmp L.Icmp.Slt e1' e2' "temp" builder
+            | A.Leq -> L.build_icmp L.Icmp.Sle e1' e2' "temp" builder
+            | A.Greater -> L.build_icmp L.Icmp.Sgt e1' e2' "temp" builder
+            | A.Geq -> L.build_icmp L.Icmp.Sge e1' e2' "temp" builder
+            | _ -> make_err err
+          )
+          else if t1 = A.Bool && t2 = A.Bool then
+          (
+            match op with
+            | A.And -> L.build_and e1' e2' "temp" builder
+            | A.Or -> L.build_or e1' e2' "temp" builder
+            | _ -> make_err err
+          )
+          (* Otherwise, it's a matrix result (either int or float) *)
+          else
+            let t = A.typ_of_container t in
+            (* Wrap broadcasted scalars into temp 1x1 matrices stored on the stack *)
+            let e1' =
+              if t1 == A.Int || t1 == A.Float
+              then build_matrix_lit ~on_heap:false t1 [| [| e1' |] |] builder
+              else e1'
             in
-            L.build_call f' (Array.of_list args') result builder
-        | SSlice_Inc -> make_err "internal error: SSlice_Inc should not be passed to expr"
-        | SEnd -> make_err "internal error: SEnd should not be passed to expr"
+            let e2' =
+              if t2 == A.Int || t2 == A.Float
+              then build_matrix_lit ~on_heap:false t2 [| [| e2' |] |] builder
+              else e2'
+            in
+            (
+              match op with
+              | A.MatMult ->
+                  let rows = get_rows e1' builder in
+                  let cols = get_cols e2' builder in
+                  let mat = build_empty_matrix t rows cols builder in
+                  let _ = L.build_call matmult_func [| e1'; e2'; mat|] "" builder in
+                  mat
+              | A.And | A.Or -> make_err err
+              | _ ->
+                  let max e1' e2' builder =
+                    let cond = L.build_icmp L.Icmp.Sgt e1' e2' "max_cond" builder in
+                    L.build_select cond e1' e2' "max_v" builder
+                  in
+                  let opcode = L.const_int i32_t (get_mat_opcode op) in
+                  let rows_1 = get_rows e1' builder in
+                  let cols_1 = get_cols e1' builder in
+                  let rows_2 = get_rows e2' builder in
+                  let cols_2 = get_cols e2' builder in
+                  let rows = max rows_1 rows_2 builder in
+                  let cols = max cols_1 cols_2 builder in
+                  let mat = build_empty_matrix t rows cols builder in
+                  let _ =
+                    L.build_call mat_binop_func
+                    [| e1'; opcode; e2'; mat |] ""  builder
+                  in
+                  mat
+            )
+      | SUnop(op, e) ->
+          let t, _ = e in
+          let e' = expr scope builder e in
+          let op' =
+            match op with
+            | A.Neg when t = A.Float -> L.build_fneg
+            | A.Neg -> L.build_neg
+            | A.Not -> L.build_not
+          in
+          op' e' "tmp" builder
+      | SCall(f, args) ->
+          let f' = expr scope builder f in
+          let args' = List.map (expr scope builder) args in
+          let result =
+            match t with
+            | A.Void -> ""
+            | _ -> "result"
+          in
+          L.build_call f' (Array.of_list args') result builder
+      | SSlice_Inc -> make_err "internal error: SSlice_Inc should not be passed to expr"
+      | SEnd -> make_err "internal error: SEnd should not be passed to expr"
     in
 
     (* Each basic block in a program ends with a "terminator" instruction i.e.
@@ -1040,7 +1053,7 @@ let translate (env, program) =
     let add_terminal builder instr =
       (* The current block where we're inserting instr *)
       match L.block_terminator (L.insertion_block builder) with
-        Some _ -> ()
+      | Some _ -> ()
       | None -> ignore (instr builder)
     in
 
@@ -1049,7 +1062,7 @@ let translate (env, program) =
       after the one generated by this call) *)
     (* Imperative nature of statement processing entails imperative OCaml *)
     let rec stmt (scope, builder) = function
-        SBlock sl ->
+      | SBlock sl ->
           let parent_scope = scope in
           let scope = { variables = StringMap.empty; parent = Some parent_scope } in
           let _, builder = List.fold_left stmt (scope, builder) sl in
@@ -1060,10 +1073,10 @@ let translate (env, program) =
       | SReturn e ->
           let _ =
             match fdecl.styp with
-                (* Special "return nothing" instr *)
-                A.Void -> L.build_ret_void builder
-                (* Build return statement *)
-              | _ -> L.build_ret (expr scope builder e) builder
+              (* Special "return nothing" instr *)
+            | A.Void -> L.build_ret_void builder
+              (* Build return statement *)
+            | _ -> L.build_ret (expr scope builder e) builder
           in
           (scope, builder)
       (* The order that we create and add the basic blocks for an If statement
@@ -1131,8 +1144,9 @@ let translate (env, program) =
     in
 
     (* If no builder is provided, make one *)
-    let builder = match builder with
-        None -> L.builder_at_end context (L.entry_block the_function)
+    let builder =
+      match builder with
+      | None -> L.builder_at_end context (L.entry_block the_function)
       | Some builder -> builder
     in
 
@@ -1154,9 +1168,9 @@ let translate (env, program) =
 
     (* Add a return if the last block falls off the end *)
     match fdecl.styp with
-        A.Void -> add_terminal builder L.build_ret_void
-      (* Semant should have detected if there was a missing required return *)
-      | _ -> ()
+    | A.Void -> add_terminal builder L.build_ret_void
+    (* Semant should have detected if there was a missing required return *)
+    | _ -> ()
   in
 
   let get_main_decl globals =
