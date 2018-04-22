@@ -7,4 +7,13 @@ void main() {
 
     println(int_of_f);
     println(float_of_i);
+
+    create matrix<int> m1 = [[1, 2, 3]];
+    create matrix<float> m2 = [[1.2, 3.7, 3.1]];
+
+    create matrix<float> m1f = to_float(m1);
+    create matrix<int> m2i = to_int(m2);
+
+    println(m1f);
+    println(m2i);
 }

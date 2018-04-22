@@ -85,5 +85,6 @@ void init_matrix(matrix_t *);
 int length(array_t *);
 int rows(matrix_t *);
 int cols(matrix_t *);
-int to_int(double);
-double to_float(int);
+int _float_to_int(double);
+double _int_to_float(int);
+matrix_t *_flip_matrix_type(matrix_t *);

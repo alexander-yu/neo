@@ -26,10 +26,6 @@ type translation_environment = {
 
 let make_err err = raise (Failure err)
 
-let nth_opt l n =
-  try Some (List.nth l n)
-  with Failure _ -> None
-
 let check (globals, functions) =
   (* add built-in functions *)
   let built_in_funcs =
@@ -73,84 +69,111 @@ let check (globals, functions) =
           if n_args = 1 && ret_type = Void then ()
           else make_err err
       | "deep_free" ->
-          let arg_is_array =
-            match nth_opt arg_types 0 with
-                Some (Array _) -> true
-              | _ -> false
+          let check_types arg_types ret_type =
+            let valid_args =
+              match List.nth arg_types 0 with
+                  Array _ -> true
+                | _ -> false
+            in
+            valid_args && ret_type = Void
           in
-          if n_args = 1 && arg_is_array && ret_type = Void then ()
+          if n_args = 1 && check_types arg_types ret_type then ()
           else make_err err
       | "free" ->
-          let arg_is_container =
-            match nth_opt arg_types 0 with
-                Some (Matrix _) | Some (Array _) -> true
-              | _ -> false
+          let check_types arg_types ret_type =
+            let valid_args =
+              match List.nth arg_types 0 with
+                  Matrix _ | Array _ -> true
+                | _ -> false
+            in
+            valid_args && ret_type = Void
           in
-          if n_args = 1 && arg_is_container && ret_type = Void then ()
+          if n_args = 1 && check_types arg_types ret_type then ()
           else make_err err
       | "length" ->
-          let arg_is_array =
-            match nth_opt arg_types 0 with
-                Some (Array _) -> true
-              | _ -> false
+          let check_types arg_types ret_type =
+            let valid_args =
+              match List.nth arg_types 0 with
+                  Array _ -> true
+                | _ -> false
+            in
+            valid_args && ret_type = Int
           in
-          if n_args = 1 && arg_is_array && ret_type = Int then ()
+          if n_args = 1 && check_types arg_types ret_type then ()
           else make_err err
       | "rows" | "cols" ->
-          let arg_is_matrix =
-            match nth_opt arg_types 0 with
-                Some (Matrix _) -> true
-              | _ -> false
+          let check_types arg_types ret_type =
+            let valid_args =
+              match List.nth arg_types 0 with
+                  Matrix _ -> true
+                | _ -> false
+            in
+            valid_args && ret_type = Int
           in
-          if n_args = 1 && arg_is_matrix && ret_type = Int then ()
+          if n_args = 1 && check_types arg_types ret_type then ()
           else make_err err
       | "to_int" ->
-          let arg_is_float = (nth_opt arg_types 0) = Some Float in
-          if n_args = 1 && arg_is_float && ret_type = Int then ()
+          let check_types arg_types ret_type =
+            (List.nth arg_types 0 = Float && ret_type = Int) ||
+            (List.nth arg_types 0 = Matrix Float && ret_type = Matrix Int)
+          in
+          if n_args = 1 && check_types arg_types ret_type then ()
           else make_err err
       | "to_float" ->
-          let arg_is_int = (nth_opt arg_types 0) = Some Int in
-          if n_args = 1 && arg_is_int && ret_type = Float then ()
+          let check_types arg_types ret_type =
+            (List.nth arg_types 0 = Int && ret_type = Float) ||
+            (List.nth arg_types 0 = Matrix Int && ret_type = Matrix Float)
+          in
+          if n_args = 1 && check_types arg_types ret_type then ()
           else make_err err
       | "insert" ->
-          let cont_type = nth_opt arg_types 0 in
-          let valid_args =
-            match cont_type with
-                Some (Array t) ->
-                  let index_is_int = (nth_opt arg_types 1) = Some Int in
-                  index_is_int && (nth_opt arg_types 2) = Some t
-              | Some (Matrix _) ->
-                  let index_is_int = (nth_opt arg_types 1) = Some Int in
-                  index_is_int && (nth_opt arg_types 2) = cont_type
-              | _ -> false
+          let check_types arg_types ret_type =
+            let cont_type = List.nth arg_types 0 in
+            let valid_args =
+              match cont_type with
+                  Array t ->
+                    let index_is_int = List.nth arg_types 1 = Int in
+                    index_is_int && List.nth arg_types 2 = t
+                | Matrix _ ->
+                    let index_is_int = List.nth arg_types 1 = Int in
+                    index_is_int && List.nth arg_types 2 = cont_type
+                | _ -> false
             in
-          if n_args = 3 && valid_args && Some ret_type = cont_type then ()
+            valid_args && ret_type = cont_type
+          in
+          if n_args = 3 && check_types arg_types ret_type then ()
           else make_err err
       | "delete" ->
-          let cont_type = nth_opt arg_types 0 in
-          let valid_args =
-            match cont_type with
-                Some (Array _) -> (nth_opt arg_types 1) = Some Int
-              | Some (Matrix _) -> (nth_opt arg_types 1) = Some Int
-              | _ -> false
+          let check_types arg_types ret_type =
+            let cont_type = List.nth arg_types 0 in
+            let valid_args =
+              match cont_type with
+                  Array _ -> List.nth arg_types 1 = Int
+                | Matrix _ -> List.nth arg_types 1 = Int
+                | _ -> false
             in
-          if n_args = 2 && valid_args && Some ret_type = cont_type then ()
+            valid_args && ret_type = cont_type
+          in
+          if n_args = 2 && check_types arg_types ret_type then ()
           else make_err err
       | "append" ->
-          let cont_type = nth_opt arg_types 0 in
-          let valid_args =
-            match cont_type with
-                Some (Array t) -> (nth_opt arg_types 1) = Some t
-              | Some (Matrix _) -> (nth_opt arg_types 1) = cont_type
-              | _ -> false
+          let check_types arg_types ret_type =
+            let cont_type = List.nth arg_types 0 in
+            let valid_args =
+              match cont_type with
+                  Array t -> List.nth arg_types 1 = t
+                | Matrix _ -> List.nth arg_types 1 = cont_type
+                | _ -> false
             in
-          if n_args = 2 && valid_args && Some ret_type = cont_type then ()
+            valid_args && ret_type = cont_type
+          in
+          if n_args = 2 && check_types arg_types ret_type then ()
           else make_err err
       | _ -> make_err err
   in
 
   let get_native_of_builtin fname arg_types =
-    let suffix_of_typ typ =
+    let abbrev_of_type typ =
       match typ with
         (* No need to include int/float; our native matrix structs already
          * embed type information, meaning our native functions for matrices
@@ -163,18 +186,29 @@ let check (globals, functions) =
         | Array _ when fname = "free" || fname = "delete" -> "array"
         | _ -> string_of_typ typ
     in
-    let type_suffix =
+    let type_tag =
       match fname with
-        (* The signatures of these functions are dependent only on the first
-         * argument, which is the container type; everything else can be
-         * inferred *)
-          "insert" | "delete" | "append" -> suffix_of_typ (List.hd arg_types)
-        | _ -> String.concat "_" (List.map suffix_of_typ arg_types)
+        (* The signatures of these functions are dependent only on the first arg *)
+          "insert" | "delete" | "append" | "to_int" | "to_float" ->
+            abbrev_of_type (List.hd arg_types)
+        | _ -> String.concat "_" (List.map abbrev_of_type arg_types)
     in
     match fname with
       (* These functions already only take one type class, so no need for a suffix *)
-        "length" | "rows" | "cols" | "to_int" | "to_float" -> fname
-      | _ -> "_" ^ fname ^ "_" ^ type_suffix
+        "length" | "rows" | "cols" -> fname
+      (* For these, if it's a matrix then we only need one native function to
+       * achieve both, since we're really just flipping the matrix type *)
+      | "to_int" | "to_float" ->
+          let is_matrix =
+            match List.hd arg_types with
+                Matrix _ -> true
+              | _ -> false
+          in
+          (* Otherwise, the type tag is a prefix; _float_to_int makes more sense
+           * then _to_int_float *)
+          if is_matrix then "_flip_matrix_type" else "_" ^ type_tag ^ "_" ^ fname
+      (* Otherwise, the type tag is a suffix *)
+      | _ -> "_" ^ fname ^ "_" ^ type_tag
   in
 
   (* Find all function types embedded within a type *)
@@ -470,6 +504,8 @@ let check (globals, functions) =
               match arg_types with
                   [Float] ->
                     (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                | [Matrix Float] ->
+                    (env, (Matrix Int, SCall((Func(arg_types, Int), SId native_fname), args')))
                 | _ -> make_err ("non-float argument in " ^ expr_s)
             )
         | "to_float" ->
@@ -478,6 +514,8 @@ let check (globals, functions) =
               match arg_types with
                   [Int] ->
                     (env, (Float, SCall((Func(arg_types, Float), SId native_fname), args')))
+                | [Matrix Int] ->
+                    (env, (Matrix Float, SCall((Func(arg_types, Matrix Float), SId native_fname), args')))
                 | _ -> make_err ("non-int argument " ^ expr_s)
             )
 

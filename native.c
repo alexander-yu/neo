@@ -548,10 +548,42 @@ int cols(matrix_t *mat) {
     return mat->cols;
 }
 
-int to_int(double d) {
+int _float_to_int(double d) {
     return (int) d;
 }
 
-double to_float(int i) {
+double _int_to_float(int i) {
     return (double) i;
+}
+
+matrix_t * _flip_matrix_type(matrix_t *mat) {
+    int rows = mat->rows;
+    int cols = mat->cols;
+    /* Flip the type */
+    enum mat_type type = 1 - mat->type;
+    matrix_t *res = malloc_matrix(rows, cols, type);
+
+    void *body;
+
+    switch (type) {
+        case Int: body = malloc(rows * cols * sizeof(int)); break;
+        case Float: body = malloc(rows * cols * sizeof(double)); break;
+    }
+
+    set_ptrs_matrix(res, body);
+
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            switch (type) {
+                case Int:
+                    res->body.ibody[i][j] = (int) mat->body.fbody[i][j];
+                    break;
+                case Float:
+                    res->body.fbody[i][j] = (double) mat->body.ibody[i][j];
+                    break;
+            }
+        }
+    }
+
+    return res;
 }
