@@ -238,6 +238,9 @@ let translate (env, program) =
   let mat_binop_func = L.declare_function "mat_binop" mat_binop_t the_module in
 
   (* Miscellaneous helper/built-ins *)
+  let init_array_t = L.function_type void_t [| pointer_t array_t; pointer_t i8_t |] in
+  let init_array_func = L.declare_function "init_array" init_array_t the_module in
+
   let init_matrix_t = L.function_type void_t [| pointer_t matrix_t |] in
   let init_matrix_func = L.declare_function "init_matrix" init_matrix_t the_module in
 
@@ -819,8 +822,14 @@ let translate (env, program) =
           let typ = A.typ_of_container t in
           build_array_lit typ raw_array builder
       | SEmpty_Array(t, n) ->
+          let ltype = ltype_of_typ t in
           let length = expr scope builder n in
-          build_empty_array t length builder
+          let arr_ptr = build_empty_array t length builder in
+          let init_ptr = L.build_alloca ltype "init_ptr" builder in
+          let _ = L.build_store (init t) init_ptr builder in
+          let init_ptr = L.build_bitcast init_ptr (pointer_t i8_t) "init_ptr" builder in
+          let _ = L.build_call init_array_func [| arr_ptr; init_ptr |] "" builder in
+          arr_ptr
       | SMatrix_Lit l ->
           let raw_elements = Array.map (Array.map (expr scope builder)) l in
           let typ = A.typ_of_container t in

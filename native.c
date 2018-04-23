@@ -523,6 +523,13 @@ void mat_binop(matrix_t *a, enum mat_op op, matrix_t *b, matrix_t *res) {
 }
 
 /* Miscellaneous helpers/built-ins */
+void init_array(array_t *arr, void *data) {
+    int length = arr->length;
+    for (int i = 0; i < length; i++) {
+        set_array(arr, i, data);
+    }
+}
+
 void init_matrix(matrix_t *mat) {
     int rows = mat->rows;
     int cols = mat->cols;
