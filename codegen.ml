@@ -1167,10 +1167,11 @@ let translate (env, program) =
     let _, builder = stmt (scope, builder) (SBlock fdecl.sbody) in
 
     (* Add a return if the last block falls off the end *)
-    match fdecl.styp with
-    | A.Void -> add_terminal builder L.build_ret_void
-    (* Semant should have detected if there was a missing required return *)
-    | _ -> ()
+    add_terminal builder (
+      match fdecl.styp with
+      | A.Void -> L.build_ret_void
+      | _ -> L.build_ret (init fdecl.styp)
+    )
   in
 
   let get_main_decl globals =
