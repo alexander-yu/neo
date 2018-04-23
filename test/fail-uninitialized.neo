@@ -1,6 +1,0 @@
-var int a;
-
-void main() {
-    create matrix<int> m;
-    m[0] = 1;
-}
