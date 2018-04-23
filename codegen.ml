@@ -112,8 +112,20 @@ let translate (env, program) =
   let empty_str = L.build_global_stringptr "" "empty_string" main_builder in
   let newline_str = L.build_global_stringptr "\n" "newline_string" main_builder in
   let null_value_err =
-    L.build_global_stringptr "Runtime error: attempted to access null value"
+    L.build_global_stringptr "Null value error: attempted to access null value"
     "null_value_err" main_builder
+  in
+  let div_zero_err =
+    L.build_global_stringptr "Zero division error: attmpted to perform division or modulo by 0"
+    "div_zero_err" main_builder
+  in
+  let exp_zero_err =
+    L.build_global_stringptr "Zero division error: attempted to raise 0 to a negative power"
+    "exp_zero_err" main_builder
+  in
+  let exp_neg_err =
+    L.build_global_stringptr "Arithmetic error: attempted to raise negative number to a non-integer power"
+    "exp_neg_err" main_builder
   in
 
   (* Declare built-in functions *)
@@ -278,6 +290,9 @@ let translate (env, program) =
 
   let check_t = L.function_type void_t [| i1_t; pointer_t i8_t |] in
   let check_func = L.declare_function "check" check_t the_module in
+
+  let floor_t = L.function_type float_t [| float_t |] in
+  let floor_func = L.declare_function "llvm.floor.f64" floor_t the_module in
 
   (* Collect native functions *)
   let print_funcs =
@@ -574,9 +589,46 @@ let translate (env, program) =
     let null = L.const_null ltype in
     (* We only use icmp here because the only null values in our language are for pointer
      * types (arrays, matrices, functions) *)
-    let cond = L.build_icmp L.Icmp.Ne value null "cond" builder in
-    let _ = build_check cond null_value_err builder in
-    ()
+    let null_value_cond = L.build_icmp L.Icmp.Ne value null "null_value_cond" builder in
+    build_check null_value_cond null_value_err builder
+  in
+
+  (* Builds a runtime check to see if binop values are valid *)
+  let build_arith_check l_value op r_value builder =
+    let ltype = L.type_of l_value in
+    let not_equal =
+      if ltype = float_t then L.build_fcmp L.Fcmp.One
+      else L.build_icmp L.Icmp.Ne
+    in
+    let at_least =
+      if ltype = float_t then L.build_fcmp L.Fcmp.Oge
+      else L.build_icmp L.Icmp.Sge
+    in
+    let zero =
+      if ltype = float_t then L.const_float float_t 0.
+      else L.const_int i32_t 0
+    in
+    let is_int value builder =
+      if ltype = float_t then
+        let floor = L.build_call floor_func [| value |] "floor" builder in
+        L.build_fcmp L.Fcmp.Oeq value floor "is_int" builder
+      (* Ints are tautologically ints *)
+      else L.const_int i1_t 1
+    in
+    match op with
+    | A.Div | A.Mod ->
+        let div_zero_cond = not_equal r_value zero "div_zero_cond" builder in
+        build_check div_zero_cond div_zero_err builder
+    | A.Exp ->
+        let l_nonzero = not_equal l_value zero "l_nonzero" builder in
+        let l_nonneg = at_least l_value zero "l_nonneg" builder in
+        let r_nonneg = at_least r_value zero "r_nonneg" builder in
+        let r_int = is_int r_value builder in
+        let exp_zero_cond = L.build_or l_nonzero r_nonneg "exp_zero_cond" builder in
+        let exp_neg_cond = L.build_or l_nonneg r_int "exp_neg_cond" builder in
+        let _ = build_check exp_zero_cond exp_zero_err builder in
+        build_check exp_neg_cond exp_neg_err builder
+    | _ -> ()
   in
 
   let add_func_decl (scope, functions) fdecl =
@@ -972,6 +1024,7 @@ let translate (env, program) =
           and e2' = expr scope builder e2 in
           if t1 = A.Float && t2 = A.Float then
           (
+            let _ = build_arith_check e1' op e2' builder in
             match op with
             | A.Add -> L.build_fadd e1' e2' "temp" builder
             | A.Sub -> L.build_fsub e1' e2' "temp" builder
@@ -989,6 +1042,7 @@ let translate (env, program) =
           )
           else if t1 = A.Int && t2 = A.Int then
           (
+            let _ = build_arith_check e1' op e2' builder in
             match op with
             | A.Add -> L.build_add e1' e2' "temp" builder
             | A.Sub -> L.build_sub e1' e2' "temp" builder

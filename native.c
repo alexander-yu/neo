@@ -489,9 +489,21 @@ matrix_t* mat_binop(matrix_t* a, enum mat_op op, matrix_t* b) {
                         case Add: r_body[i][j] = a_ij + b_ij; break;
                         case Sub: r_body[i][j] = a_ij - b_ij; break;
                         case Mult: r_body[i][j] = a_ij * b_ij; break;
-                        case Div: r_body[i][j] = a_ij / b_ij; break;
-                        case Mod: r_body[i][j] = a_ij % b_ij; break;
-                        case Exp: r_body[i][j] = iexp(a_ij, b_ij); break;
+                        case Div:
+                            check(b_ij != 0, DIV_ZERO_ERR);
+                            r_body[i][j] = a_ij / b_ij;
+                            break;
+                        case Mod:
+                            check(b_ij != 0, DIV_ZERO_ERR);
+                            r_body[i][j] = a_ij % b_ij;
+                            break;
+                        case Exp:
+                            check(a_ij != 0 || b_ij >= 0, EXP_ZERO_ERR);
+                            /* No need to perform check for negative base
+                             * raised to non-integer exponent; the exponents
+                             * here are inherently integers already */
+                            r_body[i][j] = iexp(a_ij, b_ij);
+                            break;
                         case Equal: r_body[i][j] = a_ij == b_ij; break;
                         case Neq: r_body[i][j] = a_ij != b_ij; break;
                         case Less: r_body[i][j] = a_ij < b_ij; break;
@@ -509,9 +521,19 @@ matrix_t* mat_binop(matrix_t* a, enum mat_op op, matrix_t* b) {
                         case Add: r_body[i][j] = a_ij + b_ij; break;
                         case Sub: r_body[i][j] = a_ij - b_ij; break;
                         case Mult: r_body[i][j] = a_ij * b_ij; break;
-                        case Div: r_body[i][j] = a_ij / b_ij; break;
-                        case Mod: r_body[i][j] = fmod(a_ij, b_ij); break;
-                        case Exp: r_body[i][j] = fexp(a_ij, b_ij); break;
+                        case Div:
+                            check(b_ij != 0., DIV_ZERO_ERR);
+                            r_body[i][j] = a_ij / b_ij;
+                            break;
+                        case Mod:
+                            check(b_ij != 0., DIV_ZERO_ERR);
+                            r_body[i][j] = fmod(a_ij, b_ij);
+                            break;
+                        case Exp:
+                            check(a_ij != 0. || b_ij >= 0, EXP_ZERO_ERR);
+                            check(a_ij >= 0. || floor(b_ij) == b_ij, EXP_NEG_ERR);
+                            r_body[i][j] = fexp(a_ij, b_ij);
+                            break;
                         case Equal: r_body[i][j] = (a_ij == b_ij) ? 1. : 0.; break;
                         case Neq: r_body[i][j] = (a_ij != b_ij) ? 1. : 0.; break;
                         case Less: r_body[i][j] = (a_ij < b_ij) ? 1. : 0.; break;

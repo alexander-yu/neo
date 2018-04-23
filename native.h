@@ -1,7 +1,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-const char* NULL_VALUE_ERR = "Runtime error: attempted to access null value";
+const char* NULL_VALUE_ERR = "Null value error: attempted to access null value";
+const char* DIV_ZERO_ERR = "Zero division error: attmpted to perform division or modulo by 0";
+const char* EXP_ZERO_ERR = "Zero division error: attempted to raise 0 to a negative power";
+const char* EXP_NEG_ERR = "Arithmetic error: attempted to raise negative number to a non-integer power";
 
 enum mat_type {Int, Float};
 enum mat_op {

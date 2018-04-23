@@ -131,11 +131,12 @@ CheckFail() {
 
     generatedfiles=""
 
-    generatedfiles="$generatedfiles ${basename}.err ${basename}.diff"
     if [ $2 -eq 0 ] ; then
+        generatedfiles="$generatedfiles ${basename}.err ${basename}.diff"
         RunFail "$NEO" "<" $1 "2>" "${basename}.err" ">>" $globallog
         Compare ${basename}.err ${reffile}.err ${basename}.diff
     else
+        generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out ${basename}.err"
         Run "$NEO" "$1" ">" "${basename}.ll" &&
         Run "$LLC" "${basename}.ll" ">" "${basename}.s" &&
         Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" "-lm" &&
