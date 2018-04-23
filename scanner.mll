@@ -2,7 +2,8 @@
 
 {
   open Parser
-  let fail ch = raise (Failure("illegal character " ^ Char.escaped ch))
+  exception Scan_error of string
+  let fail ch = raise (Scan_error (Char.escaped ch))
 }
 
 let digit = ['0' - '9']
@@ -12,8 +13,9 @@ let simple_char = [' '-'!' '#'-'&' '('-'[' ']'-'~']
 let escape_char = ['t' 'r' 'n' '\'' '\"' '\\']
 
 rule token = parse
-  [' ' '\t' '\r' '\n'] { token lexbuf } (* Whitespace *)
-| "/*"     { comment lexbuf }           (* Comments *)
+  [' ' '\t' '\r'] { token lexbuf }
+| '\n'     { Lexing.new_line lexbuf; token lexbuf }
+| "/*"     { comment lexbuf }
 
 (* Brackets *)
 | '('      { LPAREN }

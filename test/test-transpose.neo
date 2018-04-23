@@ -1,0 +1,7 @@
+void main(){
+    create matrix<int> a = [[1,2],[3,4],[5,6]];
+    create matrix<float> b = [[1.5,4.5,4.2,3.1],[1.,-4.2,5.3,6.1]];
+
+    println(itranspose(a));
+    println(ftranspose(b));
+}
