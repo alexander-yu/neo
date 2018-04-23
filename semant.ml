@@ -69,21 +69,15 @@ let check (globals, functions) =
         else make_err err
     | "deep_free" ->
         let check_types arg_types ret_type =
-          let valid_args =
-            match List.nth arg_types 0 with
-            | Array _ -> true
-            | _ -> false
-          in
-          valid_args && ret_type = Void
+          is_array (List.hd arg_types) && ret_type = Void
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
     | "free" ->
         let check_types arg_types ret_type =
           let valid_args =
-            match List.nth arg_types 0 with
-            | Matrix _ | Array _ -> true
-            | _ -> false
+            is_array (List.hd arg_types) ||
+            is_matrix (List.hd arg_types)
           in
           valid_args && ret_type = Void
         in
@@ -91,43 +85,33 @@ let check (globals, functions) =
         else make_err err
     | "length" ->
         let check_types arg_types ret_type =
-          let valid_args =
-            match List.nth arg_types 0 with
-            | Array _ -> true
-            | _ -> false
-          in
-          valid_args && ret_type = Int
+          is_array (List.hd arg_types) && ret_type = Int
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
     | "rows" | "cols" ->
         let check_types arg_types ret_type =
-          let valid_args =
-            match List.nth arg_types 0 with
-            | Matrix _ -> true
-            | _ -> false
-          in
-          valid_args && ret_type = Int
+          is_matrix (List.hd arg_types) && ret_type = Int
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
     | "to_int" ->
         let check_types arg_types ret_type =
-          (List.nth arg_types 0 = Float && ret_type = Int) ||
-          (List.nth arg_types 0 = Matrix Float && ret_type = Matrix Int)
+          (List.hd arg_types = Float && ret_type = Int) ||
+          (List.hd arg_types = Matrix Float && ret_type = Matrix Int)
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
     | "to_float" ->
         let check_types arg_types ret_type =
-          (List.nth arg_types 0 = Int && ret_type = Float) ||
-          (List.nth arg_types 0 = Matrix Int && ret_type = Matrix Float)
+          (List.hd arg_types = Int && ret_type = Float) ||
+          (List.hd arg_types = Matrix Int && ret_type = Matrix Float)
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
     | "insert" ->
         let check_types arg_types ret_type =
-          let cont_type = List.nth arg_types 0 in
+          let cont_type = List.hd arg_types in
           let valid_args =
             match cont_type with
             | Array t ->
@@ -144,7 +128,7 @@ let check (globals, functions) =
         else make_err err
     | "delete" ->
         let check_types arg_types ret_type =
-          let cont_type = List.nth arg_types 0 in
+          let cont_type = List.hd arg_types in
           let valid_args =
             match cont_type with
             | Array _ -> List.nth arg_types 1 = Int
@@ -157,7 +141,7 @@ let check (globals, functions) =
         else make_err err
     | "append" ->
         let check_types arg_types ret_type =
-          let cont_type = List.nth arg_types 0 in
+          let cont_type = List.hd arg_types in
           let valid_args =
             match cont_type with
             | Array t -> List.nth arg_types 1 = t
@@ -201,14 +185,10 @@ let check (globals, functions) =
     (* For these, if it's a matrix then we only need one native function to
       * achieve both, since we're really just flipping the matrix type *)
     | "to_int" | "to_float" ->
-        let is_matrix =
-          match List.hd arg_types with
-          | Matrix _ -> true
-          | _ -> false
-        in
         (* Otherwise, the type tag is a prefix; _float_to_int makes more sense
           * then _to_int_float *)
-        if is_matrix then "_flip_matrix_type" else "_" ^ type_tag ^ "_" ^ fname
+        if is_matrix (List.hd arg_types) then "_flip_matrix_type"
+        else "_" ^ type_tag ^ "_" ^ fname
     (* Otherwise, the type tag is a suffix *)
     | _ -> "_" ^ fname ^ "_" ^ type_tag
   in
@@ -674,7 +654,7 @@ let check (globals, functions) =
         in
         (* We check if one of the operands is a matrix; if so, the result
           * will also be a matrix due to broadcasting *)
-        let is_matrix =
+        let res_is_matrix =
           match t1, t2 with
           | (Matrix _, _) | (_, Matrix _) -> true
           | (_, _) -> false
@@ -688,12 +668,12 @@ let check (globals, functions) =
               let base_t1 = check_arith_operand t1 in
               let base_t2 = check_arith_operand t2 in
               let _ = if base_t1 <> base_t2 then make_err err in
-              if is_matrix then Matrix base_t1 else base_t1
+              if res_is_matrix then Matrix base_t1 else base_t1
           | Equal | Neq ->
-              if not is_matrix && t1 = t2 then Bool
+              if not res_is_matrix && t1 = t2 then Bool
               (* Instead of returning matrix of bools, we return a
               * matrix of 0s and 1s *)
-              else if is_matrix then
+              else if res_is_matrix then
                 let base_t1 = check_arith_operand t1 in
                 let base_t2 = check_arith_operand t2 in
                 let _ = if base_t1 <> base_t2 then make_err err in
@@ -705,9 +685,9 @@ let check (globals, functions) =
               let _ = if base_t1 <> base_t2 then make_err err in
               (* Instead of returning matrix of bools, we return a
               * matrix of 0s and 1s *)
-              if is_matrix then Matrix base_t1 else Bool
+              if res_is_matrix then Matrix base_t1 else Bool
           | And | Or when t1 = t2 && t1 = Bool -> Bool
-          | MatMult when t1 = t2 && is_matrix -> t1
+          | MatMult when t1 = t2 && res_is_matrix -> t1
           | _ -> make_err err
         in
         (env, (ty, SBinop((t1, e1'), op, (t2, e2'))))

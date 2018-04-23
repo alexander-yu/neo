@@ -1004,13 +1004,16 @@ let translate (env, program) =
             | A.Geq -> L.build_icmp L.Icmp.Sge e1' e2' "temp" builder
             | _ -> make_err err
           )
-          else if t1 = A.Bool && t2 = A.Bool then
+          else if t1 = A.Bool then
           (
             match op with
             | A.And -> L.build_and e1' e2' "temp" builder
             | A.Or -> L.build_or e1' e2' "temp" builder
             | _ -> make_err err
           )
+          (* In these cases, we just do pointer comparison *)
+          else if t1 = A.String || A.is_array t1 || A.is_func t1 then
+            L.build_icmp L.Icmp.Eq e1' e2' "temp" builder
           (* Otherwise, it's a matrix result (either int or float) *)
           else
             (* Wrap broadcasted scalars into temp 1x1 matrices stored on the stack *)

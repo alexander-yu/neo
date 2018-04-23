@@ -79,6 +79,18 @@ let typ_of_container = function
   | Matrix t -> t
   | _ -> raise (Failure "internal error: typ_of_container was given non-container")
 
+let is_matrix = function
+  | Matrix _ -> true
+  | _ -> false
+
+let is_array = function
+  | Array _ -> true
+  | _ -> false
+
+let is_func = function
+  | Func(_, _) | BuiltInFunc -> true
+  | _ -> false
+
 (* Pretty-printing functions *)
 
 let string_of_op = function
