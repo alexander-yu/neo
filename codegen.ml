@@ -172,8 +172,7 @@ let translate (env, program) =
   let set_array_func = L.declare_function "set_array" set_array_t the_module in
 
   let slice_array_t =
-    L.function_type void_t
-    [| pointer_t array_t; pointer_t slice_t; pointer_t array_t |]
+    L.function_type (pointer_t array_t) [| pointer_t array_t; pointer_t slice_t |]
   in
   let slice_array_func = L.declare_function "slice_array" slice_array_t the_module in
 
@@ -203,8 +202,8 @@ let translate (env, program) =
   let set_matrix_func = L.declare_function "set_matrix" set_matrix_t the_module in
 
   let slice_matrix_t =
-    L.function_type void_t
-    [| pointer_t matrix_t; pointer_t slice_t; pointer_t slice_t; pointer_t matrix_t |]
+    L.function_type (pointer_t matrix_t)
+    [| pointer_t matrix_t; pointer_t slice_t; pointer_t slice_t |]
   in
   let slice_matrix_func = L.declare_function "slice_matrix" slice_matrix_t the_module in
 
@@ -236,12 +235,14 @@ let translate (env, program) =
   let fexp_t = L.function_type float_t [| float_t; float_t |] in
   let fexp_func = L.declare_function "fexp" fexp_t the_module in
 
-  let matmult_t = L.function_type void_t [| pointer_t matrix_t; pointer_t matrix_t; pointer_t matrix_t |] in
+  let matmult_t =
+    L.function_type (pointer_t matrix_t) [| pointer_t matrix_t; pointer_t matrix_t |]
+  in
   let matmult_func = L.declare_function "matmult" matmult_t the_module in
 
   let mat_binop_t =
-    L.function_type void_t
-    [| pointer_t matrix_t; i32_t; pointer_t matrix_t; pointer_t matrix_t |]
+    L.function_type (pointer_t matrix_t)
+    [| pointer_t matrix_t; i32_t; pointer_t matrix_t |]
   in
   let mat_binop_func = L.declare_function "mat_binop" mat_binop_t the_module in
 
@@ -803,25 +804,6 @@ let translate (env, program) =
         | (_, _) -> make_err "internal error: build_dbl_slice given non-slice"
       in
 
-      let build_slice_delta slice builder =
-        let slice_start_ptr = L.build_struct_gep slice 0 "slice_start_ptr" builder in
-        let slice_end_ptr = L.build_struct_gep slice 1 "slice_end_ptr" builder in
-        let slice_start = L.build_load slice_start_ptr "slice_start" builder in
-        let slice_end = L.build_load slice_end_ptr "slice_end" builder in
-        L.build_sub slice_end slice_start "delta" builder
-      in
-
-      let build_slice_array typ slice builder =
-        let length = build_slice_delta slice builder in
-        build_empty_array typ length builder
-      in
-
-      let build_slice_matrix typ row_slice col_slice builder =
-        let rows = build_slice_delta row_slice builder in
-        let cols = build_slice_delta col_slice builder in
-        build_empty_matrix typ rows cols builder
-      in
-
       let sexpr_of_sindex = function
         | SIndex e -> e
         | _ -> make_err "internal error: sexpr_of_sindex given non-index"
@@ -901,23 +883,16 @@ let translate (env, program) =
                 L.build_load ptr "mat_element" builder
           )
       | SSlice_Expr s ->
-          let typ = A.typ_of_container t in
           (
             match s with
             | SSgl_Slice(e, s) ->
                 let e' = expr scope builder e in
                 let s' = build_sgl_slice e' s builder in
-                let res_ptr = build_slice_array typ s' builder in
-                let _ = L.build_call slice_array_func [| e'; s'; res_ptr |] "" builder in
-                res_ptr
+                L.build_call slice_array_func [| e'; s' |] "arr_slice" builder
             | SDbl_Slice(e, s1, s2) ->
                 let e' = expr scope builder e in
                 let s1', s2' = build_dbl_slice e' s1 s2 builder in
-                let res_ptr = build_slice_matrix typ s1' s2' builder in
-                let _ =
-                  L.build_call slice_matrix_func [| e'; s1'; s2'; res_ptr |] "" builder
-                in
-                res_ptr
+                L.build_call slice_matrix_func [| e'; s1'; s2' |] "mat_slice" builder
           )
       | SNoexpr -> init t
       | SId s ->
@@ -1038,7 +1013,6 @@ let translate (env, program) =
           )
           (* Otherwise, it's a matrix result (either int or float) *)
           else
-            let t = A.typ_of_container t in
             (* Wrap broadcasted scalars into temp 1x1 matrices stored on the stack *)
             let e1' =
               if t1 == A.Int || t1 == A.Float
@@ -1052,31 +1026,11 @@ let translate (env, program) =
             in
             (
               match op with
-              | A.MatMult ->
-                  let rows = get_rows e1' builder in
-                  let cols = get_cols e2' builder in
-                  let mat = build_empty_matrix t rows cols builder in
-                  let _ = L.build_call matmult_func [| e1'; e2'; mat|] "" builder in
-                  mat
+              | A.MatMult -> L.build_call matmult_func [| e1'; e2' |] "temp" builder
               | A.And | A.Or -> make_err err
               | _ ->
-                  let max e1' e2' builder =
-                    let cond = L.build_icmp L.Icmp.Sgt e1' e2' "max_cond" builder in
-                    L.build_select cond e1' e2' "max_v" builder
-                  in
                   let opcode = L.const_int i32_t (get_mat_opcode op) in
-                  let rows_1 = get_rows e1' builder in
-                  let cols_1 = get_cols e1' builder in
-                  let rows_2 = get_rows e2' builder in
-                  let cols_2 = get_cols e2' builder in
-                  let rows = max rows_1 rows_2 builder in
-                  let cols = max cols_1 cols_2 builder in
-                  let mat = build_empty_matrix t rows cols builder in
-                  let _ =
-                    L.build_call mat_binop_func
-                    [| e1'; opcode; e2'; mat |] ""  builder
-                  in
-                  mat
+                  L.build_call mat_binop_func [| e1'; opcode; e2' |] "temp"  builder
             )
       | SUnop(op, e) ->
           let t, _ = e in
@@ -1087,7 +1041,7 @@ let translate (env, program) =
             | A.Neg -> L.build_neg
             | A.Not -> L.build_not
           in
-          op' e' "tmp" builder
+          op' e' "temp" builder
       | SCall(f, args) ->
           let f' = expr scope builder f in
           let args' = List.map (expr scope builder) args in

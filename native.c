@@ -41,19 +41,19 @@ void _print_float(double d) {
     printf("%g", d);
 }
 
-void _print_string(char *s) {
+void _print_string(char* s) {
     printf("%s", s);
 }
 
-void _print_matrix(matrix_t *m) {
+void _print_matrix(matrix_t* m) {
     print_matrix(m, false);
 }
 
-void print_function(void *p) {
+void print_function(void* p) {
     printf("function at %p", p);
 }
 
-void print_matrix(matrix_t *mat, bool flat) {
+void print_matrix(matrix_t* mat, bool flat) {
     printf("[");
     int rows = mat->rows;
     int cols = mat->cols;
@@ -91,7 +91,7 @@ void print_matrix(matrix_t *mat, bool flat) {
     printf("]");
 }
 
-void print_array(array_t *arr, void(*print_element)(void *)) {
+void print_array(array_t* arr, void(*print_element)(void*)) {
     int length = arr->length;
     printf("{|");
     for (int i = 0; i < length; i++) {
@@ -104,7 +104,7 @@ void print_array(array_t *arr, void(*print_element)(void *)) {
 }
 
 /* Array/matrix memory functions */
-void _free_matrix(matrix_t *mat) {
+void _free_matrix(matrix_t* mat) {
     union mat_body body = mat->body;
     enum mat_type type = mat->type;
 
@@ -116,14 +116,14 @@ void _free_matrix(matrix_t *mat) {
     free(mat);
 }
 
-void _free_array(array_t *arr) {
-    void **body = arr->body;
+void _free_array(array_t* arr) {
+    void** body = arr->body;
     free(body[0]);
     free(body);
     free(arr);
 }
 
-void deep_free_array(array_t *arr, void(*free_element)(void *)) {
+void deep_free_array(array_t* arr, void(*free_element)(void*)) {
     int length = arr->length;
 
     for (int i = 0; i < length; i++) {
@@ -133,77 +133,93 @@ void deep_free_array(array_t *arr, void(*free_element)(void *)) {
     _free_array(arr);
 }
 
-void set_ptrs_matrix(matrix_t *mat, void *body) {
+void set_ptrs_matrix(matrix_t* mat, void* body) {
     int rows = mat->rows;
     int cols = mat->cols;
     for (int i = 0; i < rows; i++) {
         switch (mat->type) {
             case Int:
-                mat->body.ibody[i] = (int *)((char *)body + i * cols * sizeof(int));
+                mat->body.ibody[i] = (int*)((char*)body + i * cols * sizeof(int));
                 break;
             case Float:
-                mat->body.fbody[i] = (double *)((char *)body + (i * cols * sizeof(double)));
+                mat->body.fbody[i] = (double*)((char*)body + (i * cols * sizeof(double)));
                 break;
         }
     }
 }
 
-void set_ptrs_array(array_t *arr, void *body) {
+void set_ptrs_array(array_t* arr, void* body) {
     int length = arr->length;
     size_t size = arr->size;
     for (int i = 0; i < length; i++) {
-        arr->body[i] = (void *)((char *)body + i * size);
+        arr->body[i] = (void*)((char*)body + i * size);
     }
 }
 
-array_t * malloc_array(int length, size_t size, bool has_ptrs) {
-    array_t *arr = malloc(sizeof(array_t));
-    arr->body = malloc(length * sizeof(void *));
+array_t* malloc_array(int length, size_t size, bool has_ptrs) {
+    array_t* arr = malloc(sizeof(array_t));
+    arr->body = malloc(length * sizeof(void*));
     arr->length = length;
     arr->size = size;
     arr->has_ptrs = has_ptrs;
     return arr;
 }
 
-matrix_t * malloc_matrix(int rows, int cols, enum mat_type type) {
-    matrix_t *mat = malloc(sizeof(matrix_t));
+matrix_t* malloc_matrix(int rows, int cols, enum mat_type type) {
+    matrix_t* mat = malloc(sizeof(matrix_t));
     mat->rows = rows;
     mat->cols = cols;
     mat->type = type;
 
     union mat_body body;
+    void *raw_body;
 
     switch (type) {
-        case Int: body.ibody = malloc(rows * sizeof(int *)); break;
-        case Float: body.fbody = malloc(rows * sizeof(double *)); break;
+        case Int:
+            body.ibody = malloc(rows * sizeof(int*));
+            raw_body = malloc(rows * cols * sizeof(int));
+            break;
+        case Float:
+            body.fbody = malloc(rows * sizeof(double*));
+            raw_body = malloc(rows * cols * sizeof(double));
+            break;
     }
 
     mat->body = body;
+    set_ptrs_matrix(mat, raw_body);
     return mat;
 }
 
 /* Array index/slice functions */
-void *get_array(array_t *arr, int i) {
+void* get_array(array_t* arr, int i) {
     if (arr->has_ptrs) {
-        check(*(void **)arr->body[i] != NULL, NULL_VALUE_ERR);
+        check(*(void**)arr->body[i] != NULL, NULL_VALUE_ERR);
     }
     return arr->body[i];
 }
 
-void set_array(array_t *arr, int i, void *data) {
+void set_array(array_t* arr, int i, void* data) {
     /* Perform a shallow copy */
     memcpy(arr->body[i], data, arr->size);
 }
 
-void slice_array(array_t *arr, slice_t *slice, array_t *res) {
+array_t* slice_array(array_t* arr, slice_t* slice) {
     int start_i = slice->start;
     int end_i = slice->end;
-    for (int i = start_i; i < end_i; i++) {
-        res->body[i - start_i] = get_array(arr, i);
+    int length = end_i - start_i;
+    array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
+
+    void* body = malloc(length * sizeof(void*));
+    set_ptrs_array(res, body);
+
+    for (int i = 0; i < length; i++) {
+        set_array(res, i, get_array(arr, i + start_i));
     }
+
+    return res;
 }
 
-void set_slice_array(array_t *arr, slice_t *slice, array_t *data) {
+void set_slice_array(array_t* arr, slice_t* slice, array_t* data) {
     int start_i = slice->start;
     int end_i = slice->end;
     for (int i = start_i; i < end_i; i++) {
@@ -211,11 +227,11 @@ void set_slice_array(array_t *arr, slice_t *slice, array_t *data) {
     }
 }
 
-array_t * insert_array(array_t *arr, int pos_i, void *data) {
+array_t* insert_array(array_t* arr, int pos_i, void* data) {
     int length = arr->length + 1;
-    array_t *res = malloc_array(length, arr->size, arr->has_ptrs);
+    array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
 
-    void *body = malloc(length * sizeof(void *));
+    void* body = malloc(length * sizeof(void*));
     set_ptrs_array(res, body);
 
     for (int i = 0; i < length; i++) {
@@ -231,11 +247,11 @@ array_t * insert_array(array_t *arr, int pos_i, void *data) {
     return res;
 }
 
-array_t * _delete_array(array_t *arr, int pos_i) {
+array_t* _delete_array(array_t* arr, int pos_i) {
     int length = arr->length - 1;
-    array_t *res = malloc_array(length, arr->size, arr->has_ptrs);
+    array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
 
-    void *body = malloc(length * sizeof(void *));
+    void* body = malloc(length * sizeof(void*));
     set_ptrs_array(res, body);
 
     for (int i = 0; i < length; i++) {
@@ -249,11 +265,11 @@ array_t * _delete_array(array_t *arr, int pos_i) {
     return res;
 }
 
-array_t * append_array(array_t *arr, void *data) {
+array_t* append_array(array_t* arr, void* data) {
     int length = arr->length + 1;
-    array_t *res = malloc_array(length, arr->size, arr->has_ptrs);
+    array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
 
-    void *body = malloc(length * sizeof(void *));
+    void* body = malloc(length * sizeof(void*));
     set_ptrs_array(res, body);
 
     for (int i = 0; i < length; i++) {
@@ -268,10 +284,10 @@ array_t * append_array(array_t *arr, void *data) {
 }
 
 /* Matrix index/slice functions */
-void * get_matrix(matrix_t *mat, int i, int j) {
+void* get_matrix(matrix_t* mat, int i, int j) {
     switch (mat->type) {
-        case Int: return (void *)&mat->body.ibody[i][j];
-        case Float: return (void *)&mat->body.fbody[i][j];
+        case Int: return (void*)&mat->body.ibody[i][j];
+        case Float: return (void*)&mat->body.fbody[i][j];
     }
     /**
      * This is for placating GCC warnings, since get_matrix is
@@ -282,33 +298,41 @@ void * get_matrix(matrix_t *mat, int i, int j) {
     exit(EXIT_FAILURE);
 }
 
-void set_matrix(matrix_t *mat, int i, int j, void *data) {
+void set_matrix(matrix_t* mat, int i, int j, void* data) {
     switch (mat->type) {
-        case Int: mat->body.ibody[i][j] = *(int *)data; break;
-        case Float: mat->body.fbody[i][j] = *(double *)data; break;
+        case Int: mat->body.ibody[i][j] = *(int*)data; break;
+        case Float: mat->body.fbody[i][j] = *(double*)data; break;
     }
 }
 
-void slice_matrix(matrix_t *mat, slice_t *row_slice, slice_t *col_slice, matrix_t *res) {
+matrix_t* slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice) {
     int start_i = row_slice->start;
     int end_i = row_slice->end;
     int start_j = col_slice->start;
     int end_j = col_slice->end;
-    for (int i = start_i; i < end_i; i++) {
-        for (int j = start_j; j < end_j; j++) {
+
+    int rows = end_i - start_i;
+    int cols = end_j - start_j;
+    enum mat_type type = mat->type;
+    matrix_t* res = malloc_matrix(rows, cols, type);
+
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
             switch (mat->type) {
                 case Int:
-                    res->body.ibody[i - start_i][j - start_j] = mat->body.ibody[i][j];
+                    res->body.ibody[i][j] = mat->body.ibody[i + start_i][j + start_j];
                     break;
                 case Float:
-                    res->body.fbody[i - start_i][j - start_j] = mat->body.fbody[i][j];
+                    res->body.fbody[i][j] = mat->body.fbody[i + start_i][j + start_j];
                     break;
             }
         }
     }
+
+    return res;
 }
 
-void set_slice_matrix(matrix_t *mat, slice_t *row_slice, slice_t *col_slice, matrix_t *data) {
+void set_slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice, matrix_t* data) {
     int start_i = row_slice->start;
     int end_i = row_slice->end;
     int start_j = col_slice->start;
@@ -327,20 +351,11 @@ void set_slice_matrix(matrix_t *mat, slice_t *row_slice, slice_t *col_slice, mat
     }
 }
 
-matrix_t * _insert_matrix(matrix_t *mat, int row_i, matrix_t *row) {
+matrix_t* _insert_matrix(matrix_t* mat, int row_i, matrix_t* row) {
     int rows = mat->rows + 1;
     int cols = mat->cols;
     enum mat_type type = mat->type;
-    matrix_t *res = malloc_matrix(rows, cols, type);
-
-    void *body;
-
-    switch (type) {
-        case Int: body = malloc(rows * cols * sizeof(int)); break;
-        case Float: body = malloc(rows * cols * sizeof(double)); break;
-    }
-
-    set_ptrs_matrix(res, body);
+    matrix_t* res = malloc_matrix(rows, cols, type);
 
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -366,20 +381,11 @@ matrix_t * _insert_matrix(matrix_t *mat, int row_i, matrix_t *row) {
     return res;
 }
 
-matrix_t * _delete_matrix(matrix_t *mat, int row_i) {
+matrix_t* _delete_matrix(matrix_t* mat, int row_i) {
     int rows = mat->rows - 1;
     int cols = mat->cols;
     enum mat_type type = mat->type;
-    matrix_t *res = malloc_matrix(rows, cols, type);
-
-    void *body;
-
-    switch (type) {
-        case Int: body = malloc(rows * cols * sizeof(int)); break;
-        case Float: body = malloc(rows * cols * sizeof(double)); break;
-    }
-
-    set_ptrs_matrix(res, body);
+    matrix_t* res = malloc_matrix(rows, cols, type);
 
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -400,20 +406,11 @@ matrix_t * _delete_matrix(matrix_t *mat, int row_i) {
     return res;
 }
 
-matrix_t * _append_matrix(matrix_t *mat, matrix_t *row) {
+matrix_t* _append_matrix(matrix_t* mat, matrix_t* row) {
     int rows = mat->rows + 1;
     int cols = mat->cols;
     enum mat_type type = mat->type;
-    matrix_t *res = malloc_matrix(rows, cols, type);
-
-    void *body;
-
-    switch (type) {
-        case Int: body = malloc(rows * cols * sizeof(int)); break;
-        case Float: body = malloc(rows * cols * sizeof(double)); break;
-    }
-
-    set_ptrs_matrix(res, body);
+    matrix_t* res = malloc_matrix(rows, cols, type);
 
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -443,9 +440,12 @@ double fexp(double a, double b){
     return pow(a, b);
 }
 
-void matmult(matrix_t *a, matrix_t *b, matrix_t *res){
-    int rows = res->rows;
-    int cols = res->cols;
+matrix_t* matmult(matrix_t* a, matrix_t* b){
+    int rows = a->rows;
+    int cols = b->cols;
+    enum mat_type type = a->type;
+    matrix_t* res = malloc_matrix(rows, cols, type);
+
     for (int i = 0; i < rows; i++){
         for (int j = 0; j < cols; j++){
             switch (res->type) {
@@ -464,11 +464,16 @@ void matmult(matrix_t *a, matrix_t *b, matrix_t *res){
             }
         }
     }
+
+    return res;
 }
 
-void mat_binop(matrix_t *a, enum mat_op op, matrix_t *b, matrix_t *res) {
-    int rows = res->rows;
-    int cols = res->cols;
+matrix_t* mat_binop(matrix_t* a, enum mat_op op, matrix_t* b) {
+    int rows = max(a->rows, b->rows);
+    int cols = max(a->cols, b->cols);
+    enum mat_type type = a->type;
+    matrix_t* res = malloc_matrix(rows, cols, type);
+
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
             int a_i = min(a->rows - 1, i);
@@ -477,7 +482,7 @@ void mat_binop(matrix_t *a, enum mat_op op, matrix_t *b, matrix_t *res) {
             int b_j = min(b->cols - 1, j);
             switch (res->type) {
                 case Int: {
-                    int **r_body = res->body.ibody;
+                    int** r_body = res->body.ibody;
                     int a_ij = a->body.ibody[a_i][a_j];
                     int b_ij = b->body.ibody[b_i][b_j];
                     switch (op) {
@@ -497,7 +502,7 @@ void mat_binop(matrix_t *a, enum mat_op op, matrix_t *b, matrix_t *res) {
                     break;
                 }
                 case Float: {
-                    double **r_body = res->body.fbody;
+                    double** r_body = res->body.fbody;
                     double a_ij = a->body.fbody[a_i][a_j];
                     double b_ij = b->body.fbody[b_i][b_j];
                     switch (op) {
@@ -519,17 +524,19 @@ void mat_binop(matrix_t *a, enum mat_op op, matrix_t *b, matrix_t *res) {
             }
         }
     }
+
+    return res;
 }
 
 /* Miscellaneous helpers/built-ins */
-void init_array(array_t *arr, void *data) {
+void init_array(array_t* arr, void* data) {
     int length = arr->length;
     for (int i = 0; i < length; i++) {
         set_array(arr, i, data);
     }
 }
 
-void init_matrix(matrix_t *mat) {
+void init_matrix(matrix_t* mat) {
     int rows = mat->rows;
     int cols = mat->cols;
     for (int i = 0; i < rows; i++) {
@@ -542,15 +549,15 @@ void init_matrix(matrix_t *mat) {
     }
 }
 
-int length(array_t *arr) {
+int length(array_t* arr) {
     return arr->length;
 }
 
-int rows(matrix_t *mat) {
+int rows(matrix_t* mat) {
     return mat->rows;
 }
 
-int cols(matrix_t *mat) {
+int cols(matrix_t* mat) {
     return mat->cols;
 }
 
@@ -562,21 +569,12 @@ double _int_to_float(int i) {
     return (double) i;
 }
 
-matrix_t * _flip_matrix_type(matrix_t *mat) {
+matrix_t* _flip_matrix_type(matrix_t* mat) {
     int rows = mat->rows;
     int cols = mat->cols;
     /* Flip the type */
     enum mat_type type = 1 - mat->type;
-    matrix_t *res = malloc_matrix(rows, cols, type);
-
-    void *body;
-
-    switch (type) {
-        case Int: body = malloc(rows * cols * sizeof(int)); break;
-        case Float: body = malloc(rows * cols * sizeof(double)); break;
-    }
-
-    set_ptrs_matrix(res, body);
+    matrix_t* res = malloc_matrix(rows, cols, type);
 
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -598,7 +596,7 @@ void die() {
     exit(EXIT_FAILURE);
 }
 
-void check(const bool cond, const char *err) {
+void check(const bool cond, const char* err) {
     if (!cond) {
         fprintf(stderr, "%s\n", err);
         die();
