@@ -92,11 +92,10 @@ void print_matrix(matrix_t *mat, bool flat) {
 }
 
 void print_array(array_t *arr, void(*print_element)(void *)) {
-    void **body = arr->body;
     int length = arr->length;
     printf("{|");
     for (int i = 0; i < length; i++) {
-        print_element(body[i]);
+        print_element(get_array(arr, i));
         if (i != length - 1) {
             printf(", ");
         }
@@ -125,11 +124,10 @@ void _free_array(array_t *arr) {
 }
 
 void deep_free_array(array_t *arr, void(*free_element)(void *)) {
-    void **body = arr->body;
     int length = arr->length;
 
     for (int i = 0; i < length; i++) {
-        free_element(body[i]);
+        free_element(get_array(arr, i));
     }
 
     _free_array(arr);
@@ -158,11 +156,12 @@ void set_ptrs_array(array_t *arr, void *body) {
     }
 }
 
-array_t * malloc_array(int length, size_t size) {
+array_t * malloc_array(int length, size_t size, bool has_ptrs) {
     array_t *arr = malloc(sizeof(array_t));
     arr->body = malloc(length * sizeof(void *));
     arr->length = length;
     arr->size = size;
+    arr->has_ptrs = has_ptrs;
     return arr;
 }
 
@@ -185,6 +184,9 @@ matrix_t * malloc_matrix(int rows, int cols, enum mat_type type) {
 
 /* Array index/slice functions */
 void *get_array(array_t *arr, int i) {
+    if (arr->has_ptrs) {
+        check(*(void **)arr->body[i] != NULL, NULL_VALUE_ERR);
+    }
     return arr->body[i];
 }
 
@@ -197,7 +199,7 @@ void slice_array(array_t *arr, slice_t *slice, array_t *res) {
     int start_i = slice->start;
     int end_i = slice->end;
     for (int i = start_i; i < end_i; i++) {
-        res->body[i - start_i] = arr->body[i];
+        res->body[i - start_i] = get_array(arr, i);
     }
 }
 
@@ -211,8 +213,7 @@ void set_slice_array(array_t *arr, slice_t *slice, array_t *data) {
 
 array_t * insert_array(array_t *arr, int pos_i, void *data) {
     int length = arr->length + 1;
-    size_t size = arr->size;
-    array_t *res = malloc_array(length, size);
+    array_t *res = malloc_array(length, arr->size, arr->has_ptrs);
 
     void *body = malloc(length * sizeof(void *));
     set_ptrs_array(res, body);
@@ -232,8 +233,7 @@ array_t * insert_array(array_t *arr, int pos_i, void *data) {
 
 array_t * _delete_array(array_t *arr, int pos_i) {
     int length = arr->length - 1;
-    size_t size = arr->size;
-    array_t *res = malloc_array(length, size);
+    array_t *res = malloc_array(length, arr->size, arr->has_ptrs);
 
     void *body = malloc(length * sizeof(void *));
     set_ptrs_array(res, body);
@@ -251,8 +251,7 @@ array_t * _delete_array(array_t *arr, int pos_i) {
 
 array_t * append_array(array_t *arr, void *data) {
     int length = arr->length + 1;
-    size_t size = arr->size;
-    array_t *res = malloc_array(length, size);
+    array_t *res = malloc_array(length, arr->size, arr->has_ptrs);
 
     void *body = malloc(length * sizeof(void *));
     set_ptrs_array(res, body);
@@ -597,4 +596,11 @@ matrix_t * _flip_matrix_type(matrix_t *mat) {
 
 void die() {
     exit(EXIT_FAILURE);
+}
+
+void check(const bool cond, const char *err) {
+    if (!cond) {
+        fprintf(stderr, "%s\n", err);
+        die();
+    }
 }

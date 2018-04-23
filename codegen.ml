@@ -59,8 +59,12 @@ let translate (env, program) =
   let array_t =
     let array_type = L.named_struct_type context "array_t" in
     let body_type = pointer_t (pointer_t i8_t) in
-    (* Struct: void pointer to first element, length, size of elements *)
-    let _ = L.struct_set_body array_type [| body_type; i32_t; i64_t |] false in
+    (* Struct: void pointer to first element, length, size of elements, and if
+     * the array contains pointers to other objects (arrays, matrices, functions);
+     * this is needed for null pointer checks, since empty arrays are filled with
+     * the default value. We need this, as empty arrays of ints are filled with 0s,
+     * so we don't want to confuse this as actually being the null pointer. *)
+    let _ = L.struct_set_body array_type [| body_type; i32_t; i64_t; i1_t |] false in
     array_type
   in
 
@@ -107,6 +111,10 @@ let translate (env, program) =
   (* Built-in format strings *)
   let empty_str = L.build_global_stringptr "" "empty_string" main_builder in
   let newline_str = L.build_global_stringptr "\n" "newline_string" main_builder in
+  let null_value_err =
+    L.build_global_stringptr "Runtime error: attempted to access null value"
+    "null_value_err" main_builder
+  in
 
   (* Declare built-in functions *)
   (* Pretty-printing functions *)
@@ -266,6 +274,9 @@ let translate (env, program) =
 
   let die_t = L.function_type void_t [||] in
   let die_func = L.declare_function "die" die_t the_module in
+
+  let check_t = L.function_type void_t [| i1_t; pointer_t i8_t |] in
+  let check_func = L.declare_function "check" check_t the_module in
 
   (* Collect native functions *)
   let print_funcs =
@@ -549,6 +560,24 @@ let translate (env, program) =
         | Some parent -> lookup name parent
   in
 
+  (* Builds a runtime check on a condition; if condition is not true,
+   * then program prints error to stderr and exits with return code EXIT_FAILURE *)
+  let build_check cond err builder =
+    let _ = L.build_call check_func [| cond; err |] "" builder in
+    ()
+  in
+
+  (* Builds a runtime check to see if a value is null *)
+  let build_null_check value builder =
+    let ltype = L.type_of value in
+    let null = L.const_null ltype in
+    (* We only use icmp here because the only null values in our language are for pointer
+     * types (arrays, matrices, functions) *)
+    let cond = L.build_icmp L.Icmp.Ne value null "cond" builder in
+    let _ = build_check cond null_value_err builder in
+    ()
+  in
+
   let add_func_decl (scope, functions) fdecl =
     let fname = fdecl.sfname in
     let return_type = fdecl.styp in
@@ -570,6 +599,14 @@ let translate (env, program) =
     let rec expr scope builder (t, e) =
       let build_array typ length builder =
         let ltype = ltype_of_typ typ in
+
+        (* Check if the array body's elements are actually pointers;
+         * see definition of array struct for explanation *)
+        let has_ptrs =
+          match typ with
+          | A.Array _ | A.Matrix _ | A.Func(_, _) -> L.const_int i1_t 1
+          | _ -> L.const_int i1_t 0
+        in
         (* Allocate required space *)
         let body_ptr = L.build_array_malloc (pointer_t i8_t) length "body_ptr" builder in
         let arr_ptr = L.build_malloc array_t "arr_ptr" builder in
@@ -578,9 +615,11 @@ let translate (env, program) =
         let arr_body = L.build_struct_gep arr_ptr 0 "arr_body" builder in
         let arr_length = L.build_struct_gep arr_ptr 1 "arr_length" builder in
         let arr_size = L.build_struct_gep arr_ptr 2 "arr_size" builder in
+        let arr_has_ptrs = L.build_struct_gep arr_ptr 3 "arr_has_ptrs" builder in
         let _ = L.build_store body_ptr arr_body builder in
         let _ = L.build_store length arr_length builder in
         let _ = L.build_store (L.size_of ltype) arr_size builder in
+        let _ = L.build_store has_ptrs arr_has_ptrs builder in
         arr_ptr
       in
 
@@ -881,7 +920,16 @@ let translate (env, program) =
                 res_ptr
           )
       | SNoexpr -> init t
-      | SId s -> L.build_load (lookup s scope) s builder
+      | SId s ->
+          let e' = L.build_load (lookup s scope) s builder in
+          (* Only perform a null check if the type is a function pointer or container;
+           * the rest are initialized to non-null values (see init) *)
+          let _ =
+            match t with
+            | A.Array _ | A.Matrix _ | A.Func(_, _) -> build_null_check e' builder
+            | _ -> ()
+          in
+          e'
       | SAssign(e1, e2) ->
           let t, e1 = e1 in
           let e2' = expr scope builder e2 in
@@ -938,7 +986,7 @@ let translate (env, program) =
               )
             | _ -> make_err "internal error: semant should have rejected invalid assignment"
           in
-          expr scope builder (t, e1)
+          e2'
       | SBinop(e1, op, e2) ->
           let err =
             "internal error: semant should have rejected " ^

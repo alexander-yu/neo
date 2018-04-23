@@ -134,13 +134,15 @@ CheckFail() {
     generatedfiles="$generatedfiles ${basename}.err ${basename}.diff"
     if [ $2 -eq 0 ] ; then
         RunFail "$NEO" "<" $1 "2>" "${basename}.err" ">>" $globallog
+        Compare ${basename}.err ${reffile}.err ${basename}.diff
     else
         Run "$NEO" "$1" ">" "${basename}.ll" &&
         Run "$LLC" "${basename}.ll" ">" "${basename}.s" &&
         Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" "-lm" &&
-        RunFail "./${basename}.exe" ">" "${basename}.err"
+        RunFail "./${basename}.exe" "2>" "${basename}.err" ">" "${basename}.out"
+        Compare ${basename}.err ${reffile}.err ${basename}-err.diff
+        Compare ${basename}.out ${reffile}.out ${basename}-out.diff
     fi
-    Compare ${basename}.err ${reffile}.err ${basename}.diff
 
     # Report the status and clean up the generated files
 
@@ -188,7 +190,7 @@ if [ $# -ge 1 ]
 then
     files=$@
 else
-    files="test/test-*.neo test/fail-*.neo"
+    files="test/test-*.neo test/fail-*.neo test/runtime-fail-*.neo"
 fi
 
 for file in $files
