@@ -1177,11 +1177,16 @@ let translate (env, program) =
 
   let get_main_decl globals =
     let get_assign sdecl =
-      let _, t, s, e = sdecl in
+      let _, t, s, e' = sdecl in
       let s' = (t, SId s) in
-      SExpr(t, SAssign(s', e))
+      SExpr(t, SAssign(s', e'))
+    in
+    let has_assign sdecl =
+      let _, _, _, e' = sdecl in
+      snd e' <> SNoexpr
     in
     (* Assign global variables in main *)
+    let globals = List.filter has_assign globals in
     let globals = List.map get_assign globals in
     {
       styp = A.Int;
