@@ -153,7 +153,10 @@ let check (globals, functions) =
         if n_args = 2 && check_types arg_types ret_type then ()
         else make_err err
     | "die" ->
-        if n_args = 0 && ret_type = Void then ()
+        let check_types arg_types ret_type =
+          List.hd arg_types = String && ret_type = Void
+        in
+        if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
     | _ -> make_err err
   in
@@ -498,7 +501,6 @@ let check (globals, functions) =
                 (env, (Matrix Float, SCall((Func(arg_types, Matrix Float), SId native_fname), args')))
             | _ -> make_err ("non-int argument in " ^ expr_s)
           )
-
       | "insert" ->
           let _ = check_n_args 3 n_args expr_s in
           (
@@ -520,7 +522,6 @@ let check (globals, functions) =
                 (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
             | _ -> make_err ("non-container argument in " ^ expr_s)
           )
-
       | "delete" ->
           let _ = check_n_args 2 n_args expr_s in
           (
@@ -553,8 +554,10 @@ let check (globals, functions) =
             | _ -> make_err ("non-container argument in " ^ expr_s)
           )
       | "die" ->
-          let _ = check_n_args 0 n_args expr_s in
-          (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+          let _ = check_n_args 1 n_args expr_s in
+          if List.hd arg_types = String then
+            (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+          else make_err ("non-string argument in " ^ expr_s)
       | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
     in
 

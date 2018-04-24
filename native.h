@@ -107,7 +107,7 @@ int cols(matrix_t*);
 int _float_to_int(double);
 double _int_to_float(int);
 matrix_t* _flip_matrix_type(matrix_t*);
-void die();
+void die(const char*);
 void check(const bool, const char*);
 void check_arr_index(const array_t*, const int);
 void check_arr_slice(const array_t*, const slice_t*);

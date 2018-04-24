@@ -624,14 +624,14 @@ matrix_t* _flip_matrix_type(matrix_t* mat) {
     return res;
 }
 
-void die() {
+void die(const char* err) {
+    fprintf(stderr, "%s\n", err);
     exit(EXIT_FAILURE);
 }
 
 void check(const bool cond, const char* err) {
     if (!cond) {
-        fprintf(stderr, "%s\n", err);
-        die();
+        die(err);
     }
 }
 
