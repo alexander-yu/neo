@@ -16,16 +16,89 @@
     #undef min
 #endif
 
-int max(int a, int b) {
+static const char* NULL_VALUE_ERR = "Null value error: attempted to read null value";
+static const char* DIV_ZERO_ERR = "Zero division error: attmpted to perform division or modulo by 0";
+static const char* EXP_ZERO_ERR = "Zero division error: attempted to raise 0 to a negative power";
+static const char* EXP_NEG_ERR = "Arithmetic error: attempted to raise negative number to a non-integer power";
+static const char* MAT_IDX_ERR = "Matrix index error: attempted to access an out of bounds index for a matrix";
+static const char* ARR_IDX_ERR = "Array index error: attempted to access an out of bounds index for an array";
+static const char* SLICE_ERR = "Slice error: attempted to perform slice that would return zero elements \
+                               (reversed or equal bounds)";
+static const char* ARR_LEN_ERR = "Length error: attempted to create array of nonpositive length";
+static const char* MAT_ROWS_ERR = "Dimension error: attempted to create matrix with nonpositive rows";
+static const char* MAT_COLS_ERR = "Dimension error: attempted to create matrix with nonpositive columns";
+static const char* ROW_DIM_ERR = "Dimension error: attempted to insert/append row with invalid dimensions";
+static const char* MAT_MULT_ERR = "Dimension error: attempted to perform matrix multiplication with \
+                                  incompatible dimensions";
+static const char* MAT_BINOP_ERR = "Dimension error: attempted to perform matrix binary operations with \
+                                   incompatible/non-broadcastable dimensions";
+
+/* Min/max helpers */
+static int max(const int a, const int b) {
     return (a > b) ? a : b;
 }
 
-int min(int a, int b) {
+static int min(const int a, const int b) {
     return (a < b) ? a : b;
 }
 
+/* Runtime error-checking functions */
+void die(const char* err) {
+    fprintf(stderr, "%s\n", err);
+    exit(EXIT_FAILURE);
+}
+
+void check(const bool cond, const char* err) {
+    if (!cond) {
+        die(err);
+    }
+}
+
+static void check_arr_index(const array_t* arr, const int i) {
+    check(i >= 0 && i < arr->length, ARR_IDX_ERR);
+}
+
+static void check_arr_slice(const array_t* arr, const slice_t* slice) {
+    int start = slice->start;
+    int end = slice->end;
+    check(start < end, SLICE_ERR);
+    check_arr_index(arr, start);
+    check(end <= arr->length, ARR_IDX_ERR);
+}
+
+static void check_mat_index(const matrix_t* mat, const int i, const int j) {
+    check(i >= 0 && i < mat->rows, MAT_IDX_ERR);
+    check(j >= 0 && j < mat->cols, MAT_IDX_ERR);
+}
+
+static void check_mat_slice(const matrix_t* mat, const slice_t* row_slice, const slice_t* col_slice) {
+    int start_i = row_slice->start;
+    int end_i = row_slice->end;
+    int start_j = col_slice->start;
+    int end_j = col_slice->end;
+    check(start_i < end_i, SLICE_ERR);
+    check(start_j < end_j, SLICE_ERR);
+    check_mat_index(mat, start_i, start_j);
+    check(end_i <= mat->rows, MAT_IDX_ERR);
+    check(end_j <= mat->cols, MAT_IDX_ERR);
+}
+
+static void check_row_dims(const matrix_t* mat, const matrix_t* row) {
+    check(row->rows == 1, ROW_DIM_ERR);
+    check(row->cols == mat->cols, ROW_DIM_ERR);
+}
+
+static void check_mat_binop_dims(const matrix_t* a, const matrix_t* b) {
+    int rows_a = a->rows;
+    int rows_b = b->rows;
+    int cols_a = a->cols;
+    int cols_b = b->cols;
+    check(rows_a == rows_b || min(rows_a, rows_b) == 1, MAT_BINOP_ERR);
+    check(cols_a == cols_b || min(cols_a, cols_b) == 1, MAT_BINOP_ERR);
+}
+
 /* Pretty-printing functions */
-void _print_bool(bool b) {
+void _print_bool(const bool b) {
     if (b) {
         printf("True");
     } else {
@@ -33,27 +106,27 @@ void _print_bool(bool b) {
     }
 }
 
-void _print_int(int i) {
+void _print_int(const int i) {
     printf("%d", i);
 }
 
-void _print_float(double d) {
+void _print_float(const double d) {
     printf("%g", d);
 }
 
-void _print_string(char* s) {
+void _print_string(const char* s) {
     printf("%s", s);
 }
 
-void _print_matrix(matrix_t* m) {
+void _print_matrix(const matrix_t* m) {
     print_matrix(m, false);
 }
 
-void print_function(void* p) {
+void print_function(const void* p) {
     printf("function at %p", p);
 }
 
-void print_matrix(matrix_t* mat, bool flat) {
+void print_matrix(const matrix_t* mat, const bool flat) {
     printf("[");
     int rows = mat->rows;
     int cols = mat->cols;
@@ -91,7 +164,7 @@ void print_matrix(matrix_t* mat, bool flat) {
     printf("]");
 }
 
-void print_array(array_t* arr, void(*print_element)(void*)) {
+void print_array(const array_t* arr, void(*const print_element)(const void*)) {
     int length = arr->length;
     printf("{|");
     for (int i = 0; i < length; i++) {
@@ -123,7 +196,7 @@ void _free_array(array_t* arr) {
     free(arr);
 }
 
-void deep_free_array(array_t* arr, void(*free_element)(void*)) {
+void deep_free_array(array_t* arr, void(*const free_element)(void*)) {
     int length = arr->length;
 
     for (int i = 0; i < length; i++) {
@@ -133,7 +206,7 @@ void deep_free_array(array_t* arr, void(*free_element)(void*)) {
     _free_array(arr);
 }
 
-void set_ptrs_matrix(matrix_t* mat, void* body) {
+static void set_ptrs_matrix(matrix_t* mat, const void* body) {
     int rows = mat->rows;
     int cols = mat->cols;
     for (int i = 0; i < rows; i++) {
@@ -148,7 +221,7 @@ void set_ptrs_matrix(matrix_t* mat, void* body) {
     }
 }
 
-void set_ptrs_array(array_t* arr, void* body) {
+static void set_ptrs_array(array_t* arr, const void* body) {
     int length = arr->length;
     size_t size = arr->size;
     for (int i = 0; i < length; i++) {
@@ -156,7 +229,7 @@ void set_ptrs_array(array_t* arr, void* body) {
     }
 }
 
-array_t* malloc_array(int length, size_t size, bool has_ptrs) {
+array_t* malloc_array(const int length, const size_t size, const bool has_ptrs) {
     check(length > 0, ARR_LEN_ERR);
     array_t* arr = malloc(sizeof(array_t));
     arr->body = malloc(length * sizeof(void*));
@@ -170,7 +243,7 @@ array_t* malloc_array(int length, size_t size, bool has_ptrs) {
     return arr;
 }
 
-matrix_t* malloc_matrix(int rows, int cols, enum mat_type type) {
+matrix_t* malloc_matrix(const int rows, const int cols, const enum mat_type type) {
     check(rows > 0, MAT_ROWS_ERR);
     check(cols > 0, MAT_COLS_ERR);
     matrix_t* mat = malloc(sizeof(matrix_t));
@@ -198,7 +271,7 @@ matrix_t* malloc_matrix(int rows, int cols, enum mat_type type) {
 }
 
 /* Array index/slice functions */
-void* get_array(array_t* arr, int i) {
+void* get_array(const array_t* arr, const int i) {
     check_arr_index(arr, i);
     if (arr->has_ptrs) {
         check(*(void**)arr->body[i] != NULL, NULL_VALUE_ERR);
@@ -206,13 +279,13 @@ void* get_array(array_t* arr, int i) {
     return arr->body[i];
 }
 
-void set_array(array_t* arr, int i, void* data) {
+void set_array(array_t* arr, const int i, const void* data) {
     check_arr_index(arr, i);
     /* Perform a shallow copy */
     memcpy(arr->body[i], data, arr->size);
 }
 
-array_t* slice_array(array_t* arr, slice_t* slice) {
+array_t* slice_array(const array_t* arr, const slice_t* slice) {
     check_arr_slice(arr, slice);
     int start_i = slice->start;
     int end_i = slice->end;
@@ -226,7 +299,7 @@ array_t* slice_array(array_t* arr, slice_t* slice) {
     return res;
 }
 
-void set_slice_array(array_t* arr, slice_t* slice, array_t* data) {
+void set_slice_array(array_t* arr, const slice_t* slice, const array_t* data) {
     check_arr_slice(arr, slice);
     int start_i = slice->start;
     int end_i = slice->end;
@@ -235,7 +308,7 @@ void set_slice_array(array_t* arr, slice_t* slice, array_t* data) {
     }
 }
 
-array_t* insert_array(array_t* arr, int pos_i, void* data) {
+array_t* insert_array(const array_t* arr, const int pos_i, const void* data) {
     check_arr_index(arr, pos_i);
     int length = arr->length + 1;
     array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
@@ -253,7 +326,7 @@ array_t* insert_array(array_t* arr, int pos_i, void* data) {
     return res;
 }
 
-array_t* _delete_array(array_t* arr, int pos_i) {
+array_t* _delete_array(const array_t* arr, const int pos_i) {
     check_arr_index(arr, pos_i);
     int length = arr->length - 1;
     array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
@@ -269,7 +342,7 @@ array_t* _delete_array(array_t* arr, int pos_i) {
     return res;
 }
 
-array_t* append_array(array_t* arr, void* data) {
+array_t* append_array(const array_t* arr, const void* data) {
     int length = arr->length + 1;
     array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
 
@@ -285,7 +358,7 @@ array_t* append_array(array_t* arr, void* data) {
 }
 
 /* Matrix index/slice functions */
-void* get_matrix(matrix_t* mat, int i, int j) {
+void* get_matrix(const matrix_t* mat, const int i, const int j) {
     check_mat_index(mat, i, j);
     switch (mat->type) {
         case Int: return (void*)&mat->body.ibody[i][j];
@@ -300,7 +373,7 @@ void* get_matrix(matrix_t* mat, int i, int j) {
     exit(EXIT_FAILURE);
 }
 
-void set_matrix(matrix_t* mat, int i, int j, void* data) {
+void set_matrix(matrix_t* mat, const int i, const int j, const void* data) {
     check_mat_index(mat, i, j);
     switch (mat->type) {
         case Int: mat->body.ibody[i][j] = *(int*)data; break;
@@ -308,7 +381,8 @@ void set_matrix(matrix_t* mat, int i, int j, void* data) {
     }
 }
 
-matrix_t* slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice) {
+matrix_t* slice_matrix(const matrix_t* mat, const slice_t* row_slice,
+                       const slice_t* col_slice) {
     check_mat_slice(mat, row_slice, col_slice);
     int start_i = row_slice->start;
     int end_i = row_slice->end;
@@ -336,7 +410,8 @@ matrix_t* slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice) {
     return res;
 }
 
-void set_slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice, matrix_t* data) {
+void set_slice_matrix(matrix_t* mat, const slice_t* row_slice,
+                      const slice_t* col_slice, const matrix_t* data) {
     check_mat_slice(mat, row_slice, col_slice);
     int start_i = row_slice->start;
     int end_i = row_slice->end;
@@ -356,7 +431,7 @@ void set_slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice, mat
     }
 }
 
-matrix_t* _insert_matrix(matrix_t* mat, int row_i, matrix_t* row) {
+matrix_t* _insert_matrix(const matrix_t* mat, const int row_i, const matrix_t* row) {
     check_mat_index(mat, row_i, 0);
     check_row_dims(mat, row);
     int rows = mat->rows + 1;
@@ -388,7 +463,7 @@ matrix_t* _insert_matrix(matrix_t* mat, int row_i, matrix_t* row) {
     return res;
 }
 
-matrix_t* _delete_matrix(matrix_t* mat, int row_i) {
+matrix_t* _delete_matrix(const matrix_t* mat, const int row_i) {
     check_mat_index(mat, row_i, 0);
     int rows = mat->rows - 1;
     int cols = mat->cols;
@@ -414,7 +489,7 @@ matrix_t* _delete_matrix(matrix_t* mat, int row_i) {
     return res;
 }
 
-matrix_t* _append_matrix(matrix_t* mat, matrix_t* row) {
+matrix_t* _append_matrix(const matrix_t* mat, const matrix_t* row) {
     check_row_dims(mat, row);
     int rows = mat->rows + 1;
     int cols = mat->cols;
@@ -441,15 +516,15 @@ matrix_t* _append_matrix(matrix_t* mat, matrix_t* row) {
 }
 
 /* Binary operations */
-int iexp(int a, int b){
+int iexp(const int a, const int b){
     return (int) pow((double) a, (double) b);
 }
 
-double fexp(double a, double b){
+double fexp(const double a, const double b){
     return pow(a, b);
 }
 
-matrix_t* matmult(matrix_t* a, matrix_t* b){
+matrix_t* matmult(const matrix_t* a, const matrix_t* b){
     check(a->cols == b->rows, MAT_MULT_ERR);
     int rows = a->rows;
     int cols = b->cols;
@@ -478,7 +553,8 @@ matrix_t* matmult(matrix_t* a, matrix_t* b){
     return res;
 }
 
-matrix_t* mat_binop(matrix_t* a, enum mat_op op, matrix_t* b) {
+matrix_t* mat_binop(const matrix_t* a, const enum mat_op op, const matrix_t* b) {
+    check_mat_binop_dims(a, b);
     int rows = max(a->rows, b->rows);
     int cols = max(a->cols, b->cols);
     enum mat_type type = a->type;
@@ -561,7 +637,7 @@ matrix_t* mat_binop(matrix_t* a, enum mat_op op, matrix_t* b) {
 }
 
 /* Miscellaneous helpers/built-ins */
-void init_array(array_t* arr, void* data) {
+void init_array(array_t* arr, const void* data) {
     int length = arr->length;
     for (int i = 0; i < length; i++) {
         set_array(arr, i, data);
@@ -581,27 +657,27 @@ void init_matrix(matrix_t* mat) {
     }
 }
 
-int length(array_t* arr) {
+int length(const array_t* arr) {
     return arr->length;
 }
 
-int rows(matrix_t* mat) {
+int rows(const matrix_t* mat) {
     return mat->rows;
 }
 
-int cols(matrix_t* mat) {
+int cols(const matrix_t* mat) {
     return mat->cols;
 }
 
-int _float_to_int(double d) {
+int _float_to_int(const double d) {
     return (int) d;
 }
 
-double _int_to_float(int i) {
+double _int_to_float(const int i) {
     return (double) i;
 }
 
-matrix_t* _flip_matrix_type(matrix_t* mat) {
+matrix_t* _flip_matrix_type(const matrix_t* mat) {
     int rows = mat->rows;
     int cols = mat->cols;
     /* Flip the type */
@@ -622,58 +698,4 @@ matrix_t* _flip_matrix_type(matrix_t* mat) {
     }
 
     return res;
-}
-
-void die(const char* err) {
-    fprintf(stderr, "%s\n", err);
-    exit(EXIT_FAILURE);
-}
-
-void check(const bool cond, const char* err) {
-    if (!cond) {
-        die(err);
-    }
-}
-
-void check_arr_index(const array_t* arr, const int i) {
-    check(i >= 0 && i < arr->length, ARR_IDX_ERR);
-}
-
-void check_arr_slice(const array_t* arr, const slice_t* slice) {
-    int start = slice->start;
-    int end = slice->end;
-    check(start < end, SLICE_ERR);
-    check_arr_index(arr, start);
-    check(end <= arr->length, ARR_IDX_ERR);
-}
-
-void check_mat_index(const matrix_t* mat, const int i, const int j) {
-    check(i >= 0 && i < mat->rows, MAT_IDX_ERR);
-    check(j >= 0 && j < mat->cols, MAT_IDX_ERR);
-}
-
-void check_mat_slice(const matrix_t* mat, const slice_t* row_slice, const slice_t* col_slice) {
-    int start_i = row_slice->start;
-    int end_i = row_slice->end;
-    int start_j = col_slice->start;
-    int end_j = col_slice->end;
-    check(start_i < end_i, SLICE_ERR);
-    check(start_j < end_j, SLICE_ERR);
-    check_mat_index(mat, start_i, start_j);
-    check(end_i <= mat->rows, MAT_IDX_ERR);
-    check(end_j <= mat->cols, MAT_IDX_ERR);
-}
-
-void check_row_dims(const matrix_t* mat, const matrix_t* row) {
-    check(row->rows == 1, ROW_DIM_ERR);
-    check(row->cols == mat->cols, ROW_DIM_ERR);
-}
-
-void check_mat_binop_dims(const matrix_t* a, const matrix_t* b) {
-    int rows_a = a->rows;
-    int rows_b = b->rows;
-    int cols_a = a->cols;
-    int cols_b = b->cols;
-    check(rows_a == rows_b || min(rows_a, rows_b) == 1, MAT_BINOP_ERR);
-    check(cols_a == cols_b || min(cols_a, cols_b) == 1, MAT_BINOP_ERR);
 }

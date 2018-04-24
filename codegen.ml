@@ -285,12 +285,14 @@ let translate (env, program) =
     L.declare_function "_flip_matrix_type" _flip_matrix_type_t the_module
   in
 
+  (* Runtime error-checking functions *)
   let die_t = L.function_type void_t [| pointer_t i8_t |] in
   let die_func = L.declare_function "die" die_t the_module in
 
   let check_t = L.function_type void_t [| i1_t; pointer_t i8_t |] in
   let check_func = L.declare_function "check" check_t the_module in
 
+  (* LLVM floor instrinsic *)
   let floor_t = L.function_type float_t [| float_t |] in
   let floor_func = L.declare_function "llvm.floor.f64" floor_t the_module in
 
