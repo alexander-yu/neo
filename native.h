@@ -9,6 +9,9 @@ const char* MAT_IDX_ERR = "Matrix index error: attempted to access an out of bou
 const char* ARR_IDX_ERR = "Array index error: attempted to access an out of bounds index for an array";
 const char* SLICE_ERR = "Slice error: attempted to perform slice that would return zero elements \
                         (reversed or equal bounds)";
+const char* ARR_LEN_ERR = "Length error: attempted to create array of nonpositive length";
+const char* MAT_ROWS_ERR = "Dimension error: attempted to create matrix with nonpositive rows";
+const char* MAT_COLS_ERR = "Dimension error: attempted to create matrix with nonpositive columns";
 
 enum mat_type {Int, Float};
 enum mat_op {

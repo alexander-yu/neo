@@ -157,6 +157,7 @@ void set_ptrs_array(array_t* arr, void* body) {
 }
 
 array_t* malloc_array(int length, size_t size, bool has_ptrs) {
+    check(length > 0, ARR_LEN_ERR);
     array_t* arr = malloc(sizeof(array_t));
     arr->body = malloc(length * sizeof(void*));
     arr->length = length;
@@ -170,6 +171,8 @@ array_t* malloc_array(int length, size_t size, bool has_ptrs) {
 }
 
 matrix_t* malloc_matrix(int rows, int cols, enum mat_type type) {
+    check(rows > 0, MAT_ROWS_ERR);
+    check(cols > 0, MAT_COLS_ERR);
     matrix_t* mat = malloc(sizeof(matrix_t));
     mat->rows = rows;
     mat->cols = cols;
