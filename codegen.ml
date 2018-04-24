@@ -170,11 +170,11 @@ let translate (env, program) =
   in
   let deep_free_array_func = L.declare_function "deep_free_array" deep_free_array_t the_module in
 
-  let set_ptrs_matrix_t = L.function_type void_t [| pointer_t matrix_t; pointer_t i8_t |] in
-  let set_ptrs_matrix_func = L.declare_function "set_ptrs_matrix" set_ptrs_matrix_t the_module in
+  let malloc_array_t = L.function_type (pointer_t array_t) [| i32_t; i64_t; i1_t |] in
+  let malloc_array_func = L.declare_function "malloc_array" malloc_array_t the_module in
 
-  let set_ptrs_array_t = L.function_type void_t [| pointer_t array_t; pointer_t i8_t |] in
-  let set_ptrs_array_func = L.declare_function "set_ptrs_array" set_ptrs_array_t the_module in
+  let malloc_matrix_t = L.function_type (pointer_t matrix_t) [| i32_t; i32_t; i32_t |] in
+  let malloc_matrix_func = L.declare_function "malloc_matrix" malloc_matrix_t the_module in
 
   (* Array index/slice functions *)
   let get_array_t = L.function_type (pointer_t i8_t) [| pointer_t array_t; i32_t |] in
@@ -650,156 +650,70 @@ let translate (env, program) =
   let build_function_body scope builder the_function fdecl =
     (* Construct code for an expression; return its value *)
     let rec expr scope builder (t, e) =
-      let build_array typ length builder =
-        let ltype = ltype_of_typ typ in
-
-        (* Check if the array body's elements are actually pointers;
-         * see definition of array struct for explanation *)
-        let has_ptrs =
-          match typ with
-          | A.Array _ | A.Matrix _ | A.Func(_, _) -> L.const_int i1_t 1
-          | _ -> L.const_int i1_t 0
-        in
-        (* Allocate required space *)
-        let body_ptr = L.build_array_malloc (pointer_t i8_t) length "body_ptr" builder in
-        let arr_ptr = L.build_malloc array_t "arr_ptr" builder in
-
-        (* Set fields *)
-        let arr_body = L.build_struct_gep arr_ptr 0 "arr_body" builder in
-        let arr_length = L.build_struct_gep arr_ptr 1 "arr_length" builder in
-        let arr_size = L.build_struct_gep arr_ptr 2 "arr_size" builder in
-        let arr_has_ptrs = L.build_struct_gep arr_ptr 3 "arr_has_ptrs" builder in
-        let _ = L.build_store body_ptr arr_body builder in
-        let _ = L.build_store length arr_length builder in
-        let _ = L.build_store (L.size_of ltype) arr_size builder in
-        let _ = L.build_store has_ptrs arr_has_ptrs builder in
-        arr_ptr
+      (* Check if the array body's elements are actually pointers;
+        * see definition of array struct for explanation *)
+      let array_has_ptrs typ =
+        match typ with
+        | A.Array _ | A.Matrix _ | A.Func(_, _) -> L.const_int i1_t 1
+        | _ -> L.const_int i1_t 0
       in
 
       let build_array_lit typ raw_elements builder =
         let ltype = ltype_of_typ typ in
         let length = L.const_int i32_t (Array.length raw_elements) in
-        let arr_ptr = build_array typ length builder in
+        let arr_ptr =
+          L.build_call malloc_array_func
+          [| length; L.size_of ltype; array_has_ptrs typ |] "arr_ptr" builder
+        in
 
-        (* Allocate and fill array body *)
-        let body = L.build_array_malloc ltype length "body" builder in
+        (* Fill array body *)
         let set_element i element =
-          let ptr =
-            L.build_in_bounds_gep body
-            [| L.const_int i32_t i |] "ptr" builder
+          let element_ptr = L.build_alloca ltype "element_ptr" builder in
+          let _ = L.build_store element element_ptr builder in
+          (* Cast element pointer to "void pointer" *)
+          let element_ptr = L.build_bitcast element_ptr (pointer_t i8_t) "element_ptr" builder in
+          let _ =
+            L.build_call set_array_func
+            [| arr_ptr; L.const_int i32_t i; element_ptr |] "" builder
           in
-          let _ = L.build_store element ptr builder in
           ()
         in
         let _ = Array.iteri set_element raw_elements in
-
-        (* Cast body to "void pointer" *)
-        let body = L.build_bitcast body (pointer_t i8_t) "body" builder in
-
-        (* Set body pointers *)
-        let _ = L.build_call set_ptrs_array_func [| arr_ptr; body |] "" builder in
         arr_ptr
       in
 
-      let build_empty_array typ length builder =
-        let ltype = ltype_of_typ typ in
-        let arr_ptr = build_array typ length builder in
-
-        (* Allocate array contents *)
-        let body = L.build_array_malloc ltype length "body" builder in
-
-        (* Cast body to "void pointer" *)
-        let body = L.build_bitcast body (pointer_t i8_t) "body" builder in
-
-        (* Set body pointers *)
-        let _ = L.build_call set_ptrs_array_func [| arr_ptr; body |] "" builder in
-        arr_ptr
-      in
-
-      let get_mat_type = function
+      let mat_type_of_typ = function
         | A.Int -> L.const_int i32_t 0
         (* Otherwise, it's A.Float *)
         | _ -> L.const_int i32_t 1
       in
 
-      let build_matrix ?on_heap:(on_heap=true) typ rows cols builder =
-        (* Get allocating functions *)
-        let array_alloc = if on_heap then L.build_array_malloc else L.build_array_alloca in
-        let alloc = if on_heap then L.build_malloc else L.build_alloca in
-
-        (* Allocate required space *)
-        let row_ptrs = array_alloc (pointer_t float_t) rows "row_ptrs" builder in
-        let mat_ptr = alloc matrix_t "mat_ptr" builder in
-
-        (* Set fields *)
-        let mat_body = L.build_struct_gep mat_ptr 0 "mat_body" builder in
-        let mat_rows = L.build_struct_gep mat_ptr 1 "mat_rows" builder in
-        let mat_cols = L.build_struct_gep mat_ptr 2 "mat_cols" builder in
-        let mat_type = L.build_struct_gep mat_ptr 3 "mat_type" builder in
-        let _ = L.build_store row_ptrs mat_body builder in
-        let _ = L.build_store rows mat_rows builder in
-        let _ = L.build_store cols mat_cols builder in
-        let _ = L.build_store (get_mat_type typ) mat_type builder in
-        mat_ptr
-      in
-
-      let build_matrix_lit ?on_heap:(on_heap=true) typ raw_elements builder =
-        (* Get allocating function *)
-        let array_alloc = if on_heap then L.build_array_malloc else L.build_array_alloca in
-
+      let build_matrix_lit typ raw_elements builder =
         let ltype = ltype_of_typ typ in
         let rows = L.const_int i32_t (Array.length raw_elements) in
         let cols = L.const_int i32_t (Array.length raw_elements.(0)) in
-        let size = L.build_mul rows cols "size" builder in
-        let mat_ptr = build_matrix ~on_heap:on_heap typ rows cols builder in
-
-        (* Flatten elements into one array *)
-        let raw_elements = Array.concat (Array.to_list raw_elements) in
+        let mat_type = mat_type_of_typ typ in
+        let mat_ptr =
+          L.build_call malloc_matrix_func [| rows; cols; mat_type |] "mat_ptr" builder
+        in
 
         (* Allocate and fill matrix body *)
-        let body_ptr = array_alloc ltype size "body_ptr" builder in
-        let set_element i element =
-          let ptr =
-            L.build_in_bounds_gep body_ptr
-            [| L.const_int i32_t i |] "ptr" builder
+        let set_row i row =
+          let set_element j element =
+            let element_ptr = L.build_alloca ltype "element_ptr" builder in
+            let _ = L.build_store element element_ptr builder in
+            (* Cast element pointer to "void pointer" *)
+            let element_ptr = L.build_bitcast element_ptr (pointer_t i8_t) "element_ptr" builder in
+            let _ =
+              L.build_call set_matrix_func
+              [| mat_ptr; L.const_int i32_t i; L.const_int i32_t j; element_ptr |] "" builder
+            in
+            ()
           in
-          let _ = L.build_store element ptr builder in
-          ()
+          Array.iteri set_element row
         in
-        let _ = Array.iteri set_element raw_elements in
-
-        (* Cast body ptr to "void pointer" *)
-        let body_ptr = L.build_bitcast body_ptr (pointer_t i8_t) "body_ptr" builder in
-
-        (* Set body pointers *)
-        let _ = L.build_call set_ptrs_matrix_func [| mat_ptr; body_ptr |] "" builder in
+        let _ = Array.iteri set_row raw_elements in
         mat_ptr
-      in
-
-      let build_empty_matrix typ rows cols builder =
-        let ltype = ltype_of_typ typ in
-        let size = L.build_mul rows cols "size" builder in
-        let mat_ptr = build_matrix typ rows cols builder in
-
-        (* Allocate matrix body *)
-        let body_ptr = L.build_array_malloc ltype size "body_ptr" builder in
-
-        (* Cast body ptr to "void pointer" *)
-        let body_ptr = L.build_bitcast body_ptr (pointer_t i8_t) "body_ptr" builder in
-
-        (* Set body pointers *)
-        let _ = L.build_call set_ptrs_matrix_func [| mat_ptr; body_ptr |] "" builder in
-        mat_ptr
-      in
-
-      let get_rows mat builder =
-        let rows_ptr = L.build_struct_gep mat 1 "rows_ptr" builder in
-        L.build_load rows_ptr "rows" builder
-      in
-
-      let get_cols mat builder =
-        let cols_ptr = L.build_struct_gep mat 2 "cols_ptr" builder in
-        L.build_load cols_ptr "cols" builder
       in
 
       let build_sgl_slice arr slice builder =
@@ -838,7 +752,7 @@ let translate (env, program) =
               | SInt_Lit _ -> expr scope builder j1
               | SSlice_Inc -> L.build_add i1' (L.const_int i32_t 1) "row_slice_inc" builder
               (* Otherwise, it's SEnd *)
-              | _ -> get_rows mat builder
+              | _ -> L.build_call rows_func [| mat |] "rows" builder
             in
             let i2' = expr scope builder i2 in
             let j2' =
@@ -846,7 +760,7 @@ let translate (env, program) =
               | SInt_Lit _ -> expr scope builder j2
               | SSlice_Inc -> L.build_add i2' (L.const_int i32_t 1) "col_slice_inc" builder
               (* Otherwise, it's SEnd *)
-              | _ -> get_cols mat builder
+              | _ -> L.build_call cols_func [| mat |] "cols" builder
             in
             let _ = L.build_store i1' row_slice_start builder in
             let _ = L.build_store j1' row_slice_end builder in
@@ -897,7 +811,10 @@ let translate (env, program) =
       | SEmpty_Array(t, n) ->
           let ltype = ltype_of_typ t in
           let length = expr scope builder n in
-          let arr_ptr = build_empty_array t length builder in
+          let arr_ptr =
+            L.build_call malloc_array_func
+            [| length; L.size_of ltype; array_has_ptrs t |] "arr_ptr" builder
+          in
           let init_ptr = L.build_alloca ltype "init_ptr" builder in
           let _ = L.build_store (init t) init_ptr builder in
           let init_ptr = L.build_bitcast init_ptr (pointer_t i8_t) "init_ptr" builder in
@@ -910,7 +827,10 @@ let translate (env, program) =
       | SEmpty_Matrix(t, r, c) ->
           let rows = expr scope builder r in
           let cols = expr scope builder c in
-          let mat_ptr = build_empty_matrix t rows cols builder in
+          let mat_ptr =
+            L.build_call malloc_matrix_func
+            [| rows; cols; mat_type_of_typ t |] "mat_ptr" builder
+          in
           let _ = L.build_call init_matrix_func [| mat_ptr |] "" builder in
           mat_ptr
       | SIndex_Expr i ->
@@ -1070,25 +990,38 @@ let translate (env, program) =
             L.build_icmp L.Icmp.Eq e1' e2' "temp" builder
           (* Otherwise, it's a matrix result (either int or float) *)
           else
-            (* Wrap broadcasted scalars into temp 1x1 matrices stored on the stack *)
-            let e1' =
-              if t1 == A.Int || t1 == A.Float
-              then build_matrix_lit ~on_heap:false t1 [| [| e1' |] |] builder
-              else e1'
+            (* Wrap broadcasted scalars into temp 1x1 matrices; we'll free these
+             * immediately after computation *)
+            let e1', free_e1 =
+              if t1 == A.Int || t1 == A.Float then
+                (build_matrix_lit t1 [| [| e1' |] |] builder, true)
+              else (e1', false)
             in
-            let e2' =
-              if t2 == A.Int || t2 == A.Float
-              then build_matrix_lit ~on_heap:false t2 [| [| e2' |] |] builder
-              else e2'
+            let e2', free_e2 =
+              if t2 == A.Int || t2 == A.Float then
+                (build_matrix_lit t2 [| [| e2' |] |] builder, true)
+              else (e2', false)
             in
-            (
+            let res =
               match op with
               | A.MatMult -> L.build_call matmult_func [| e1'; e2' |] "temp" builder
               | A.And | A.Or -> make_err err
               | _ ->
                   let opcode = L.const_int i32_t (get_mat_opcode op) in
                   L.build_call mat_binop_func [| e1'; opcode; e2' |] "temp"  builder
-            )
+            in
+            let _ =
+              if free_e1 then
+                let _ = L.build_call _free_matrix_func [| e1' |] "" builder in
+                ()
+            in
+            let _ =
+              if free_e2 then
+                let _ = L.build_call _free_matrix_func [| e2' |] "" builder in
+                ()
+            in
+            res
+
       | SUnop(op, e) ->
           let t, _ = e in
           let e' = expr scope builder e in

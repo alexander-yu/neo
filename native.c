@@ -162,6 +162,10 @@ array_t* malloc_array(int length, size_t size, bool has_ptrs) {
     arr->length = length;
     arr->size = size;
     arr->has_ptrs = has_ptrs;
+
+    void* body = malloc(length * sizeof(void*));
+    set_ptrs_array(arr, body);
+
     return arr;
 }
 
@@ -212,9 +216,6 @@ array_t* slice_array(array_t* arr, slice_t* slice) {
     int length = end_i - start_i;
     array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
 
-    void* body = malloc(length * sizeof(void*));
-    set_ptrs_array(res, body);
-
     for (int i = 0; i < length; i++) {
         set_array(res, i, get_array(arr, i + start_i));
     }
@@ -236,9 +237,6 @@ array_t* insert_array(array_t* arr, int pos_i, void* data) {
     int length = arr->length + 1;
     array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
 
-    void* body = malloc(length * sizeof(void*));
-    set_ptrs_array(res, body);
-
     for (int i = 0; i < length; i++) {
         if (i < pos_i) {
             set_array(res, i, arr->body[i]);
@@ -257,9 +255,6 @@ array_t* _delete_array(array_t* arr, int pos_i) {
     int length = arr->length - 1;
     array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
 
-    void* body = malloc(length * sizeof(void*));
-    set_ptrs_array(res, body);
-
     for (int i = 0; i < length; i++) {
         if (i < pos_i) {
             set_array(res, i, arr->body[i]);
@@ -274,9 +269,6 @@ array_t* _delete_array(array_t* arr, int pos_i) {
 array_t* append_array(array_t* arr, void* data) {
     int length = arr->length + 1;
     array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
-
-    void* body = malloc(length * sizeof(void*));
-    set_ptrs_array(res, body);
 
     for (int i = 0; i < length; i++) {
         if (i == length - 1) {
