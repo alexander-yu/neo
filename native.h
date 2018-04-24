@@ -114,3 +114,4 @@ void check_arr_slice(const array_t*, const slice_t*);
 void check_mat_index(const matrix_t*, const int, const int);
 void check_mat_slice(const matrix_t*, const slice_t*, const slice_t*);
 void check_row_dims(const matrix_t*, const matrix_t*);
+void check_mat_binop_dims(const matrix_t*, const matrix_t*)
