@@ -12,6 +12,11 @@ const char* SLICE_ERR = "Slice error: attempted to perform slice that would retu
 const char* ARR_LEN_ERR = "Length error: attempted to create array of nonpositive length";
 const char* MAT_ROWS_ERR = "Dimension error: attempted to create matrix with nonpositive rows";
 const char* MAT_COLS_ERR = "Dimension error: attempted to create matrix with nonpositive columns";
+const char* ROW_DIM_ERR = "Dimension error: attempted to insert/append row with invalid dimensions";
+const char* MAT_MULT_ERR = "Dimension error: attempted to perform matrix multiplication with \
+                           incompatible dimensions";
+const char* MAT_BINOP_ERR = "Dimension error: attempted to perform matrix binary operations with \
+                            incompatible/non-broadcastable dimensions";
 
 enum mat_type {Int, Float};
 enum mat_op {
@@ -108,3 +113,4 @@ void check_arr_index(const array_t*, const int);
 void check_arr_slice(const array_t*, const slice_t*);
 void check_mat_index(const matrix_t*, const int, const int);
 void check_mat_slice(const matrix_t*, const slice_t*, const slice_t*);
+void check_row_dims(const matrix_t*, const matrix_t*);

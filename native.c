@@ -358,6 +358,7 @@ void set_slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice, mat
 
 matrix_t* _insert_matrix(matrix_t* mat, int row_i, matrix_t* row) {
     check_mat_index(mat, row_i, 0);
+    check_row_dims(mat, row);
     int rows = mat->rows + 1;
     int cols = mat->cols;
     enum mat_type type = mat->type;
@@ -414,6 +415,7 @@ matrix_t* _delete_matrix(matrix_t* mat, int row_i) {
 }
 
 matrix_t* _append_matrix(matrix_t* mat, matrix_t* row) {
+    check_row_dims(mat, row);
     int rows = mat->rows + 1;
     int cols = mat->cols;
     enum mat_type type = mat->type;
@@ -448,6 +450,7 @@ double fexp(double a, double b){
 }
 
 matrix_t* matmult(matrix_t* a, matrix_t* b){
+    check(a->cols == b->rows, MAT_MULT_ERR);
     int rows = a->rows;
     int cols = b->cols;
     enum mat_type type = a->type;
@@ -659,4 +662,18 @@ void check_mat_slice(const matrix_t* mat, const slice_t* row_slice, const slice_
     check_mat_index(mat, start_i, start_j);
     check(end_i <= mat->rows, MAT_IDX_ERR);
     check(end_j <= mat->cols, MAT_IDX_ERR);
+}
+
+void check_row_dims(const matrix_t* mat, const matrix_t* row) {
+    check(row->rows == 1, ROW_DIM_ERR);
+    check(row->cols == mat->cols, ROW_DIM_ERR);
+}
+
+void check_mat_binop_dims(const matrix_t* a, const matrix_t* b) {
+    int rows_a = a->rows;
+    int rows_b = b->rows;
+    int cols_a = a->cols;
+    int cols_b = b->cols;
+    check(rows_a == rows_b || min(rows_a, rows_b) == 1, MAT_BINOP_ERR);
+    check(cols_a == cols_b || min(cols_a, cols_b) == 1, MAT_BINOP_ERR);
 }
