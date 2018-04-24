@@ -40,9 +40,9 @@ Usage() {
 }
 
 SignalError() {
-    if [ $error -eq 0 ] ; then
-	echo "FAILED"
-	error=1
+    if [ $error -eq 0 ]; then
+        echo "FAILED"
+        error=1
     fi
     echo "  $1"
 }
@@ -66,8 +66,8 @@ Compare() {
 Run() {
     echo $* 1>&2
     eval $* || {
-	SignalError "$1 failed on $*"
-	return 1
+        SignalError "$1 failed on $*"
+        return 1
     }
 }
 
@@ -76,8 +76,8 @@ Run() {
 RunFail() {
     echo $* 1>&2
     eval $* && {
-	SignalError "failed: $* did not report an error"
-	return 1
+        SignalError "failed: $* did not report an error"
+        return 1
     }
     return 0
 }
@@ -105,16 +105,16 @@ Check() {
 
     # Report the status and clean up the generated files
 
-    if [ $error -eq 0 ] ; then
-	if [ $keep -eq 0 ] ; then
-	    rm -f $generatedfiles
-	fi
-	echo "OK"
-	echo "###### SUCCESS" 1>&2
+    if [ $error -eq 0 ]; then
+        if [ $keep -eq 0 ]; then
+            rm -f $generatedfiles
+        fi
+        echo "OK"
+        echo "###### SUCCESS" 1>&2
     else
-    echo "FAILED"
-	echo "###### FAILED" 1>&2
-	globalerror=$error
+        echo "FAILED"
+        echo "###### FAILED" 1>&2
+        globalerror=$error
     fi
 }
 
@@ -132,7 +132,7 @@ CheckFail() {
 
     generatedfiles=""
 
-    if [ $2 -eq 0 ] ; then
+    if [ $2 -eq 0 ]; then
         generatedfiles="$generatedfiles ${basename}.err ${basename}.diff"
         RunFail "$NEO" "<" $1 "2>" "${basename}.err" ">>" $globallog
         Compare ${basename}.err ${reffile}.err ${basename}.diff
@@ -148,16 +148,16 @@ CheckFail() {
 
     # Report the status and clean up the generated files
 
-    if [ $error -eq 0 ] ; then
-	if [ $keep -eq 0 ] ; then
-	    rm -f $generatedfiles
-	fi
-	echo "OK"
-	echo "###### SUCCESS" 1>&2
+    if [ $error -eq 0 ]; then
+        if [ $keep -eq 0 ]; then
+            rm -f $generatedfiles
+        fi
+        echo "OK"
+        echo "###### SUCCESS" 1>&2
     else
-    echo "FAILED"
-	echo "###### FAILED" 1>&2
-	globalerror=$error
+        echo "FAILED"
+        echo "###### FAILED" 1>&2
+        globalerror=$error
     fi
 }
 
@@ -182,15 +182,13 @@ LLIFail() {
 
 which "$LLI" >> $globallog || LLIFail
 
-if [ ! -f native.o ]
-then
+if [ ! -f native.o ]; then
     echo "Could not find native.o"
     echo "Try \"make native.o\""
     exit 1
 fi
 
-if [ $# -ge 1 ]
-then
+if [ $# -ge 1 ]; then
     files=$@
 else
     files="test/test-*.neo test/fail-*.neo test/runtime-fail-*.neo"

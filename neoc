@@ -1,0 +1,83 @@
+#!/bin/bash
+
+# Path to the LLVM compiler
+LLC="llc"
+
+# Path to the C compiler
+CC="gcc"
+
+# C Flags
+CFLAGS="-g -Wall"
+
+# Path to the Neo compiler
+NEO="./neo.native"
+
+error=0
+keep=0
+
+Usage() {
+    echo "Usage: testall.sh [options] [.neo file]"
+    echo "-k    Keep intermediate files"
+    echo "-h    Print this help"
+    exit 1
+}
+
+SignalError() {
+    if [ $error -eq 0 ]; then
+        echo "FAILED"
+        error=1
+    fi
+    echo "  $1"
+}
+
+# Run <args>
+# Report the command, run it, and report any errors
+Run() {
+    echo $*
+    eval $* || {
+        SignalError "$1 failed on $*"
+        return 1
+    }
+}
+
+Compile() {
+    error=0
+    basename=`echo $1 | sed 's/.*\\///
+                            s/.neo//'`
+    generatedfiles="${basename}.ll ${basename}.s" &&
+    Run "$NEO" "$1" ">" "${basename}.ll" &&
+    Run "$LLC" "${basename}.ll" ">" "${basename}.s" &&
+    Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" "-lm"
+
+    if [ $error -eq 0 ]; then
+        if [ $keep -eq 0 ]; then
+            rm -f $generatedfiles
+        fi
+        echo "OK"
+    fi
+}
+
+while getopts kdpsh c; do
+    case $c in
+	k) # Keep intermediate files
+	    keep=1
+	    ;;
+	h) # Help
+	    Usage
+	    ;;
+    esac
+done
+
+shift `expr $OPTIND - 1`
+
+if [ ! -f native.o ]; then
+    echo "Could not find native.o"
+    echo "Try \"make native.o\""
+    exit 1
+fi
+
+if [ $# -ne 1 ]; then
+    Usage
+fi
+
+Compile $1

@@ -9,6 +9,10 @@ by Alex Yu, Andrés Aguayo, Ani Bezjian, Dominique Gordon, and Mohamed Abedelmal
 - Navigate to root directory of project
 - Compile using the command `make`
 
+## Compiling a Neo Program
+
+- Run the command `./neoc [options] [.neo file]`
+
 ## Testing
 
 ### Scanner Testing
