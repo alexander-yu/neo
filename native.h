@@ -1,10 +1,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-const char* NULL_VALUE_ERR = "Null value error: attempted to access null value";
+const char* NULL_VALUE_ERR = "Null value error: attempted to read null value";
 const char* DIV_ZERO_ERR = "Zero division error: attmpted to perform division or modulo by 0";
 const char* EXP_ZERO_ERR = "Zero division error: attempted to raise 0 to a negative power";
 const char* EXP_NEG_ERR = "Arithmetic error: attempted to raise negative number to a non-integer power";
+const char* MAT_IDX_ERR = "Matrix index error: attempted to access an out of bounds index for a matrix";
+const char* ARR_IDX_ERR = "Array index error: attempted to access an out of bounds index for an array";
+const char* SLICE_ERR = "Slice error: attempted to perform slice that would return zero elements \
+                        (reversed or equal bounds)";
 
 enum mat_type {Int, Float};
 enum mat_op {
@@ -97,3 +101,7 @@ double _int_to_float(int);
 matrix_t* _flip_matrix_type(matrix_t*);
 void die();
 void check(const bool, const char*);
+void check_arr_index(const array_t*, const int);
+void check_arr_slice(const array_t*, const slice_t*);
+void check_mat_index(const matrix_t*, const int, const int);
+void check_mat_slice(const matrix_t*, const slice_t*, const slice_t*);

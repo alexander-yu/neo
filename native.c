@@ -192,6 +192,7 @@ matrix_t* malloc_matrix(int rows, int cols, enum mat_type type) {
 
 /* Array index/slice functions */
 void* get_array(array_t* arr, int i) {
+    check_arr_index(arr, i);
     if (arr->has_ptrs) {
         check(*(void**)arr->body[i] != NULL, NULL_VALUE_ERR);
     }
@@ -199,11 +200,13 @@ void* get_array(array_t* arr, int i) {
 }
 
 void set_array(array_t* arr, int i, void* data) {
+    check_arr_index(arr, i);
     /* Perform a shallow copy */
     memcpy(arr->body[i], data, arr->size);
 }
 
 array_t* slice_array(array_t* arr, slice_t* slice) {
+    check_arr_slice(arr, slice);
     int start_i = slice->start;
     int end_i = slice->end;
     int length = end_i - start_i;
@@ -220,6 +223,7 @@ array_t* slice_array(array_t* arr, slice_t* slice) {
 }
 
 void set_slice_array(array_t* arr, slice_t* slice, array_t* data) {
+    check_arr_slice(arr, slice);
     int start_i = slice->start;
     int end_i = slice->end;
     for (int i = start_i; i < end_i; i++) {
@@ -228,6 +232,7 @@ void set_slice_array(array_t* arr, slice_t* slice, array_t* data) {
 }
 
 array_t* insert_array(array_t* arr, int pos_i, void* data) {
+    check_arr_index(arr, pos_i);
     int length = arr->length + 1;
     array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
 
@@ -248,6 +253,7 @@ array_t* insert_array(array_t* arr, int pos_i, void* data) {
 }
 
 array_t* _delete_array(array_t* arr, int pos_i) {
+    check_arr_index(arr, pos_i);
     int length = arr->length - 1;
     array_t* res = malloc_array(length, arr->size, arr->has_ptrs);
 
@@ -285,6 +291,7 @@ array_t* append_array(array_t* arr, void* data) {
 
 /* Matrix index/slice functions */
 void* get_matrix(matrix_t* mat, int i, int j) {
+    check_mat_index(mat, i, j);
     switch (mat->type) {
         case Int: return (void*)&mat->body.ibody[i][j];
         case Float: return (void*)&mat->body.fbody[i][j];
@@ -299,6 +306,7 @@ void* get_matrix(matrix_t* mat, int i, int j) {
 }
 
 void set_matrix(matrix_t* mat, int i, int j, void* data) {
+    check_mat_index(mat, i, j);
     switch (mat->type) {
         case Int: mat->body.ibody[i][j] = *(int*)data; break;
         case Float: mat->body.fbody[i][j] = *(double*)data; break;
@@ -306,6 +314,7 @@ void set_matrix(matrix_t* mat, int i, int j, void* data) {
 }
 
 matrix_t* slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice) {
+    check_mat_slice(mat, row_slice, col_slice);
     int start_i = row_slice->start;
     int end_i = row_slice->end;
     int start_j = col_slice->start;
@@ -333,6 +342,7 @@ matrix_t* slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice) {
 }
 
 void set_slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice, matrix_t* data) {
+    check_mat_slice(mat, row_slice, col_slice);
     int start_i = row_slice->start;
     int end_i = row_slice->end;
     int start_j = col_slice->start;
@@ -352,6 +362,7 @@ void set_slice_matrix(matrix_t* mat, slice_t* row_slice, slice_t* col_slice, mat
 }
 
 matrix_t* _insert_matrix(matrix_t* mat, int row_i, matrix_t* row) {
+    check_mat_index(mat, row_i, 0);
     int rows = mat->rows + 1;
     int cols = mat->cols;
     enum mat_type type = mat->type;
@@ -382,6 +393,7 @@ matrix_t* _insert_matrix(matrix_t* mat, int row_i, matrix_t* row) {
 }
 
 matrix_t* _delete_matrix(matrix_t* mat, int row_i) {
+    check_mat_index(mat, row_i, 0);
     int rows = mat->rows - 1;
     int cols = mat->cols;
     enum mat_type type = mat->type;
@@ -623,4 +635,33 @@ void check(const bool cond, const char* err) {
         fprintf(stderr, "%s\n", err);
         die();
     }
+}
+
+void check_arr_index(const array_t* arr, const int i) {
+    check(i >= 0 && i < arr->length, ARR_IDX_ERR);
+}
+
+void check_arr_slice(const array_t* arr, const slice_t* slice) {
+    int start = slice->start;
+    int end = slice->end;
+    check(start < end, SLICE_ERR);
+    check_arr_index(arr, start);
+    check(end <= arr->length, ARR_IDX_ERR);
+}
+
+void check_mat_index(const matrix_t* mat, const int i, const int j) {
+    check(i >= 0 && i < mat->rows, MAT_IDX_ERR);
+    check(j >= 0 && j < mat->cols, MAT_IDX_ERR);
+}
+
+void check_mat_slice(const matrix_t* mat, const slice_t* row_slice, const slice_t* col_slice) {
+    int start_i = row_slice->start;
+    int end_i = row_slice->end;
+    int start_j = col_slice->start;
+    int end_j = col_slice->end;
+    check(start_i < end_i, SLICE_ERR);
+    check(start_j < end_j, SLICE_ERR);
+    check_mat_index(mat, start_i, start_j);
+    check(end_i <= mat->rows, MAT_IDX_ERR);
+    check(end_j <= mat->cols, MAT_IDX_ERR);
 }

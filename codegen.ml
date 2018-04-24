@@ -112,11 +112,11 @@ let translate (env, program) =
   let empty_str = L.build_global_stringptr "" "empty_string" main_builder in
   let newline_str = L.build_global_stringptr "\n" "newline_string" main_builder in
   let null_value_err =
-    L.build_global_stringptr "Null value error: attempted to access null value"
+    L.build_global_stringptr "Null value error: attempted to read null value"
     "null_value_err" main_builder
   in
   let div_zero_err =
-    L.build_global_stringptr "Zero division error: attmpted to perform division or modulo by 0"
+    L.build_global_stringptr "Zero division error: attempted to perform division or modulo by 0"
     "div_zero_err" main_builder
   in
   let exp_zero_err =

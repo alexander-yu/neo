@@ -1,6 +1,6 @@
 array<int> foo() {
     create array<int> a = {|1|};
-    return insert(a, 1, 2);
+    return append(a, 2);
 }
 
 void main() {
