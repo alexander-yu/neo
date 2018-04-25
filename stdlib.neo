@@ -1,3 +1,9 @@
+void check(bool cond, string err) {
+    if (!cond) {
+        die(err);
+    }
+}
+
 matrix<int> itranspose(matrix<int> mat) {
     var int r = rows(mat);
     var int c = cols(mat);

@@ -44,7 +44,6 @@ let check (globals, functions) =
       "delete";
       "append";
       "die";
-      "check";
     ]
   in
 
@@ -158,17 +157,6 @@ let check (globals, functions) =
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
-    | "check" ->
-        let check_types arg_types ret_type =
-          let valid_args =
-            match arg_types with
-            | [Bool; String] -> true
-            | _ -> false
-          in
-          valid_args && ret_type = Void
-        in
-        if n_args = 2 && check_types arg_types ret_type then ()
-        else make_err err
     | _ -> make_err err
   in
 
@@ -195,7 +183,7 @@ let check (globals, functions) =
     in
     match fname with
     (* These functions already only a defined signature (in LLVM), so no need for a suffix *)
-    | "length" | "rows" | "cols" | "die" | "check" -> fname
+    | "length" | "rows" | "cols" | "die" -> fname
     (* For these, if it's a matrix then we only need one native function to
       * achieve both, since we're really just flipping the matrix type *)
     | "to_int" | "to_float" ->
@@ -569,11 +557,6 @@ let check (globals, functions) =
           if arg_types = [String] then
             (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
           else make_err ("non-string argument in " ^ expr_s)
-      | "check" ->
-          let _ = check_n_args 2 n_args expr_s in
-          if arg_types = [Bool; String] then
-            (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
-          else make_err ("illegal arguments in " ^ expr_s)
       | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
     in
 
