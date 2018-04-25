@@ -734,7 +734,8 @@ let check (globals, functions) =
                 (env, checked_arg :: checked)
               in
               let env, args' = List.fold_left2 check_arg (env, []) formals args in
-              (env, (return_type, SCall((t, f'), List.rev args')))
+              let args' = List.rev args' in
+              (env, (return_type, SCall((t, f'), args')))
       | One -> make_err "internal error: One should not be passed to check_expr"
       | Slice_Inc -> make_err "internal error: Slice_Inc should not be passed to check_expr"
       | End -> (env, (Int, SEnd))
@@ -934,6 +935,7 @@ let check (globals, functions) =
     let scope = { variables = StringMap.empty; parent = Some parent_scope } in
     let env = { env with scope } in
     let env, formals' = List.fold_left check_v_decl (env, []) func.formals in
+    let formals' = List.rev formals' in
 
     (* Check body *)
     let env, body =
