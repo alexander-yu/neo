@@ -1223,6 +1223,7 @@ let translate (env, program) =
     let global_scope = add_native_funcs "_delete_array" _delete_array_func global_scope in
     let global_scope = add_native_funcs "_delete_matrix" _delete_matrix_func global_scope in
     let global_scope = add_native_funcs "die" die_func global_scope in
+    let global_scope = add_native_funcs "check" check_func global_scope in
     global_scope
   in
   (* Add global variables to scope *)

@@ -44,6 +44,7 @@ let check (globals, functions) =
       "delete";
       "append";
       "die";
+      "check";
     ]
   in
 
@@ -97,15 +98,15 @@ let check (globals, functions) =
         else make_err err
     | "to_int" ->
         let check_types arg_types ret_type =
-          (List.hd arg_types = Float && ret_type = Int) ||
-          (List.hd arg_types = Matrix Float && ret_type = Matrix Int)
+          (arg_types = [Float] && ret_type = Int) ||
+          (arg_types = [Matrix Float] && ret_type = Matrix Int)
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
     | "to_float" ->
         let check_types arg_types ret_type =
-          (List.hd arg_types = Int && ret_type = Float) ||
-          (List.hd arg_types = Matrix Int && ret_type = Matrix Float)
+          (arg_types = [Int] && ret_type = Float) ||
+          (arg_types = [Matrix Int] && ret_type = Matrix Float)
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
@@ -114,12 +115,10 @@ let check (globals, functions) =
           let cont_type = List.hd arg_types in
           let valid_args =
             match cont_type with
-            | Array t ->
-                let index_is_int = List.nth arg_types 1 = Int in
-                index_is_int && List.nth arg_types 2 = t
+            | Array _ ->
+                arg_types = [cont_type; Int; typ_of_container cont_type]
             | Matrix _ ->
-                let index_is_int = List.nth arg_types 1 = Int in
-                index_is_int && List.nth arg_types 2 = cont_type
+                arg_types = [cont_type; Int; cont_type]
             | _ -> false
           in
           valid_args && ret_type = cont_type
@@ -131,8 +130,7 @@ let check (globals, functions) =
           let cont_type = List.hd arg_types in
           let valid_args =
             match cont_type with
-            | Array _ -> List.nth arg_types 1 = Int
-            | Matrix _ -> List.nth arg_types 1 = Int
+            | Array _ | Matrix _ -> arg_types = [cont_type; Int]
             | _ -> false
           in
           valid_args && ret_type = cont_type
@@ -144,8 +142,10 @@ let check (globals, functions) =
           let cont_type = List.hd arg_types in
           let valid_args =
             match cont_type with
-            | Array t -> List.nth arg_types 1 = t
-            | Matrix _ -> List.nth arg_types 1 = cont_type
+            | Array _ ->
+                arg_types = [cont_type; typ_of_container cont_type]
+            | Matrix _ ->
+                arg_types = [cont_type; cont_type]
             | _ -> false
           in
           valid_args && ret_type = cont_type
@@ -154,9 +154,20 @@ let check (globals, functions) =
         else make_err err
     | "die" ->
         let check_types arg_types ret_type =
-          List.hd arg_types = String && ret_type = Void
+          arg_types = [String] && ret_type = Void
         in
         if n_args = 1 && check_types arg_types ret_type then ()
+        else make_err err
+    | "check" ->
+        let check_types arg_types ret_type =
+          let valid_args =
+            match arg_types with
+            | [Bool; String] -> true
+            | _ -> false
+          in
+          valid_args && ret_type = Void
+        in
+        if n_args = 2 && check_types arg_types ret_type then ()
         else make_err err
     | _ -> make_err err
   in
@@ -183,8 +194,8 @@ let check (globals, functions) =
       | _ -> String.concat "_" (List.map abbrev_of_type arg_types)
     in
     match fname with
-    (* These functions already only take one/no type class, so no need for a suffix *)
-    | "length" | "rows" | "cols" | "die" -> fname
+    (* These functions already only a defined signature (in LLVM), so no need for a suffix *)
+    | "length" | "rows" | "cols" | "die" | "check" -> fname
     (* For these, if it's a matrix then we only need one native function to
       * achieve both, since we're really just flipping the matrix type *)
     | "to_int" | "to_float" ->
@@ -555,9 +566,14 @@ let check (globals, functions) =
           )
       | "die" ->
           let _ = check_n_args 1 n_args expr_s in
-          if List.hd arg_types = String then
+          if arg_types = [String] then
             (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
           else make_err ("non-string argument in " ^ expr_s)
+      | "check" ->
+          let _ = check_n_args 2 n_args expr_s in
+          if arg_types = [Bool; String] then
+            (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+          else make_err ("illegal arguments in " ^ expr_s)
       | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
     in
 
