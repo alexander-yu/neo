@@ -1,0 +1,4 @@
+void main() {
+    create array<matrix<int>> a[3];
+    println(a);
+}

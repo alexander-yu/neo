@@ -1,0 +1,29 @@
+var func<(string):void> f;
+
+int foo(int i) {
+    return 2 * i;
+}
+
+void print_name(string s) {
+    print("My name is ");
+    println(s);
+}
+
+void main() {
+    println(print);
+    println(foo);
+
+    create array<func<(int):int>> a = {| foo, foo |};
+    create array<array<func<(string):void>>> b =
+        {| {| print, print_name |}, {| print_name |} |};
+
+    println(a);
+    println(b[0]);
+    b[0][0]("Hello!\n");
+
+    var func<(int):int> g = a[0];
+    println(g(3));
+
+    f = b[1][0];
+    f("Alex");
+}

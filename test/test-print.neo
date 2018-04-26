@@ -6,18 +6,12 @@ create array<matrix<int>> c = {| [[1], [2]], [[3], [4]] |};
 create matrix<float> d = [[1.1, 3.3]];
 
 void main() {
-    print("Hello\n");
-    print(a);
-    print("\n");
-    print(arr1);
-    print("\n");
-    print(arr2);
-    print("\n");
-    print(b);
-    print("\n");
-    print(c);
-    print("\n");
-    print(True);
-    print("\n");
-    print(d);
+    println("Hello");
+    println(a);
+    println(arr1);
+    println(arr2);
+    println(b);
+    println(c);
+    println(True);
+    println(d);
 }

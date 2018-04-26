@@ -1,0 +1,9 @@
+void main() {
+    create matrix<float> a[2][2];
+    create array<bool> b[2];
+    create array<string> c[2];
+
+    println(a);
+    println(b);
+    println(c);
+}

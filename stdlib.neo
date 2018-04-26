@@ -1,0 +1,35 @@
+void check(bool cond, string err) {
+    if (!cond) {
+        die(err);
+    }
+}
+
+matrix<int> itranspose(matrix<int> mat) {
+    var int r = rows(mat);
+    var int c = cols(mat);
+
+    create matrix<int> res[c][r];
+
+    for (var int i = 0; i < c; i++) {
+        for (var int j = 0; j < r; j++) {
+            res[i, j] = mat[j, i];
+        }
+    }
+
+    return res;
+}
+
+matrix<float> ftranspose(matrix<float> mat) {
+    var int r = rows(mat);
+    var int c = cols(mat);
+
+    create matrix<float> res[c][r];
+
+    for (var int i = 0; i < c; i++) {
+        for (var int j = 0; j < r; j++) {
+            res[i, j] = mat[j, i];
+        }
+    }
+
+    return res;
+}

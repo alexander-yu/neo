@@ -1,0 +1,11 @@
+void print_name(string s) {
+    print("My name is ");
+    println(s);
+}
+
+void main() {
+    auto i = 17;
+    auto a = {| print, print_name |};
+    println(i);
+    println(a);
+}

@@ -16,10 +16,11 @@ parser.output
 scanner.ml
 !test/*.out
 
-# OCaml
+# OCaml / Makefile
 *.cmi
 *.cmo
 *.cmx
+*.exe
 *.ll
 *.o
 *.s

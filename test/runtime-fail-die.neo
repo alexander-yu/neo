@@ -1,0 +1,5 @@
+void main() {
+    println("Hello!");
+    die("Runtime error");
+    println("Unreachable!");
+}

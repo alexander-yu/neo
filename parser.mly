@@ -20,13 +20,13 @@ open Ast
 %token NOT AND OR
 
 /* Control flow */
-%token RETURN IF ELSE FOR WHILE TRY CATCH PROTEST
+%token RETURN IF ELSE FOR WHILE TRY CATCH PROTEST WITH
 
 /* Declaration */
 %token VAR CREATE EXCEPTION
 
 /* Types */
-%token INT BOOL FLOAT VOID STRING ARRAY MATRIX FUNC
+%token INT BOOL FLOAT VOID STRING ARRAY MATRIX FUNC AUTO EXC
 
 /* Literals */
 %token <int> INT_LIT
@@ -58,16 +58,16 @@ program:
   decls EOF { (List.rev (fst $1), List.rev (snd $1)) }
 
 decls:
-   /* nothing */   { ([], []) }
- | decls decl SEMI { (($2 :: fst $1), snd $1) }
- | decls fdecl     { (fst $1, ($2 :: snd $1)) }
+    /* nothing */   { ([], []) }
+  | decls decl SEMI { (($2 :: fst $1), snd $1) }
+  | decls fdecl     { (fst $1, ($2 :: snd $1)) }
 
 fdecl:
-   typ ID LPAREN formals_opt RPAREN LBRACE stmts_opt RBRACE
-     { { typ = $1;
-	 fname = $2;
-	 formals = $4;
-	 body = $7 } }
+  typ ID LPAREN formals_opt RPAREN LBRACE stmts_opt RBRACE
+    { { typ = $1;
+  fname = $2;
+  formals = $4;
+  body = $7 } }
 
 formals_opt:
     /* nothing */ { [] }
@@ -87,6 +87,7 @@ typ:
   | MATRIX LANGLE typ RANGLE { Matrix $3 }
   | FUNC LANGLE LPAREN typ_opt RPAREN COLON typ RANGLE
                              { Func($4, $7) }
+  | EXC                      { Exc }
 
 typ_opt:
     /* nothing */ { [] }
@@ -107,11 +108,11 @@ stmt_list:
 /* Implement for loops as while loops */
 for_loop:
     FOR LPAREN expr_opt SEMI expr SEMI expr_opt RPAREN stmt
-      { Block [Expr $3 ; While($5, Block [$9 ; Expr $7])] }
+      { Block [Expr $3; While($5, Block [$9; Expr $7])] }
   | FOR LPAREN decl SEMI expr SEMI expr_opt RPAREN stmt
       /* Implement declaration initializer as declaration
        * followed by loop in a block */
-      { Block [Decl $3 ; While($5, Block [$9 ; Expr $7])] }
+      { Block [Decl $3; While($5, Block [$9; Expr $7])] }
 
 /* This is to prevent if/else statements from containing
  * single-line declarations in their bodies; declarations
@@ -136,7 +137,7 @@ nondecl_stmt:
                                               exc_var = $8;
                                               catch_block = $11;
                                             }) }
-  | PROTEST ID LPAREN expr_opt RPAREN SEMI  { Protest($2, $4) }
+  | PROTEST expr WITH expr SEMI  { Protest($2, $4) }
 
 stmt:
     nondecl_stmt { $1 }
@@ -152,6 +153,7 @@ decl:
   | CREATE typ ID LBRACKET expr RBRACKET LBRACKET expr RBRACKET
                                          { (Create, $2, $3,
                                             Empty_Matrix(typ_of_container $2, $5, $8)) }
+  | AUTO ID ASSIGN expr                  { (Auto, Notyp, $2, $4) }
   | EXCEPTION ID                         { (Exception, Exc, $2, Noexpr) }
 
 expr_opt:
@@ -196,10 +198,10 @@ postfix_expr:
                                       Slice_Expr(Dbl_Slice($1, $3, $5))
                               }
   /* Function Call */
-  | ID LPAREN args_opt RPAREN { Call($1, $3) }
+  | postfix_expr LPAREN args_opt RPAREN { Call($1, $3) }
 
 prefix_expr:
-    postfix_expr       { $1 }
+    postfix_expr      { $1 }
 
   /* Unary ops */
   | MINUS prefix_expr { Unop(Neg, $2) }

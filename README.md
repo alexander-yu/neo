@@ -9,6 +9,10 @@ by Alex Yu, Andrés Aguayo, Ani Bezjian, Dominique Gordon, and Mohamed Abedelmal
 - Navigate to root directory of project
 - Compile using the command `make`
 
+## Compiling a Neo Program
+
+- Run the command `./neoc [options] [.neo file]`
+
 ## Testing
 
 ### Scanner Testing
@@ -42,4 +46,3 @@ by Alex Yu, Andrés Aguayo, Ani Bezjian, Dominique Gordon, and Mohamed Abedelmal
 - **test-mod.neo**: checks that the modulus operator (`%`) works
 - **test-print.neo**: checks that the `print` built-in function properly prints various data types
 - **test-return-container.neo**: checks that functions can properly return container types
-- **test-transpose.neo**: checks that the `transpose` built-in functions works

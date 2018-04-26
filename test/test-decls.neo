@@ -2,15 +2,12 @@ create matrix<int> a = [[1]];
 var int b = 3;
 
 void main() {
-    print(a);
-    print("\n");
-    print(b);
-    print("\n");
+    println(a);
+    println(b);
 
     create matrix<int> a = [[2]];
     var int b = 4;
 
-    print(a);
-    print("\n");
-    print(b);
+    println(a);
+    println(b);
 }

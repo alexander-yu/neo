@@ -1,15 +1,11 @@
 void main() {
     create matrix<int> a = [[1, 2], [3, 4]];
     create matrix<int> b = [[1, 2], [3, 4]];
-    print(a + b);
-    print("\n");
-    print(2 * a);
-    print("\n");
+    println(a + b);
+    println(2 * a);
     create matrix<float> c = [[1., 2.], [3., 4.]];
-    print(0.5 ^ c);
-    print("\n");
-    print(c <= 2.);
-    print("\n");
+    println(0.5 ^ c);
+    println(c <= 2.);
     create matrix<float> d = [[0.5, 0.3]];
-    print(c % d);
+    println(c % d);
 }

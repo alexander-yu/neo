@@ -1,0 +1,8 @@
+void main() {
+    create array<int> a = {| 1, 2, 3 |};
+    var int i = 10;
+    create matrix<float> m[i][i];
+    println(length(a));
+    println(rows(m));
+    println(cols(m));
+}
