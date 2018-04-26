@@ -667,15 +667,21 @@ let check (globals, functions) =
         )
     | Unop(op, e) ->
         let env, (t, e') = check_expr env e in
-        let ty =
+        let ty, ex' =
           match op with
-          | Neg when t = Int || t = Float -> t
-          | Not when t = Bool -> Bool
+          | Neg when t = Int || t = Float -> (t, SUnop(op, (t, e')))
+          | Neg when t = Matrix Int || t = Matrix Float ->
+              let neg_one =
+                if typ_of_container t = Int then (Int, SInt_Lit (-1))
+                else (Float, SFloat_Lit "-1.")
+              in
+              (t, SBinop(neg_one, Mult, (t, e')))
+          | Not when t = Bool -> (t, SUnop(op, (t, e')))
           | _ -> make_err ("illegal unary operator " ^
               string_of_uop op ^ string_of_typ t ^
               " in " ^ expr_s)
         in
-        (env, (ty, SUnop(op, (t, e'))))
+        (env, (ty, ex'))
     | Binop(e1, op, e2) ->
         let env, (t1, e1') = check_expr env e1 in
         let env, (t2, e2') =
