@@ -76,8 +76,16 @@ let () =
       | Sast -> print_string (Sast.string_of_sprogram (snd sast))
       | LLVM_IR ->
           let m = Codegen.translate sast in
+          let pm = Llvm.PassManager.create () in
+          let _ = Llvm_ipo.add_global_dce pm in
+          let _ = Llvm_ipo.add_strip_dead_prototypes pm in
+          let _ = Llvm.PassManager.run_module m pm in
           print_string (Llvm.string_of_llmodule m)
       | Compile ->
           let m = Codegen.translate sast in
+          let pm = Llvm.PassManager.create () in
+          let _ = Llvm_ipo.add_global_dce pm in
+          let _ = Llvm_ipo.add_strip_dead_prototypes pm in
+          let _ = Llvm.PassManager.run_module m pm in
           let _ = Llvm_analysis.assert_valid_module m in
           print_string (Llvm.string_of_llmodule m)

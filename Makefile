@@ -13,7 +13,9 @@ all : neo.native native.o
 .PHONY : neo.native
 neo.native :
 	rm -f *.o
-	ocamlbuild -use-ocamlfind -pkgs llvm,llvm.analysis,str -cflags -w,+a-4 \
+	ocamlbuild -use-ocamlfind \
+		-pkgs llvm,llvm.analysis,llvm.ipo,str \
+		-cflags -w,+a-4 \
 		neo.native
 
 # "make clean" removes all generated files

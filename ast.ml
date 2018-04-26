@@ -135,6 +135,16 @@ let rec string_of_typ = function
   | BuiltInFunc -> "func<built-in>"
   | Notyp -> ""
 
+let abbrev_of_typ typ =
+    match typ with
+    (* No need to include int/float; our native matrix structs already
+      * embed type information, meaning our native functions for matrices
+      * already account for the two different types at the same time,
+      * that's why we have _print_matrix and _free_matrix rather than
+      * _print_matrix<int> or _free_matrix<int> *)
+    | Matrix _ -> "matrix"
+    | _ -> string_of_typ typ
+
 let rec string_of_expr expr =
   let string_of_islice = function
     | Index i -> string_of_expr i

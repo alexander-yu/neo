@@ -4,7 +4,7 @@ open Ast
 open Sast
 
 module StringMap = Map.Make(String)
-module TypeSet = Set.Make(struct type t = typ let compare = compare end)
+module StringSet = Set.Make(String)
 
 (* Semantic checking of the AST. Returns an SAST if successful,
    throws an exception if something is wrong.
@@ -18,8 +18,18 @@ type symbol_table = {
 
 type translation_environment = {
     scope : symbol_table;
-    array_types : TypeSet.t;
-    func_types : TypeSet.t;
+    (* Store any uses of native built-in functions; we'll be doing the same
+     * with helper functions and declared functions. This will be a shallow
+     * variant of global dead code elimination; we're not doing any of the
+     * fancy dependency graph stuff, this is just to help de-clustter some
+     * of the LLVM generation. *)
+    builtin_uses : typ list StringMap.t;
+    (* Store any uses of miscellaneous external helper functions,
+     * such as get_matrix or set_matrix, which are not exposed as
+     * built-in functions but are needed regardless for various operations *)
+    helper_uses : StringSet.t;
+    (* Store any uses of Neo functions (user-defined or standard library) *)
+    func_uses : StringSet.t;
   }
 
 let make_err err = raise (Failure err)
@@ -160,68 +170,77 @@ let check (globals, functions) =
     | _ -> make_err err
   in
 
-  let get_native_of_builtin fname arg_types =
-    let abbrev_of_type typ =
-      match typ with
-      (* No need to include int/float; our native matrix structs already
-        * embed type information, meaning our native functions for matrices
-        * already account for the two different types at the same time,
-        * that's why we have _print_matrix and _free_matrix rather than
-        * _print_matrix<int> or _free_matrix<int> *)
-      | Matrix _ -> "matrix"
-      (* Similar as the above case, but while we don't account for type
-        * in our native arrays, these functions don't care about the element types *)
-      | Array _ when fname = "free" || fname = "delete" -> "array"
-      | _ -> string_of_typ typ
-    in
+  (* Adds uses of helper functions to environment *)
+  let add_helper_use env fname =
+    { env with helper_uses = StringSet.add fname env.helper_uses }
+  in
+
+  let get_native_of_builtin env fname arg_types =
     let type_tag =
-      match fname with
-      (* The signatures of these functions are dependent only on the first arg *)
-      | "insert" | "delete" | "append" | "to_int" | "to_float" ->
-          abbrev_of_type (List.hd arg_types)
-      | _ -> String.concat "_" (List.map abbrev_of_type arg_types)
+      match fname, List.hd arg_types with
+      (* These functions don't need to know the array's element type *)
+      | ("free", Array _) | ("delete", Array _) -> "array"
+      | ("insert", _) | ("delete", _) | ("append", _) ->
+          abbrev_of_typ (List.hd arg_types)
+      | (_, _) -> String.concat "_" (List.map abbrev_of_typ arg_types)
     in
-    match fname with
-    (* These functions already only a defined signature (in LLVM), so no need for a suffix *)
-    | "length" | "rows" | "cols" | "die" -> fname
-    (* For these, if it's a matrix then we only need one native function to
-      * achieve both, since we're really just flipping the matrix type *)
-    | "to_int" | "to_float" ->
-        (* Otherwise, the type tag is a prefix; _float_to_int makes more sense
-          * then _to_int_float *)
-        if is_matrix (List.hd arg_types) then "_flip_matrix_type"
-        else "_" ^ type_tag ^ "_" ^ fname
-    (* Otherwise, the type tag is a suffix *)
-    | _ -> "_" ^ fname ^ "_" ^ type_tag
-  in
-
-  (* Find all function types embedded within a type *)
-  let rec add_func_type func_types typ =
-    match typ with
-    | Func(arg_types, ret_type) ->
-        let func_types = TypeSet.add typ func_types in
-        let func_types = List.fold_left add_func_type func_types arg_types in
-        add_func_type func_types ret_type
-    | Array t -> add_func_type func_types t
-    | _ -> func_types
-  in
-
-  (* Find all array types embedded within a type *)
-  let rec add_array_type array_types typ =
-    match typ with
-    | Func(arg_types, ret_type) ->
-        let array_types = List.fold_left add_array_type array_types arg_types in
-        add_array_type array_types ret_type
-    | Array t ->
-        let array_types = TypeSet.add typ array_types in
-        add_array_type array_types t
-    | _ -> array_types
+    let native_fname =
+      match fname with
+      (* These functions already only a defined signature (in LLVM), so no need for a suffix *)
+      | "length" | "rows" | "cols" | "die" -> fname
+      (* For these, if it's a matrix then we only need one native function to
+        * achieve both, since we're really just flipping the matrix type *)
+      | "to_int" | "to_float" ->
+          (* Otherwise, the type tag is a prefix; _float_to_int makes more sense
+            * then _to_int_float *)
+          if is_matrix (List.hd arg_types) then "_flip_matrix_type"
+          else "_" ^ type_tag ^ "_" ^ fname
+      (* Otherwise, the type tag is a suffix *)
+      | _ -> "_" ^ fname ^ "_" ^ type_tag
+    in
+    let env =
+      if (fname = "print" || fname = "println") && List.hd arg_types = BuiltInFunc then
+        { env with builtin_uses = StringMap.add "_print_string" [String] env.builtin_uses }
+      else
+        let rec typ_contains_class typ typ_class =
+          match typ, typ_class with
+          | (Matrix _, "matrix") -> true
+          | (Func(_, _), "function") -> true
+          | (Array _, "array") -> true
+          | (Array t, _) -> typ_contains_class t typ_class
+          | (_, _) -> string_of_typ typ = typ_class
+        in
+        let env =
+          { env with
+              builtin_uses = StringMap.add native_fname arg_types env.builtin_uses
+          }
+        in
+        let helper_fnames =
+          match fname with
+          | "print" | "println" ->
+              (
+                match List.hd arg_types with
+                | Array t when typ_contains_class t "matrix" -> ["print_array"; "print_matrix"]
+                | Array t when typ_contains_class t "function" -> ["print_array"; "print_function"]
+                | Array _ -> ["print_array"]
+                | _ -> []
+              )
+          (* Note we don't perform validation that we're being handed an array; validation on
+          * argument types is already done elsewhere *)
+          | "deep_free" -> ["deep_free_array"]
+          | "insert" | "append" ->
+              if is_array (List.hd arg_types) then [fname ^ "_array"] else []
+          | _ -> []
+        in
+        List.fold_left add_helper_use env helper_fnames
+    in
+    (env, native_fname)
   in
 
   (* Raise an exception if the given rvalue type cannot be assigned to
   * the given lvalue type *)
-  let check_assign lvaluet (rvaluet, rexpr) err =
-    if lvaluet = rvaluet then (rvaluet, rexpr)
+  let check_assign env lvaluet (rvaluet, rexpr) err =
+    if lvaluet = rvaluet then (env, (rvaluet, rexpr))
     (* Alternatively, there's a built-in reference; see if we can restrict
      * the built-in type to the assigned type *)
     else
@@ -245,7 +264,8 @@ let check (globals, functions) =
                   " = " ^ string_of_typ rvaluet ^ " should have been rejected" ^
                   " by check_builtin_restrict")
             in
-            (lvaluet, SId (get_native_of_builtin fname arg_types))
+            let env, native_fname = get_native_of_builtin env fname arg_types in
+            (env, (lvaluet, SId native_fname))
         | _ -> make_err ("internal error: only direct references to " ^
             "built-in functions should have type BuiltInFunc")
       else make_err err
@@ -282,7 +302,7 @@ let check (globals, functions) =
           "container expected type " ^ string_of_typ t ^
           " but saw type " ^ string_of_typ t' ^ " in " ^ expr_s
         in
-        let t', e' = check_assign t (t', e') err in
+        let env, (t', e') = check_assign env t (t', e') err in
         (env, (t', e') :: checked)
       in
 
@@ -305,11 +325,6 @@ let check (globals, functions) =
           let t = find_typed l 0 in
           let env, checked = Array.fold_left (check_equal_type t) (env, []) l in
           let checked = Array.of_list (List.rev checked) in
-          (* Add array type to set *)
-          let array_types = add_array_type env.array_types (Array t) in
-          (* Add possible function types to set *)
-          let func_types = add_func_type env.func_types t in
-          let env = { env with array_types; func_types } in
           (env, (Array t, SArray_Lit(checked)))
       | Matrix_Lit l ->
           let env, (t, _) = check_expr env l.(0).(0) in
@@ -341,9 +356,13 @@ let check (globals, functions) =
           (env, SSlice((ti, i'), (tj, j')))
     in
 
-    let check_index_expr env i =
+    let check_index_expr env i is_assign =
       match i with
       | Sgl_Index(e, i) ->
+          let env =
+            if is_assign then add_helper_use env "set_array"
+            else add_helper_use env "get_array"
+          in
           let env, (t, e') = check_expr env e in
           (
             match t with
@@ -362,6 +381,10 @@ let check (globals, functions) =
                 " is not an array or matrix")
           )
       | Dbl_Index(e, i1, i2) ->
+          let env =
+            if is_assign then add_helper_use env "set_matrix"
+            else add_helper_use env "get_matrix"
+          in
           let env, (t, e') = check_expr env e in
           let _ =
             match t with
@@ -376,9 +399,13 @@ let check (globals, functions) =
           (env, (typ_of_container t, sindex))
     in
 
-    let check_slice_expr env i =
+    let check_slice_expr env i is_assign =
       match i with
       | Sgl_Slice(e, s) ->
+          let env =
+            if is_assign then add_helper_use env "set_slice_array"
+            else add_helper_use env "slice_array"
+          in
           let env, (t, e') = check_expr env e in
           (
             match t with
@@ -396,6 +423,10 @@ let check (globals, functions) =
                 " is not an array")
           )
       | Dbl_Slice(e, s1, s2) ->
+          let env =
+            if is_assign then add_helper_use env "set_slice_matrix"
+            else add_helper_use env "slice_matrix"
+          in
           let env, (t, e') = check_expr env e in
           let _ =
             match t with
@@ -410,7 +441,7 @@ let check (globals, functions) =
     in
 
     (* Check calls for built-in functions *)
-    let check_builtin_call fname args expr_s =
+    let check_builtin_call env fname args expr_s =
       let check_arg (env, checked) arg =
         let env, arg' = check_expr env arg in
         (env, arg' :: checked)
@@ -424,7 +455,7 @@ let check (globals, functions) =
       let env, args' = List.fold_left check_arg (env, []) args in
       let args' = List.rev args' in
       let arg_types = List.map fst args' in
-      let native_fname = get_native_of_builtin fname arg_types in
+      let env, native_fname = get_native_of_builtin env fname arg_types in
       match fname with
       | "print" | "println" ->
           let _ = check_n_args 1 n_args expr_s in
@@ -443,7 +474,7 @@ let check (globals, functions) =
                       "should be direct reference to built-in"
                 in
                 let str = "built-in function " ^ arg_name in
-                let native_fname = get_native_of_builtin fname [String] in
+                let env, native_fname = get_native_of_builtin env fname [String] in
                 (env, (Void, SCall((Func([String], Void), SId native_fname),
                   [(String, SString_Lit str)])))
             | _ -> (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
@@ -507,17 +538,17 @@ let check (globals, functions) =
             let err = "illegal insertion in " ^ expr_s in
             match arg_types with
             | [Array t; Int; _] ->
-                let e' = check_assign t e' err in
+                let env, e' = check_assign env t e' err in
                 let args' = Array.of_list args' in
                 let _ = Array.set args' 2 e' in
                 let args' = Array.to_list args' in
                 let arg_types = Array.of_list arg_types in
                 let _ = Array.set arg_types 2 (fst e') in
                 let arg_types = Array.to_list arg_types in
-                let native_fname = get_native_of_builtin fname arg_types in
+                let env, native_fname = get_native_of_builtin env fname arg_types in
                 (env, (Array t, SCall((Func(arg_types, Array t), SId native_fname), args')))
             | [Matrix t; Int; Matrix _] ->
-                let _ = check_assign (Matrix t) e' err in
+                let env, _ = check_assign env (Matrix t) e' err in
                 (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
             | _ -> make_err ("non-container argument in " ^ expr_s)
           )
@@ -538,17 +569,17 @@ let check (globals, functions) =
             let err = "illegal append in " ^ expr_s in
             match arg_types with
             | [Array t; _] ->
-                let e' = check_assign t e' err in
+                let env, e' = check_assign env t e' err in
                 let args' = Array.of_list args' in
                 let _ = Array.set args' 1 e' in
                 let args' = Array.to_list args' in
                 let arg_types = Array.of_list arg_types in
                 let _ = Array.set arg_types 1 (fst e') in
                 let arg_types = Array.to_list arg_types in
-                let native_fname = get_native_of_builtin fname arg_types in
+                let env, native_fname = get_native_of_builtin env fname arg_types in
                 (env, (Array t, SCall((Func(arg_types, Array t), SId native_fname), args')))
             | [Matrix t; Matrix _] ->
-                let _ = check_assign (Matrix t) e' err in
+                let env, _ = check_assign env (Matrix t) e' err in
                 (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
             | _ -> make_err ("non-container argument in " ^ expr_s)
           )
@@ -566,22 +597,42 @@ let check (globals, functions) =
     | Float_Lit l -> (env, (Float, SFloat_Lit l))
     | Bool_Lit l -> (env, (Bool, SBool_Lit l))
     | Noexpr -> (env, (Void, SNoexpr))
-    | Id s -> (env, (lookup s env.scope, SId s))
+    | Id s ->
+        let t = lookup s env.scope in
+        let env =
+          match t with
+          | Array _ | Matrix _ -> add_helper_use env "check"
+          | Func(_, _) ->
+              let env = { env with func_uses = StringSet.add s env.func_uses } in
+              add_helper_use env "check"
+          | _ -> env
+        in
+        (env, (t, SId s))
     | String_Lit s -> (env, (String, SString_Lit s))
-    | Array_Lit _ as a -> check_container_lit env a
+    | Array_Lit _ as a ->
+        let env = add_helper_use env "malloc_array" in
+        let env = add_helper_use env "set_array" in
+        check_container_lit env a
     | Empty_Array(t, n) ->
+        let env = add_helper_use env "malloc_array" in
+        let env = add_helper_use env "init_array" in
         let env, (nt, n') = check_expr env n in
         if nt <> Int then make_err ("non-integer length specified in " ^ expr_s)
         else (env, (Array t, SEmpty_Array(t, (nt, n'))))
-    | Matrix_Lit _ as m -> check_container_lit env m
+    | Matrix_Lit _ as m ->
+        let env = add_helper_use env "malloc_matrix" in
+        let env = add_helper_use env "set_matrix" in
+        check_container_lit env m
     | Empty_Matrix(t, r, c) ->
+        let env = add_helper_use env "malloc_matrix" in
+        let env = add_helper_use env "init_matrix" in
         let env, (rt, r') = check_expr env r in
         let env, (ct, c') = check_expr env c in
         if rt <> Int || ct <> Int
         then make_err ("non-integer dimensions specified in " ^ expr_s)
         else (env, (Matrix t, SEmpty_Matrix(t, (rt, r'), (ct, c'))))
-    | Index_Expr i -> check_index_expr env i
-    | Slice_Expr s -> check_slice_expr env s
+    | Index_Expr i -> check_index_expr env i false
+    | Slice_Expr s -> check_slice_expr env s false
     | Assign(e1, e2) ->
         (
           match e1 with
@@ -592,25 +643,25 @@ let check (globals, functions) =
                 "illegal assignment " ^ string_of_typ lt ^ " = " ^
                 string_of_typ rt ^ " in " ^ expr_s
               in
-              let rt, e' = check_assign lt (rt, e') err  in
+              let env, (rt, e') = check_assign env lt (rt, e') err  in
               (env, (lt, SAssign((lt, SId s), (rt, e'))))
           | Index_Expr i ->
-              let env, (lt, i') = check_index_expr env i in
+              let env, (lt, i') = check_index_expr env i true in
               let env, (rt, e') = check_expr env e2 in
               let err =
                 "illegal assignment " ^ string_of_typ lt ^ " = " ^
                 string_of_typ rt ^ " in " ^ expr_s
               in
-              let rt, e' = check_assign lt (rt, e') err in
+              let env, (rt, e') = check_assign env lt (rt, e') err in
               (env, (lt, SAssign((lt, i'), (rt, e'))))
           | Slice_Expr s ->
-              let env, (lt, s') = check_slice_expr env s in
+              let env, (lt, s') = check_slice_expr env s true in
               let env, (rt, e') = check_expr env e2 in
               let err =
                 "illegal assignment " ^ string_of_typ lt ^ " = " ^
                 string_of_typ rt ^ " in " ^ expr_s
               in
-              let rt, e' = check_assign lt (rt, e') err in
+              let env, (rt, e') = check_assign env lt (rt, e') err in
               (env, (lt, SAssign((lt, s'), (rt, e'))))
           | _ -> make_err (expr_s ^ " is not assignable")
         )
@@ -656,13 +707,27 @@ let check (globals, functions) =
         in
         (* We check if one of the operands is a matrix; if so, the result
           * will also be a matrix due to broadcasting *)
-        let res_is_matrix =
+        let env, res_is_matrix =
           match t1, t2 with
-          | (Matrix _, _) | (_, Matrix _) -> true
-          | (_, _) -> false
+          | (Matrix _, Matrix _) -> (add_helper_use env "mat_binop", true)
+          (* In this case, this means we perform broadcasting; check_arith_operand
+           * will ensure that the base types are equal. We also need to add
+           * _free_matrix as a built-in use; while the user program won't directly call it,
+           * we will be generating a temporary matrix for the scalar and therefore
+           * need to free it directly after computation, so the generated LLVM will be
+           * calling it. *)
+          | (Matrix t, _) | (_, Matrix t) ->
+              let env =
+                {
+                  env with builtin_uses =
+                    StringMap.add "_free_matrix" [Matrix t] env.builtin_uses
+                }
+              in
+              (add_helper_use env "mat_binop", true)
+          | (_, _) -> (env, false)
         in
         (* Determine expression type based on operator and operand types *)
-        let ty =
+        let env, ty =
           match op with
           | Add | Sub | Mult | Div | Mod | Exp ->
               (* Since we're implementing broadcasting, we just need to
@@ -670,16 +735,30 @@ let check (globals, functions) =
               let base_t1 = check_arith_operand t1 in
               let base_t2 = check_arith_operand t2 in
               let _ = if base_t1 <> base_t2 then make_err err in
-              if res_is_matrix then Matrix base_t1 else base_t1
+              let env =
+                match op with
+                | Div | Mod | Exp when t1 = t2 -> add_helper_use env "check"
+                | _ -> env
+              in
+              let env =
+                if op = Exp && t1 = t2 then
+                  if t1 = Float then
+                    let env = add_helper_use env "llvm.floor.f64" in
+                    add_helper_use env "fexp"
+                  else if t1 = Int then add_helper_use env "iexp"
+                  else env
+                else env
+              in
+              (env, if res_is_matrix then Matrix base_t1 else base_t1)
           | Equal | Neq ->
-              if not res_is_matrix && t1 = t2 then Bool
+              if not res_is_matrix && t1 = t2 then (env, Bool)
               (* Instead of returning matrix of bools, we return a
               * matrix of 0s and 1s *)
               else if res_is_matrix then
                 let base_t1 = check_arith_operand t1 in
                 let base_t2 = check_arith_operand t2 in
                 let _ = if base_t1 <> base_t2 then make_err err in
-                Matrix base_t1
+                (env, Matrix base_t1)
               else make_err err
           | Less | Leq | Greater | Geq ->
               let base_t1 = check_arith_operand t1 in
@@ -687,9 +766,10 @@ let check (globals, functions) =
               let _ = if base_t1 <> base_t2 then make_err err in
               (* Instead of returning matrix of bools, we return a
               * matrix of 0s and 1s *)
-              if res_is_matrix then Matrix base_t1 else Bool
-          | And | Or when t1 = t2 && t1 = Bool -> Bool
-          | MatMult when t1 = t2 && res_is_matrix -> t1
+              (env, if res_is_matrix then Matrix base_t1 else Bool)
+          | And | Or when t1 = t2 && t1 = Bool -> (env, Bool)
+          | MatMult when t1 = t2 && res_is_matrix ->
+              (add_helper_use env "matmult", t1)
           | _ -> make_err err
         in
         (env, (ty, SBinop((t1, e1'), op, (t2, e2'))))
@@ -710,7 +790,7 @@ let check (globals, functions) =
                   make_err ("internal error: only direct calls to " ^
                   "built-in functions should have type BuiltInFunc")
             in
-            check_builtin_call fname args expr_s
+            check_builtin_call env fname args expr_s
           else
             let formals, return_type =
               match t with
@@ -730,7 +810,7 @@ let check (globals, functions) =
                   ", expected " ^ string_of_typ arg_type ^
                   " in " ^ expr_s
                 in
-                let checked_arg = check_assign arg_type (expr_type, expr') err in
+                let env, checked_arg = check_assign env arg_type (expr_type, expr') err in
                 (env, checked_arg :: checked)
               in
               let env, args' = List.fold_left2 check_arg (env, []) formals args in
@@ -805,8 +885,8 @@ let check (globals, functions) =
       "illegal initialization " ^ string_of_typ t ^
       " = " ^ string_of_typ et ^ " in " ^ string_of_vdecl decl
     in
-    let t, expr' =
-      if expr' = SNoexpr then (t, expr')
+    let env, (t, expr') =
+      if expr' = SNoexpr then (env, (t, expr'))
       (* Auto variables must be initialized to explicitly typed expressions;
        * built-in functions require the presence of other explicitly typed
        * expressions to be explicitly typed, so clearly we cannot have both here *)
@@ -814,8 +894,8 @@ let check (globals, functions) =
         make_err ("illegal initialization of auto variable in " ^
         string_of_vdecl decl)
       (* Otherwise, set the auto variable to the type of its initializer *)
-      else if t = Notyp then (et, expr')
-      else check_assign t (et, expr') typ_err
+      else if t = Notyp then (env, (et, expr'))
+      else check_assign env t (et, expr') typ_err
     in
 
     (* Add decl to scope; we redefine decl here in case the variable was
@@ -823,16 +903,10 @@ let check (globals, functions) =
     let decl = (kw, t, s, expr) in
     let scope = add_v_decl env.scope decl in
 
-    (* Add array type to set if we declared an array type *)
-    let array_types = add_array_type env.array_types t in
-
-    (* Add function types to set if function types were part of declaration *)
-    let func_types = add_func_type env.func_types t in
-
     (* After type check, we explicitly add decl's type to the sexpr,
      * to handle the case where we have a void initialization (i.e.
      * declaration but not initialization) *)
-    ({ scope; array_types; func_types }, (kw, t, s, (t, expr')) :: checked)
+    ({ env with scope }, (kw, t, s, (t, expr')) :: checked)
   in
 
   (* Return semantically checked function *)
@@ -883,7 +957,7 @@ let check (globals, functions) =
             "return gives " ^ string_of_typ t ^ " expected " ^
             string_of_typ func.typ ^ " in " ^ string_of_expr e
           in
-          let t, e' = check_assign func.typ (t, e') err in
+          let env, (t, e') = check_assign env func.typ (t, e') err in
           (env, SReturn(t, e'), true)
       (* A block is correct if each statement is correct and nothing
       * follows any return statement. Blocks define their own scope. *)
@@ -951,17 +1025,6 @@ let check (globals, functions) =
           let err = "internal error: block didn't become a block?" in
           make_err err
     in
-
-    (* Add array/function types from return type *)
-    let array_types = add_array_type env.array_types func.typ in
-    let func_types = add_func_type env.func_types func.typ in
-
-    (* Add own function type *)
-    let func_type = lookup func.fname env.scope in
-    let func_types = add_func_type func_types func_type in
-
-    let env = { env with array_types; func_types } in
-
     (
       (* Return to parent scope *)
       { env with scope = parent_scope },
@@ -975,7 +1038,14 @@ let check (globals, functions) =
   in
 
   let global_scope = { variables = built_in_funcs; parent = None } in
-  let env = { scope = global_scope; array_types = TypeSet.empty; func_types = TypeSet.empty } in
+  let env =
+    {
+      scope = global_scope;
+      func_uses = StringSet.empty;
+      builtin_uses = StringMap.empty;
+      helper_uses = StringSet.empty;
+    }
+  in
   let env, globals' = List.fold_left check_v_decl (env, []) globals in
   let env, functions' = List.fold_left check_func_decl (env, []) functions in
 
@@ -985,10 +1055,12 @@ let check (globals, functions) =
     try
       let typ = lookup prog_main env.scope in
       match typ with
-      | Func([], Void) -> typ
+      | Func([], Void) -> ()
       | _ -> make_err main_err
     with Not_found -> make_err main_err
   in
+  (* Mark program main as used, since system main will call it *)
+  let env = { env with func_uses = StringSet.add prog_main env.func_uses } in
 
   let program = (List.rev globals', List.rev functions') in
   (env, program)
