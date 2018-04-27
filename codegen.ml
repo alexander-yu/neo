@@ -978,16 +978,30 @@ let translate (env, program) =
           (* Otherwise, it's a matrix result (either int or float) *)
           else
             (* Wrap broadcasted scalars into temp 1x1 matrices; we'll free these
-             * immediately after computation *)
+             * immediately after computation; alternatively, if we're using
+             * expressions that return a new matrix and are unreachable
+             * after computation, free those *)
             let e1', free_e1 =
               if t1 == A.Int || t1 == A.Float then
                 (build_matrix_lit t1 [| [| e1' |] |] builder, true)
-              else (e1', false)
+              else
+                let free_e1 =
+                  match snd e1 with
+                  | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
+                  | _ -> false
+                in
+                (e1', free_e1)
             in
             let e2', free_e2 =
               if t2 == A.Int || t2 == A.Float then
                 (build_matrix_lit t2 [| [| e2' |] |] builder, true)
-              else (e2', false)
+              else
+                let free_e2 =
+                  match snd e2 with
+                  | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
+                  | _ -> false
+                in
+                (e2', free_e2)
             in
             let res =
               match op with
