@@ -135,15 +135,31 @@ let rec string_of_typ = function
   | BuiltInFunc -> "func<built-in>"
   | Notyp -> ""
 
-let abbrev_of_typ typ =
-    match typ with
-    (* No need to include int/float; our native matrix structs already
-      * embed type information, meaning our native functions for matrices
-      * already account for the two different types at the same time,
-      * that's why we have _print_matrix and _free_matrix rather than
-      * _print_matrix<int> or _free_matrix<int> *)
-    | Matrix _ -> "matrix"
-    | _ -> string_of_typ typ
+(* Output should be valid output of string_of_typ *)
+let rec typ_of_string s =
+  match s with
+  | "int" -> Int
+  | "bool" -> Bool
+  | "float" -> Float
+  | "string" -> String
+  | "void" -> Void
+  | "exc" -> Exc
+  | "func<built-in>" -> BuiltInFunc
+  | "" -> Notyp
+  | _ ->
+      let array_regexp = Str.regexp "array<\\(.*\\)>" in
+      let matrix_regexp = Str.regexp "matrix<\\(.*\\)>" in
+      let func_regexp = Str.regexp "func<(\\(.*\\)):\\(.*\\)>" in
+      if Str.string_match array_regexp s 0 then
+        Array (typ_of_string (Str.matched_group 1 s))
+      else if Str.string_match matrix_regexp s 0 then
+        Matrix (typ_of_string (Str.matched_group 1 s))
+      else if Str.string_match func_regexp s 0 then
+        let args = Str.matched_group 1 s in
+        let ret = Str.matched_group 2 s in
+        let args = Str.split (Str.regexp ", ") args in
+        Func(List.map typ_of_string args, typ_of_string ret)
+      else raise (Failure ("internal error: typ_of_string given invalid type string " ^ s))
 
 let rec string_of_expr expr =
   let string_of_islice = function

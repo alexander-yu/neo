@@ -19,11 +19,8 @@ type symbol_table = {
 type translation_environment = {
     scope : symbol_table;
     (* Store any uses of native built-in functions; we'll be doing the same
-     * with helper functions and declared functions. This will be a shallow
-     * variant of global dead code elimination; we're not doing any of the
-     * fancy dependency graph stuff, this is just to help de-clustter some
-     * of the LLVM generation. *)
-    builtin_uses : typ list StringMap.t;
+     * with helper functions and declared functions. *)
+    builtin_uses : StringSet.t;
     (* Store any uses of miscellaneous external helper functions,
      * such as get_matrix or set_matrix, which are not exposed as
      * built-in functions but are needed regardless for various operations *)
@@ -176,31 +173,14 @@ let check (globals, functions) =
   in
 
   let get_native_of_builtin env fname arg_types =
-    let type_tag =
-      match fname, List.hd arg_types with
-      (* These functions don't need to know the array's element type *)
-      | ("free", Array _) | ("delete", Array _) -> "array"
-      | ("insert", _) | ("delete", _) | ("append", _) ->
-          abbrev_of_typ (List.hd arg_types)
-      | (_, _) -> String.concat "_" (List.map abbrev_of_typ arg_types)
-    in
-    let native_fname =
-      match fname with
-      (* These functions already only a defined signature (in LLVM), so no need for a suffix *)
-      | "length" | "rows" | "cols" | "die" -> fname
-      (* For these, if it's a matrix then we only need one native function to
-        * achieve both, since we're really just flipping the matrix type *)
-      | "to_int" | "to_float" ->
-          (* Otherwise, the type tag is a prefix; _float_to_int makes more sense
-            * then _to_int_float *)
-          if is_matrix (List.hd arg_types) then "_flip_matrix_type"
-          else "_" ^ type_tag ^ "_" ^ fname
-      (* Otherwise, the type tag is a suffix *)
-      | _ -> "_" ^ fname ^ "_" ^ type_tag
-    in
+    (* Our built-in functions are written in a way such that
+     * the first argument is all the information required to determine
+     * which actual native function to call *)
+    let type_tag = string_of_typ (List.hd arg_types) in
+    let native_fname = "_" ^ fname ^ "_" ^ type_tag in
     let env =
       if (fname = "print" || fname = "println") && List.hd arg_types = BuiltInFunc then
-        { env with builtin_uses = StringMap.add "_print_string" [String] env.builtin_uses }
+        { env with builtin_uses = StringSet.add "_print_string" env.builtin_uses }
       else
         let rec typ_contains_class typ typ_class =
           match typ, typ_class with
@@ -212,7 +192,7 @@ let check (globals, functions) =
         in
         let env =
           { env with
-              builtin_uses = StringMap.add native_fname arg_types env.builtin_uses
+              builtin_uses = StringSet.add native_fname env.builtin_uses
           }
         in
         let helper_fnames =
@@ -717,18 +697,13 @@ let check (globals, functions) =
           match t1, t2 with
           | (Matrix _, Matrix _) -> (add_helper_use env "mat_binop", true)
           (* In this case, this means we perform broadcasting; check_arith_operand
-           * will ensure that the base types are equal. We also need to add
-           * _free_matrix as a built-in use; while the user program won't directly call it,
+           * will ensure that the base types are equal. We need to add _free_matrix
+           * as a built-in use; while the user program won't directly call it,
            * we will be generating a temporary matrix for the scalar and therefore
            * need to free it directly after computation, so the generated LLVM will be
            * calling it. *)
           | (Matrix t, _) | (_, Matrix t) ->
-              let env =
-                {
-                  env with builtin_uses =
-                    StringMap.add "_free_matrix" [Matrix t] env.builtin_uses
-                }
-              in
+              let env, _ = get_native_of_builtin env "free" [Matrix t] in
               (add_helper_use env "mat_binop", true)
           | (_, _) -> (env, false)
         in
@@ -1048,7 +1023,7 @@ let check (globals, functions) =
     {
       scope = global_scope;
       func_uses = StringSet.empty;
-      builtin_uses = StringMap.empty;
+      builtin_uses = StringSet.empty;
       helper_uses = StringSet.empty;
     }
   in

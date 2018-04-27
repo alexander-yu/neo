@@ -231,19 +231,30 @@ let translate (env, program) =
     L.build_call helper_func args s builder
   in
 
-  let build_external_builtin fname builtin_funcs =
-    if StringMap.mem fname builtin_funcs then builtin_funcs
-    else
+  let build_external_builtin ?alias:(alias=None) fname builtin_funcs =
+    if StringMap.mem fname builtin_funcs then
+      match alias with
+      | None -> builtin_funcs
+      | Some alias ->
+          if StringMap.mem alias builtin_funcs then builtin_funcs
+          else
+            let func = StringMap.find fname builtin_funcs in
+            StringMap.add alias func builtin_funcs
+    else if StringMap.mem fname external_builtin_types then
       let func_t = StringMap.find fname external_builtin_types in
       let func = L.declare_function fname func_t the_module in
-      StringMap.add fname func builtin_funcs
+      let builtin_funcs = StringMap.add fname func builtin_funcs in
+      match alias with
+      | None -> builtin_funcs
+      | Some alias -> StringMap.add alias func builtin_funcs
+    else make_err (fname ^ " is not an external built-in")
   in
 
-  let rec build_builtin fname arg_types builtin_funcs =
+  let rec build_builtin fname builtin_funcs =
     (* Build any necessary element-printing functions for array types *)
     let rec build_print_element_func array_type builtin_funcs =
       let typ = A.typ_of_container array_type in
-      let fname = "_print_element_" ^ A.abbrev_of_typ typ in
+      let fname = "_print_element_" ^ A.string_of_typ typ in
       if StringMap.mem fname builtin_funcs then builtin_funcs
       else
         let print_t = L.function_type void_t [| pointer_t i8_t |] in
@@ -265,13 +276,13 @@ let translate (env, program) =
         let builtin_funcs =
           match typ with
           | A.Int | A.Bool | A.Float | A.String ->
-              let print_fname = "_print_" ^ A.abbrev_of_typ typ in
+              let print_fname = "_print_" ^ A.string_of_typ typ in
               let builtin_funcs = build_external_builtin print_fname builtin_funcs in
               let element_print_func = StringMap.find print_fname builtin_funcs in
               let _ = L.build_call element_print_func [| param |] "" builder in
               builtin_funcs
           | A.Array t ->
-              let element_fname = "_print_element_" ^ A.abbrev_of_typ t in
+              let element_fname = "_print_element_" ^ A.string_of_typ t in
               let _ =
                 call_helper "print_array"
                 [| param; StringMap.find element_fname builtin_funcs |] "" builder
@@ -298,7 +309,7 @@ let translate (env, program) =
 
     (* Build any necessary array-printing functions *)
     let build_print_array_func array_type builtin_funcs =
-      let fname = "_print_" ^ A.abbrev_of_typ array_type in
+      let fname = "_print_" ^ A.string_of_typ array_type in
       let print_t = L.function_type void_t [| ltype_of_typ array_type |] in
       let print_func = L.define_function fname print_t the_module in
       let builder = L.builder_at_end context (L.entry_block print_func) in
@@ -308,7 +319,7 @@ let translate (env, program) =
 
       (* Call print_array *)
       let typ = A.typ_of_container array_type in
-      let element_fname = "_print_element_" ^ A.abbrev_of_typ typ in
+      let element_fname = "_print_element_" ^ A.string_of_typ typ in
       let builtin_funcs = build_print_element_func array_type builtin_funcs in
       let print_element_func = StringMap.find element_fname builtin_funcs in
       let _ =
@@ -321,7 +332,7 @@ let translate (env, program) =
 
     (* Build any necessary function-printing functions *)
     let build_print_function_func func_type builtin_funcs =
-      let fname = "_print_" ^ A.abbrev_of_typ func_type in
+      let fname = "_print_" ^ A.string_of_typ func_type in
       let print_t = L.function_type void_t [| ltype_of_typ func_type |] in
       let print_func = L.define_function fname print_t the_module in
       let builder = L.builder_at_end context (L.entry_block print_func) in
@@ -338,14 +349,14 @@ let translate (env, program) =
 
     (* Build any necessary println functions *)
     let build_println_func arg_type builtin_funcs =
-      let print_fname = "_print_" ^ A.abbrev_of_typ arg_type in
+      let print_fname = "_print_" ^ A.string_of_typ arg_type in
       let builtin_funcs =
         if StringMap.mem print_fname builtin_funcs then builtin_funcs
-        else build_builtin print_fname [arg_type] builtin_funcs
+        else build_builtin print_fname builtin_funcs
       in
       let print_func = StringMap.find print_fname builtin_funcs in
 
-      let fname = "_println_" ^ A.abbrev_of_typ arg_type in
+      let fname = "_println_" ^ A.string_of_typ arg_type in
       (* Note that print_func is actually a function pointer, so we need to get the
       * "dereferenced" type *)
       let println_t = L.element_type (L.type_of print_func) in
@@ -367,7 +378,7 @@ let translate (env, program) =
     (* Build any necessary element-freeing functions for array types *)
     let rec build_free_element_func array_type builtin_funcs =
       let typ = A.typ_of_container array_type in
-      let fname = "_free_element_" ^ A.abbrev_of_typ typ in
+      let fname = "_free_element_" ^ A.string_of_typ typ in
       if StringMap.mem fname builtin_funcs then builtin_funcs
       else
         let free_t = L.function_type void_t [| pointer_t i8_t |] in
@@ -390,7 +401,7 @@ let translate (env, program) =
         let builtin_funcs =
           match typ with
           | A.Array t ->
-              let element_fname = "_free_element_" ^ A.abbrev_of_typ t in
+              let element_fname = "_free_element_" ^ A.string_of_typ t in
               let free_element_func = StringMap.find element_fname builtin_funcs in
               let _ =
                 call_helper "deep_free_array"
@@ -413,7 +424,7 @@ let translate (env, program) =
 
     (* Build any necessary array deep-freeing functions *)
     let build_deep_free_func array_type builtin_funcs =
-      let fname = "_deep_free_" ^ A.abbrev_of_typ array_type in
+      let fname = "_deep_free_" ^ A.string_of_typ array_type in
       let deep_free_t = L.function_type void_t [| ltype_of_typ array_type |] in
       let deep_free_func = L.define_function fname deep_free_t the_module in
       let builder = L.builder_at_end context (L.entry_block deep_free_func) in
@@ -423,7 +434,7 @@ let translate (env, program) =
 
       (* Call deep_free_array *)
       let typ = A.typ_of_container array_type in
-      let element_fname = "_free_element_" ^ A.abbrev_of_typ typ in
+      let element_fname = "_free_element_" ^ A.string_of_typ typ in
       let builtin_funcs = build_free_element_func array_type builtin_funcs in
       let free_element_func = StringMap.find element_fname builtin_funcs in
       let _ =
@@ -436,7 +447,7 @@ let translate (env, program) =
 
     (* Build any necessary array-inserting functions *)
     let build_insert_array_func array_type builtin_funcs =
-      let fname = "_insert_" ^ A.abbrev_of_typ array_type in
+      let fname = "_insert_" ^ A.string_of_typ array_type in
       let element_t = ltype_of_typ (A.typ_of_container array_type) in
       let insert_t =
         L.function_type (pointer_t array_t)
@@ -462,7 +473,7 @@ let translate (env, program) =
 
     (* Build any necessary array-appending functions *)
     let build_append_array_func array_type builtin_funcs =
-      let fname = "_append_" ^ A.abbrev_of_typ array_type in
+      let fname = "_append_" ^ A.string_of_typ array_type in
       let element_t = ltype_of_typ (A.typ_of_container array_type) in
       let append_t =
         L.function_type (pointer_t array_t)
@@ -485,43 +496,85 @@ let translate (env, program) =
       let _ = L.build_ret res builder in
       StringMap.add fname append_func builtin_funcs
     in
-    if StringMap.mem fname external_builtin_types then
-      build_external_builtin fname builtin_funcs
-    else
-      let fname_fragments = Str.split (Str.regexp "_") fname in
-      let fragment = List.hd fname_fragments in
-      let arg_type = List.hd arg_types in
-      match fragment with
-      | "print" ->
+
+    let fname_fragments = Str.split (Str.regexp "_") fname in
+    match fname_fragments with
+    | ["print"; arg_type] ->
+        let arg_type = A.typ_of_string arg_type in
+        (
+          match arg_type with
+          | A.Matrix _ ->
+              build_external_builtin ~alias:(Some fname) "_print_matrix" builtin_funcs
+          | A.Array _ -> build_print_array_func arg_type builtin_funcs
+          | A.Func(_, _) -> build_print_function_func arg_type builtin_funcs
+          | _ -> build_external_builtin fname builtin_funcs
+        )
+    | ["println"; arg_type] ->
+        let arg_type = A.typ_of_string arg_type in
+        build_println_func arg_type builtin_funcs
+    | ["free"; arg_type] ->
+        let arg_type = A.typ_of_string arg_type in
+        (
+          match arg_type with
+          | A.Array _ ->
+              build_external_builtin ~alias:(Some fname) "_free_array" builtin_funcs
+          | A.Matrix _ ->
+              build_external_builtin ~alias:(Some fname) "_free_matrix" builtin_funcs
+          | _ -> make_err ("internal error: " ^ fname ^ " is invalid free")
+        )
+    | ["deep"; "free"; arg_type] ->
+        let arg_type = A.typ_of_string arg_type in
+        (
+          match arg_type with
+          | A.Array _ -> build_deep_free_func arg_type builtin_funcs
+          | _ -> make_err ("internal error: " ^ fname ^ " is invalid deep_free")
+        )
+    | ["insert"; arg_type] ->
+        let arg_type = A.typ_of_string arg_type in
+        (
+          match arg_type with
+          | A.Matrix _ ->
+              build_external_builtin ~alias:(Some fname) "_insert_matrix" builtin_funcs
+          | A.Array _ -> build_insert_array_func arg_type builtin_funcs
+          | _ -> make_err ("internal error: " ^ fname ^ " is invalid insert")
+        )
+    | ["delete"; arg_type] ->
+        let arg_type = A.typ_of_string arg_type in
+        (
+          match arg_type with
+          | A.Matrix _ ->
+              build_external_builtin ~alias:(Some fname) "_delete_matrix" builtin_funcs
+          | A.Array _ ->
+              build_external_builtin ~alias:(Some fname) "_delete_array" builtin_funcs
+          | _ -> make_err ("internal error: " ^ fname ^ " is invalid delete")
+        )
+    | ["append"; arg_type] ->
+        let arg_type = A.typ_of_string arg_type in
+        (
+          match arg_type with
+          | A.Matrix _ ->
+              build_external_builtin ~alias:(Some fname) "_append_matrix" builtin_funcs
+          | A.Array _ -> build_append_array_func arg_type builtin_funcs
+          | _ -> make_err ("internal error: " ^ fname ^ " is invalid append")
+        )
+      | ["length"; _] | ["rows"; _] | ["cols"; _] | ["die"; _] ->
+          build_external_builtin ~alias:(Some fname) (List.hd fname_fragments) builtin_funcs
+      | ["to"; "int"; arg_type] | ["to"; "float"; arg_type] ->
+          let arg_type = A.typ_of_string arg_type in
           (
             match arg_type with
-            | A.Array _ -> build_print_array_func arg_type builtin_funcs
-            | A.Func(_, _) -> build_print_function_func arg_type builtin_funcs
-            | _ -> make_err ("internal error: " ^ fname ^ " should be in external_builtin_types")
+            | A.Int ->
+                build_external_builtin ~alias:(Some fname) "_int_to_float" builtin_funcs
+            | A.Float ->
+                build_external_builtin ~alias:(Some fname) "_float_to_int" builtin_funcs
+            | A.Matrix _ ->
+                build_external_builtin ~alias:(Some fname) "_flip_matrix_type" builtin_funcs
+            | _ -> make_err ("internal error: " ^ fname ^ " is invalid cast")
           )
-      | "println" -> build_println_func arg_type builtin_funcs
-      | "deep" ->
-          (
-            match arg_type with
-            | A.Array _ -> build_deep_free_func arg_type builtin_funcs
-            | _ -> make_err ("internal error: " ^ fname ^ " is invalid deep_free")
-          )
-      | "insert" ->
-          (
-            match arg_type with
-            | A.Array _ -> build_insert_array_func arg_type builtin_funcs
-            | _ -> make_err ("internal error: " ^ fname ^ " should be in external_builtin_types")
-          )
-      | "append" ->
-          (
-            match arg_type with
-            | A.Array _ -> build_append_array_func arg_type builtin_funcs
-            | _ -> make_err ("internal error: " ^ fname ^ " should be in external_builtin_types")
-          )
-      | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
+    | _ -> build_external_builtin fname builtin_funcs
   in
 
-  let builtin_funcs = StringMap.fold build_builtin builtin_uses StringMap.empty in
+  let builtin_funcs = StringSet.fold build_builtin builtin_uses StringMap.empty in
 
   (* Returns initial value for an empty declaration of a given type *)
   let init t =
