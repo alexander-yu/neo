@@ -779,7 +779,7 @@ let translate (env, program) =
           L.build_load cols_ptr "cols" builder
         in
         match (row_slice, col_slice) with
-        | (SSlice(i1, j1), SSlice(i2, j2)) ->
+        | SSlice(i1, j1), SSlice(i2, j2) ->
             let row_slice_ptr = L.build_alloca slice_t "row_slice_ptr" builder in
             let row_slice_start = L.build_struct_gep row_slice_ptr 0 "row_slice_start" builder in
             let row_slice_end = L.build_struct_gep row_slice_ptr 1 "row_slice_end" builder in
@@ -807,7 +807,7 @@ let translate (env, program) =
             let _ = L.build_store i2' col_slice_start builder in
             let _ = L.build_store j2' col_slice_end builder in
             (row_slice_ptr, col_slice_ptr)
-        | (_, _) -> make_err "internal error: build_dbl_slice given non-slice"
+        | _ -> make_err "internal error: build_dbl_slice given non-slice"
       in
 
       let sexpr_of_sindex = function

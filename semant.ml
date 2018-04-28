@@ -184,11 +184,11 @@ let check (globals, functions) =
       else
         let rec typ_contains_class typ typ_class =
           match typ, typ_class with
-          | (Matrix _, "matrix") -> true
-          | (Func(_, _), "function") -> true
-          | (Array _, "array") -> true
-          | (Array t, _) -> typ_contains_class t typ_class
-          | (_, _) -> string_of_typ typ = typ_class
+          | Matrix _, "matrix" -> true
+          | Func(_, _), "function" -> true
+          | Array _, "array" -> true
+          | Array t, _ -> typ_contains_class t typ_class
+          | _ -> string_of_typ typ = typ_class
         in
         let env =
           { env with
@@ -226,7 +226,7 @@ let check (globals, functions) =
     else
       let is_builtin_assign lvaluet rvaluet =
         match lvaluet, rvaluet with
-        | (Func(_, _), BuiltInFunc) -> true
+        | Func(_, _), BuiltInFunc -> true
         | _ -> false
       in
       if is_builtin_assign lvaluet rvaluet then
@@ -695,17 +695,17 @@ let check (globals, functions) =
           * will also be a matrix due to broadcasting *)
         let env, res_is_matrix =
           match t1, t2 with
-          | (Matrix _, Matrix _) -> (add_helper_use env "mat_binop", true)
+          | Matrix _, Matrix _ -> (add_helper_use env "mat_binop", true)
           (* In this case, this means we perform broadcasting; check_arith_operand
            * will ensure that the base types are equal. We need to add _free_matrix
            * as a built-in use; while the user program won't directly call it,
            * we will be generating a temporary matrix for the scalar and therefore
            * need to free it directly after computation, so the generated LLVM will be
            * calling it. *)
-          | (Matrix t, _) | (_, Matrix t) ->
+          | Matrix t, _ | _, Matrix t ->
               let env, _ = get_native_of_builtin env "free" [Matrix t] in
               (add_helper_use env "mat_binop", true)
-          | (_, _) -> (env, false)
+          | _ -> (env, false)
         in
         (* Determine expression type based on operator and operand types *)
         let env, ty =

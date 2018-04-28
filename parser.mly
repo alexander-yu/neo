@@ -182,19 +182,19 @@ postfix_expr:
   | postfix_expr LBRACKET index RBRACKET
                               {
                                 match $3 with
-                                    Index _ -> Index_Expr(Sgl_Index($1, $3))
+                                  | Index _ -> Index_Expr(Sgl_Index($1, $3))
                                   | Slice _ -> Slice_Expr(Sgl_Slice($1, $3))
                               }
   | postfix_expr LBRACKET index COMMA index RBRACKET
                               {
                                 match ($3, $5) with
-                                    (Index _, Index _) ->
+                                  | Index _, Index _ ->
                                       Index_Expr(Dbl_Index($1, $3, $5))
-                                  | (Slice _, Index _) ->
+                                  | Slice _, Index _ ->
                                       Slice_Expr(Dbl_Slice($1, $3, index_to_slice($5)))
-                                  | (Index _, Slice _) ->
+                                  | Index _, Slice _ ->
                                       Slice_Expr(Dbl_Slice($1, index_to_slice($3), $5))
-                                  | (Slice _, Slice _) ->
+                                  | Slice _, Slice _ ->
                                       Slice_Expr(Dbl_Slice($1, $3, $5))
                               }
   /* Function Call */

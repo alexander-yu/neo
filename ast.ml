@@ -217,12 +217,12 @@ let rec string_of_expr expr =
 
 let string_of_vdecl (kw, t, id, expr) =
   match kw, t, expr with
-  | (Nokw, _, Noexpr) -> string_of_typ t ^ " " ^ id
-  | (_, Exc, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
-  | (_, Notyp, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
-  | (_, _, Noexpr) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
-  | (_, Notyp, _) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
-  | (_, _, _) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
+  | Nokw, _, Noexpr -> string_of_typ t ^ " " ^ id
+  | _, Exc, Noexpr -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | _, Notyp, Noexpr -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | _, _, Noexpr -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
+  | _, Notyp, _ -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | _ -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
       string_of_expr expr ^ ";\n"
 
 let rec string_of_stmt = function
