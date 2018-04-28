@@ -152,65 +152,65 @@ let translate (env, program) =
       ("_delete_matrix", pointer_t matrix_t, [| pointer_t matrix_t; i32_t |]);
       ("_append_matrix", pointer_t matrix_t, [| pointer_t matrix_t; pointer_t matrix_t |]);
       (* Miscellaneous built-ins *)
-      ("length", i32_t, [| pointer_t array_t |]);
-      ("rows", i32_t, [| pointer_t matrix_t |]);
-      ("cols", i32_t, [| pointer_t matrix_t |]);
+      ("_length", i32_t, [| pointer_t array_t |]);
+      ("_rows", i32_t, [| pointer_t matrix_t |]);
+      ("_cols", i32_t, [| pointer_t matrix_t |]);
       ("_float_to_int", i32_t, [| float_t |]);
       ("_int_to_float", float_t, [| i32_t |]);
       ("_flip_matrix_type", pointer_t matrix_t, [| pointer_t matrix_t |]);
-      ("die", void_t, [| pointer_t i8_t |]);
+      ("_die", void_t, [| pointer_t i8_t |]);
     ]
   in
 
   let external_helper_types =
     List.fold_left add_external_func StringMap.empty [
       (* Pretty-printing functions *)
-      ("print_function", void_t, [| pointer_t i8_t |]);
+      ("_print_function", void_t, [| pointer_t i8_t |]);
       (
-        "print_array", void_t,
+        "_print_array", void_t,
         [|
           pointer_t array_t;
           pointer_t (L.function_type void_t [| pointer_t i8_t |])
         |]
       );
-      ("print_matrix", void_t, [| pointer_t matrix_t; i1_t |]);
+      ("_print_flat_matrix", void_t, [| pointer_t matrix_t |]);
       (* Array/matrix memory functions *)
       (
-        "deep_free_array", void_t,
+        "_deep_free_array", void_t,
         [|
           pointer_t array_t;
           pointer_t (L.function_type void_t [| pointer_t i8_t |])
         |]
       );
-      ("malloc_array", pointer_t array_t, [| i32_t; i64_t; i1_t |]);
-      ("malloc_matrix", pointer_t matrix_t, [| i32_t; i32_t; i32_t |]);
+      ("_malloc_array", pointer_t array_t, [| i32_t; i64_t; i1_t |]);
+      ("_malloc_matrix", pointer_t matrix_t, [| i32_t; i32_t; i32_t |]);
       (* Array index/slice functions *)
-      ("get_array", pointer_t i8_t, [| pointer_t array_t; i32_t |]);
-      ("set_array", void_t, [| pointer_t array_t; i32_t; pointer_t i8_t |]);
-      ("slice_array", pointer_t array_t, [| pointer_t array_t; pointer_t slice_t |]);
-      ("set_slice_array", void_t, [| pointer_t array_t; pointer_t slice_t; pointer_t array_t |]);
+      ("_get_array", pointer_t i8_t, [| pointer_t array_t; i32_t |]);
+      ("_set_array", void_t, [| pointer_t array_t; i32_t; pointer_t i8_t |]);
+      ("_slice_array", pointer_t array_t, [| pointer_t array_t; pointer_t slice_t |]);
+      ("_set_slice_array", void_t, [| pointer_t array_t; pointer_t slice_t; pointer_t array_t |]);
       (* Matrix index/slice functions *)
-      ("get_matrix", pointer_t i8_t, [| pointer_t matrix_t; i32_t; i32_t |]);
-      ("set_matrix", void_t, [| pointer_t matrix_t; i32_t; i32_t; pointer_t i8_t |]);
+      ("_get_matrix", pointer_t i8_t, [| pointer_t matrix_t; i32_t; i32_t |]);
+      ("_set_matrix", void_t, [| pointer_t matrix_t; i32_t; i32_t; pointer_t i8_t |]);
       (
-        "slice_matrix", pointer_t matrix_t,
+        "_slice_matrix", pointer_t matrix_t,
         [| pointer_t matrix_t; pointer_t slice_t; pointer_t slice_t |]
       );
       (
-        "set_slice_matrix", void_t,
+        "_set_slice_matrix", void_t,
         [| pointer_t matrix_t; pointer_t slice_t; pointer_t slice_t; pointer_t matrix_t |]
       );
-      ("insert_array", pointer_t array_t, [| pointer_t array_t; i32_t; pointer_t i8_t |]);
-      ("append_array", pointer_t array_t, [| pointer_t array_t; pointer_t i8_t |]);
+      ("_insert_array", pointer_t array_t, [| pointer_t array_t; i32_t; pointer_t i8_t |]);
+      ("_append_array", pointer_t array_t, [| pointer_t array_t; pointer_t i8_t |]);
       (* Binary operations *)
-      ("iexp", i32_t, [| i32_t; i32_t |]);
-      ("fexp", float_t, [| float_t; float_t |]);
-      ("matmult", pointer_t matrix_t, [| pointer_t matrix_t; pointer_t matrix_t |]);
-      ("mat_binop", pointer_t matrix_t, [| pointer_t matrix_t; i32_t; pointer_t matrix_t |]);
+      ("_iexp", i32_t, [| i32_t; i32_t |]);
+      ("_fexp", float_t, [| float_t; float_t |]);
+      ("_matmult", pointer_t matrix_t, [| pointer_t matrix_t; pointer_t matrix_t |]);
+      ("_mat_binop", pointer_t matrix_t, [| pointer_t matrix_t; i32_t; pointer_t matrix_t |]);
       (* Miscellaneous helper/built-ins *)
-      ("init_array", void_t, [| pointer_t array_t; pointer_t i8_t |]);
-      ("init_matrix", void_t, [| pointer_t matrix_t |]);
-      ("check", void_t, [| i1_t; pointer_t i8_t |]);
+      ("_init_array", void_t, [| pointer_t array_t; pointer_t i8_t |]);
+      ("_init_matrix", void_t, [| pointer_t matrix_t |]);
+      ("_check", void_t, [| i1_t; pointer_t i8_t |]);
       ("llvm.floor.f64", float_t, [| float_t |]);
     ]
   in
@@ -226,6 +226,7 @@ let translate (env, program) =
   in
 
   let call_helper fname args s builder =
+    (* TODO: remove this *)
     let _ = if not (StringMap.mem fname helper_funcs) then make_err fname in
     let helper_func = StringMap.find fname helper_funcs in
     L.build_call helper_func args s builder
@@ -284,18 +285,18 @@ let translate (env, program) =
           | A.Array t ->
               let element_fname = "_print_element_" ^ A.string_of_typ t in
               let _ =
-                call_helper "print_array"
+                call_helper "_print_array"
                 [| param; StringMap.find element_fname builtin_funcs |] "" builder
               in
               builtin_funcs
           | A.Matrix _ ->
               (* Print flat matrices if embedded within arrays *)
-              let _ = call_helper "print_matrix" [| param; L.const_int i1_t 1 |] "" builder in
+              let _ = call_helper "_print_flat_matrix" [| param |] "" builder in
               builtin_funcs
           | A.Func(_, _) ->
               (* Cast function pointer to "void pointer" *)
               let param = L.build_bitcast param (pointer_t i8_t) "param" builder in
-              let _ = call_helper "print_function" [| param |] "" builder in
+              let _ = call_helper "_print_function" [| param |] "" builder in
               builtin_funcs
           | A.BuiltInFunc ->
               make_err ("internal error: BuiltInFunc should have not made it " ^
@@ -323,7 +324,7 @@ let translate (env, program) =
       let builtin_funcs = build_print_element_func array_type builtin_funcs in
       let print_element_func = StringMap.find element_fname builtin_funcs in
       let _ =
-        call_helper "print_array"
+        call_helper "_print_array"
         [| param; print_element_func |] "" builder
       in
       let _ = L.build_ret_void builder in
@@ -342,7 +343,7 @@ let translate (env, program) =
 
       (* Cast function pointer to "void pointer" *)
       let param = L.build_bitcast param (pointer_t i8_t) "param" builder in
-      let _ = call_helper "print_function" [| param |] "" builder in
+      let _ = call_helper "_print_function" [| param |] "" builder in
       let _ = L.build_ret_void builder in
       StringMap.add fname print_func builtin_funcs
     in
@@ -404,7 +405,7 @@ let translate (env, program) =
               let element_fname = "_free_element_" ^ A.string_of_typ t in
               let free_element_func = StringMap.find element_fname builtin_funcs in
               let _ =
-                call_helper "deep_free_array"
+                call_helper "_deep_free_array"
                 [| param; free_element_func |] "" builder
               in
               builtin_funcs
@@ -438,7 +439,7 @@ let translate (env, program) =
       let builtin_funcs = build_free_element_func array_type builtin_funcs in
       let free_element_func = StringMap.find element_fname builtin_funcs in
       let _ =
-        call_helper "deep_free_array"
+        call_helper "_deep_free_array"
         [| param; free_element_func |] "" builder
       in
       let _ = L.build_ret_void builder in
@@ -466,7 +467,7 @@ let translate (env, program) =
       let _ = Array.set params 2 element_ptr in
 
       (* Call insert_array *)
-      let res = call_helper "insert_array" params "res" builder in
+      let res = call_helper "_insert_array" params "res" builder in
       let _ = L.build_ret res builder in
       StringMap.add fname insert_func builtin_funcs
     in
@@ -492,7 +493,7 @@ let translate (env, program) =
       let _ = Array.set params 1 element_ptr in
 
       (* Call append_array *)
-      let res = call_helper "append_array" params "res" builder in
+      let res = call_helper "_append_array" params "res" builder in
       let _ = L.build_ret res builder in
       StringMap.add fname append_func builtin_funcs
     in
@@ -558,7 +559,7 @@ let translate (env, program) =
           | _ -> make_err ("internal error: " ^ fname ^ " is invalid append")
         )
       | ["length"; _] | ["rows"; _] | ["cols"; _] | ["die"; _] ->
-          build_external_builtin ~alias:(Some fname) (List.hd fname_fragments) builtin_funcs
+          build_external_builtin ~alias:(Some fname) ("_" ^ List.hd fname_fragments) builtin_funcs
       | ["to"; "int"; arg_type] | ["to"; "float"; arg_type] ->
           let arg_type = A.typ_of_string arg_type in
           (
@@ -610,7 +611,7 @@ let translate (env, program) =
   (* Builds a runtime check on a condition; if condition is not true,
    * then program prints error to stderr and exits with return code EXIT_FAILURE *)
   let build_check cond err builder =
-    let _ = call_helper "check" [| cond; err |] "" builder in
+    let _ = call_helper "_check" [| cond; err |] "" builder in
     ()
   in
 
@@ -693,7 +694,7 @@ let translate (env, program) =
         let ltype = ltype_of_typ typ in
         let length = L.const_int i32_t (Array.length raw_elements) in
         let arr_ptr =
-          call_helper "malloc_array"
+          call_helper "_malloc_array"
           [| length; L.size_of ltype; array_has_ptrs typ |] "arr_ptr" builder
         in
 
@@ -704,7 +705,7 @@ let translate (env, program) =
           (* Cast element pointer to "void pointer" *)
           let element_ptr = L.build_bitcast element_ptr (pointer_t i8_t) "element_ptr" builder in
           let _ =
-            call_helper "set_array"
+            call_helper "_set_array"
             [| arr_ptr; L.const_int i32_t i; element_ptr |] "" builder
           in
           ()
@@ -725,7 +726,7 @@ let translate (env, program) =
         let cols = L.const_int i32_t (Array.length raw_elements.(0)) in
         let mat_type = mat_type_of_typ typ in
         let mat_ptr =
-          call_helper "malloc_matrix" [| rows; cols; mat_type |] "mat_ptr" builder
+          call_helper "_malloc_matrix" [| rows; cols; mat_type |] "mat_ptr" builder
         in
 
         (* Allocate and fill matrix body *)
@@ -736,7 +737,7 @@ let translate (env, program) =
             (* Cast element pointer to "void pointer" *)
             let element_ptr = L.build_bitcast element_ptr (pointer_t i8_t) "element_ptr" builder in
             let _ =
-              call_helper "set_matrix"
+              call_helper "_set_matrix"
               [| mat_ptr; L.const_int i32_t i; L.const_int i32_t j; element_ptr |] "" builder
             in
             ()
@@ -852,13 +853,13 @@ let translate (env, program) =
           let ltype = ltype_of_typ t in
           let length = expr scope builder n in
           let arr_ptr =
-            call_helper "malloc_array"
+            call_helper "_malloc_array"
             [| length; L.size_of ltype; array_has_ptrs t |] "arr_ptr" builder
           in
           let init_ptr = L.build_alloca ltype "init_ptr" builder in
           let _ = L.build_store (init t) init_ptr builder in
           let init_ptr = L.build_bitcast init_ptr (pointer_t i8_t) "init_ptr" builder in
-          let _ = call_helper "init_array" [| arr_ptr; init_ptr |] "" builder in
+          let _ = call_helper "_init_array" [| arr_ptr; init_ptr |] "" builder in
           arr_ptr
       | SMatrix_Lit l ->
           let raw_elements = Array.map (Array.map (expr scope builder)) l in
@@ -868,10 +869,10 @@ let translate (env, program) =
           let rows = expr scope builder r in
           let cols = expr scope builder c in
           let mat_ptr =
-            call_helper "malloc_matrix"
+            call_helper "_malloc_matrix"
             [| rows; cols; mat_type_of_typ t |] "mat_ptr" builder
           in
-          let _ = call_helper "init_matrix" [| mat_ptr |] "" builder in
+          let _ = call_helper "_init_matrix" [| mat_ptr |] "" builder in
           mat_ptr
       | SIndex_Expr i ->
           (
@@ -880,7 +881,7 @@ let translate (env, program) =
                 let ltype = ltype_of_typ t in
                 let e' = expr scope builder e in
                 let i' = expr scope builder (sexpr_of_sindex i) in
-                let ptr = call_helper "get_array" [| e'; i' |] "ptr" builder in
+                let ptr = call_helper "_get_array" [| e'; i' |] "ptr" builder in
                 let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
                 L.build_load ptr "arr_element" builder
             | SDbl_Index(e, i, j) ->
@@ -889,7 +890,7 @@ let translate (env, program) =
                 let i' = expr scope builder (sexpr_of_sindex i) in
                 let j' = expr scope builder (sexpr_of_sindex j) in
                 let ptr =
-                  call_helper "get_matrix" [| e'; i'; j' |] "mat_element" builder
+                  call_helper "_get_matrix" [| e'; i'; j' |] "mat_element" builder
                 in
                 let ptr = L.build_bitcast ptr (pointer_t ltype) "ptr" builder in
                 L.build_load ptr "mat_element" builder
@@ -900,11 +901,11 @@ let translate (env, program) =
             | SSgl_Slice(e, s) ->
                 let e' = expr scope builder e in
                 let s' = build_sgl_slice e' s builder in
-                call_helper "slice_array" [| e'; s' |] "arr_slice" builder
+                call_helper "_slice_array" [| e'; s' |] "arr_slice" builder
             | SDbl_Slice(e, s1, s2) ->
                 let e' = expr scope builder e in
                 let s1', s2' = build_dbl_slice e' s1 s2 builder in
-                call_helper "slice_matrix" [| e'; s1'; s2' |] "mat_slice" builder
+                call_helper "_slice_matrix" [| e'; s1'; s2' |] "mat_slice" builder
           )
       | SNoexpr -> init t
       | SId s ->
@@ -935,7 +936,7 @@ let translate (env, program) =
                       let ptr = L.build_alloca ltype "ptr" builder in
                       let _ = L.build_store e2' ptr builder in
                       let ptr = L.build_bitcast ptr (pointer_t i8_t) "ptr" builder in
-                      let _ = call_helper "set_array" [| e'; i'; ptr |] "" builder in
+                      let _ = call_helper "_set_array" [| e'; i'; ptr |] "" builder in
                       ()
                   | SDbl_Index(e, i, j) ->
                       let ltype = ltype_of_typ t in
@@ -946,7 +947,7 @@ let translate (env, program) =
                       let _ = L.build_store e2' ptr builder in
                       let ptr = L.build_bitcast ptr (pointer_t i8_t) "ptr" builder in
                       let _ =
-                        call_helper "set_matrix"
+                        call_helper "_set_matrix"
                         [| e'; i'; j'; ptr |] "" builder
                       in
                       ()
@@ -958,7 +959,7 @@ let translate (env, program) =
                     let e' = expr scope builder e in
                     let s' = build_sgl_slice e' s builder in
                     let _ =
-                      call_helper "set_slice_array"
+                      call_helper "_set_slice_array"
                       [| e'; s'; e2' |] "" builder
                     in
                     ()
@@ -966,7 +967,7 @@ let translate (env, program) =
                     let e' = expr scope builder e in
                     let s1', s2' = build_dbl_slice e' s1 s2 builder in
                     let _ =
-                      call_helper "set_slice_matrix"
+                      call_helper "_set_slice_matrix"
                       [| e'; s1'; s2'; e2' |] "" builder
                     in
                     ()
@@ -991,7 +992,7 @@ let translate (env, program) =
             | A.Mult -> L.build_fmul e1' e2' "temp" builder
             | A.Div -> L.build_fdiv e1' e2' "temp" builder
             | A.Mod -> L.build_frem e1' e2' "temp" builder
-            | A.Exp -> call_helper "fexp" [| e1'; e2'|] "temp" builder
+            | A.Exp -> call_helper "_fexp" [| e1'; e2'|] "temp" builder
             | A.Equal -> L.build_fcmp L.Fcmp.Oeq e1' e2' "temp" builder
             | A.Neq -> L.build_fcmp L.Fcmp.One e1' e2' "temp" builder
             | A.Less -> L.build_fcmp L.Fcmp.Olt e1' e2' "temp" builder
@@ -1009,7 +1010,7 @@ let translate (env, program) =
             | A.Mult -> L.build_mul e1' e2' "temp" builder
             | A.Div -> L.build_sdiv e1' e2' "temp" builder
             | A.Mod -> L.build_srem e1' e2' "temp" builder
-            | A.Exp -> call_helper "iexp" [| e1'; e2'|] "temp" builder
+            | A.Exp -> call_helper "_iexp" [| e1'; e2'|] "temp" builder
             | A.Equal -> L.build_icmp L.Icmp.Eq e1' e2' "temp" builder
             | A.Neq -> L.build_icmp L.Icmp.Ne e1' e2' "temp" builder
             | A.Less -> L.build_icmp L.Icmp.Slt e1' e2' "temp" builder
@@ -1058,11 +1059,11 @@ let translate (env, program) =
             in
             let res =
               match op with
-              | A.MatMult -> call_helper "matmult" [| e1'; e2' |] "temp" builder
+              | A.MatMult -> call_helper "_matmult" [| e1'; e2' |] "temp" builder
               | A.And | A.Or -> make_err err
               | _ ->
                   let opcode = L.const_int i32_t (get_mat_opcode op) in
-                  call_helper "mat_binop" [| e1'; opcode; e2' |] "temp"  builder
+                  call_helper "_mat_binop" [| e1'; opcode; e2' |] "temp"  builder
             in
             let _ =
               if free_e1 then

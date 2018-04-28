@@ -31,6 +31,34 @@ type translation_environment = {
 
 let make_err err = raise (Failure err)
 
+let helpers_of_native fname =
+  let rec typ_contains_class typ typ_class =
+    match typ, typ_class with
+    | Matrix _, "matrix" -> true
+    | Func(_, _), "function" -> true
+    | Array _, "array" -> true
+    | Array t, _ -> typ_contains_class t typ_class
+    | _ -> string_of_typ typ = typ_class
+  in
+  let fname_fragments = Str.split (Str.regexp "_") fname in
+  match fname_fragments with
+  | ["print"; arg_type] | ["println"; arg_type] ->
+      let arg_type = typ_of_string arg_type in
+      (
+        match arg_type with
+        | Array t when typ_contains_class t "matrix" -> ["_print_array"; "_print_flat_matrix"]
+        | Array t when typ_contains_class t "function" -> ["_print_array"; "_print_function"]
+        | Array _ -> ["_print_array"]
+        | _ -> []
+      )
+  (* Note we don't perform validation that we're being handed an array; validation on
+  * argument types is already done elsewhere *)
+  | ["deep"; "free"; _] -> ["_deep_free_array"]
+  | [("insert" as fname); arg_type] | [("append" as fname); arg_type] ->
+      let arg_type = typ_of_string arg_type in
+      if is_array arg_type then ["_" ^ fname ^ "_array"] else []
+  | _ -> []
+
 let check (globals, functions) =
   (* add built-in functions *)
   let built_in_funcs =
@@ -182,37 +210,11 @@ let check (globals, functions) =
       if (fname = "print" || fname = "println") && List.hd arg_types = BuiltInFunc then
         { env with builtin_uses = StringSet.add "_print_string" env.builtin_uses }
       else
-        let rec typ_contains_class typ typ_class =
-          match typ, typ_class with
-          | Matrix _, "matrix" -> true
-          | Func(_, _), "function" -> true
-          | Array _, "array" -> true
-          | Array t, _ -> typ_contains_class t typ_class
-          | _ -> string_of_typ typ = typ_class
-        in
         let env =
-          { env with
-              builtin_uses = StringSet.add native_fname env.builtin_uses
-          }
+          { env with builtin_uses = StringSet.add native_fname env.builtin_uses }
         in
-        let helper_fnames =
-          match fname with
-          | "print" | "println" ->
-              (
-                match List.hd arg_types with
-                | Array t when typ_contains_class t "matrix" -> ["print_array"; "print_matrix"]
-                | Array t when typ_contains_class t "function" -> ["print_array"; "print_function"]
-                | Array _ -> ["print_array"]
-                | _ -> []
-              )
-          (* Note we don't perform validation that we're being handed an array; validation on
-          * argument types is already done elsewhere *)
-          | "deep_free" -> ["deep_free_array"]
-          | "insert" | "append" ->
-              if is_array (List.hd arg_types) then [fname ^ "_array"] else []
-          | _ -> []
-        in
-        List.fold_left add_helper_use env helper_fnames
+        let helpers = helpers_of_native native_fname in
+        List.fold_left add_helper_use env helpers
     in
     (env, native_fname)
   in
@@ -251,12 +253,12 @@ let check (globals, functions) =
       else make_err err
   in
 
-  let rec lookup name scope =
+  let rec lookup scope name =
     try StringMap.find name scope.variables with
     | Not_found ->
         match scope.parent with
         | None -> make_err ("undeclared identifier " ^ name)
-        | Some parent -> lookup name parent
+        | Some parent -> lookup parent name
   in
 
   (* Return a semantically-checked expression *)
@@ -340,8 +342,8 @@ let check (globals, functions) =
       match i with
       | Sgl_Index(e, i) ->
           let env =
-            if is_assign then add_helper_use env "set_array"
-            else add_helper_use env "get_array"
+            if is_assign then add_helper_use env "_set_array"
+            else add_helper_use env "_get_array"
           in
           let env, (t, e') = check_expr env e in
           (
@@ -362,8 +364,8 @@ let check (globals, functions) =
           )
       | Dbl_Index(e, i1, i2) ->
           let env =
-            if is_assign then add_helper_use env "set_matrix"
-            else add_helper_use env "get_matrix"
+            if is_assign then add_helper_use env "_set_matrix"
+            else add_helper_use env "_get_matrix"
           in
           let env, (t, e') = check_expr env e in
           let _ =
@@ -383,8 +385,8 @@ let check (globals, functions) =
       match i with
       | Sgl_Slice(e, s) ->
           let env =
-            if is_assign then add_helper_use env "set_slice_array"
-            else add_helper_use env "slice_array"
+            if is_assign then add_helper_use env "_set_slice_array"
+            else add_helper_use env "_slice_array"
           in
           let env, (t, e') = check_expr env e in
           (
@@ -404,8 +406,8 @@ let check (globals, functions) =
           )
       | Dbl_Slice(e, s1, s2) ->
           let env =
-            if is_assign then add_helper_use env "set_slice_matrix"
-            else add_helper_use env "slice_matrix"
+            if is_assign then add_helper_use env "_set_slice_matrix"
+            else add_helper_use env "_slice_matrix"
           in
           let env, (t, e') = check_expr env e in
           let _ =
@@ -578,34 +580,34 @@ let check (globals, functions) =
     | Bool_Lit l -> (env, (Bool, SBool_Lit l))
     | Noexpr -> (env, (Void, SNoexpr))
     | Id s ->
-        let t = lookup s env.scope in
+        let t = lookup env.scope s in
         let env =
           match t with
-          | Array _ | Matrix _ -> add_helper_use env "check"
+          | Array _ | Matrix _ -> add_helper_use env "_check"
           | Func(_, _) ->
               let env = { env with func_uses = StringSet.add s env.func_uses } in
-              add_helper_use env "check"
+              add_helper_use env "_check"
           | _ -> env
         in
         (env, (t, SId s))
     | String_Lit s -> (env, (String, SString_Lit s))
     | Array_Lit _ as a ->
-        let env = add_helper_use env "malloc_array" in
-        let env = add_helper_use env "set_array" in
+        let env = add_helper_use env "_malloc_array" in
+        let env = add_helper_use env "_set_array" in
         check_container_lit env a
     | Empty_Array(t, n) ->
-        let env = add_helper_use env "malloc_array" in
-        let env = add_helper_use env "init_array" in
+        let env = add_helper_use env "_malloc_array" in
+        let env = add_helper_use env "_init_array" in
         let env, (nt, n') = check_expr env n in
         if nt <> Int then make_err ("non-integer length specified in " ^ expr_s)
         else (env, (Array t, SEmpty_Array(t, (nt, n'))))
     | Matrix_Lit _ as m ->
-        let env = add_helper_use env "malloc_matrix" in
-        let env = add_helper_use env "set_matrix" in
+        let env = add_helper_use env "_malloc_matrix" in
+        let env = add_helper_use env "_set_matrix" in
         check_container_lit env m
     | Empty_Matrix(t, r, c) ->
-        let env = add_helper_use env "malloc_matrix" in
-        let env = add_helper_use env "init_matrix" in
+        let env = add_helper_use env "_malloc_matrix" in
+        let env = add_helper_use env "_init_matrix" in
         let env, (rt, r') = check_expr env r in
         let env, (ct, c') = check_expr env c in
         if rt <> Int || ct <> Int
@@ -617,7 +619,7 @@ let check (globals, functions) =
         (
           match e1 with
           | Id s ->
-              let lt = lookup s env.scope in
+              let lt = lookup env.scope s in
               let env, (rt, e') = check_expr env e2 in
               let err =
                 "illegal assignment " ^ string_of_typ lt ^ " = " ^
@@ -695,7 +697,7 @@ let check (globals, functions) =
           * will also be a matrix due to broadcasting *)
         let env, res_is_matrix =
           match t1, t2 with
-          | Matrix _, Matrix _ -> (add_helper_use env "mat_binop", true)
+          | Matrix _, Matrix _ -> (add_helper_use env "_mat_binop", true)
           (* In this case, this means we perform broadcasting; check_arith_operand
            * will ensure that the base types are equal. We need to add _free_matrix
            * as a built-in use; while the user program won't directly call it,
@@ -704,7 +706,7 @@ let check (globals, functions) =
            * calling it. *)
           | Matrix t, _ | _, Matrix t ->
               let env, _ = get_native_of_builtin env "free" [Matrix t] in
-              (add_helper_use env "mat_binop", true)
+              (add_helper_use env "_mat_binop", true)
           | _ -> (env, false)
         in
         (* Determine expression type based on operator and operand types *)
@@ -718,15 +720,15 @@ let check (globals, functions) =
               let _ = if base_t1 <> base_t2 then make_err err in
               let env =
                 match op with
-                | Div | Mod | Exp when t1 = t2 -> add_helper_use env "check"
+                | Div | Mod | Exp when t1 = t2 -> add_helper_use env "_check"
                 | _ -> env
               in
               let env =
                 if op = Exp && t1 = t2 then
                   if t1 = Float then
                     let env = add_helper_use env "llvm.floor.f64" in
-                    add_helper_use env "fexp"
-                  else if t1 = Int then add_helper_use env "iexp"
+                    add_helper_use env "_fexp"
+                  else if t1 = Int then add_helper_use env "_iexp"
                   else env
                 else env
               in
@@ -750,7 +752,7 @@ let check (globals, functions) =
               (env, if res_is_matrix then Matrix base_t1 else Bool)
           | And | Or when t1 = t2 && t1 = Bool -> (env, Bool)
           | MatMult when t1 = t2 && res_is_matrix ->
-              (add_helper_use env "matmult", t1)
+              (add_helper_use env "_matmult", t1)
           | _ -> make_err err
         in
         (env, (ty, SBinop((t1, e1'), op, (t2, e2'))))
@@ -1034,7 +1036,7 @@ let check (globals, functions) =
   let _ =
     let main_err = "must have a main function of type func<():void>" in
     try
-      let typ = lookup prog_main env.scope in
+      let typ = lookup env.scope prog_main in
       match typ with
       | Func([], Void) -> ()
       | _ -> make_err main_err
