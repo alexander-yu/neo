@@ -1031,31 +1031,17 @@ let translate (env, program) =
             L.build_icmp L.Icmp.Eq e1' e2' "temp" builder
           (* Otherwise, it's a matrix result (either int or float) *)
           else
-            (* Wrap broadcasted scalars into temp 1x1 matrices; we'll free these
-             * immediately after computation; alternatively, if we're using
-             * expressions that return a new matrix and are unreachable
-             * after computation, free those *)
-            let e1', free_e1 =
-              if t1 == A.Int || t1 == A.Float then
-                (build_matrix_lit t1 [| [| e1' |] |] builder, true)
-              else
-                let free_e1 =
-                  match snd e1 with
-                  | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
-                  | _ -> false
-                in
-                (e1', free_e1)
+            (* If we're using expressions that return a new matrix and
+             * are unreachable after computation, free those *)
+            let free_e1 =
+              match snd e1 with
+              | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
+              | _ -> false
             in
-            let e2', free_e2 =
-              if t2 == A.Int || t2 == A.Float then
-                (build_matrix_lit t2 [| [| e2' |] |] builder, true)
-              else
-                let free_e2 =
-                  match snd e2 with
-                  | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
-                  | _ -> false
-                in
-                (e2', free_e2)
+            let free_e2 =
+              match snd e2 with
+              | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
+              | _ -> false
             in
             let res =
               match op with
@@ -1078,7 +1064,6 @@ let translate (env, program) =
                 ()
             in
             res
-
       | SUnop(op, e) ->
           let t, _ = e in
           let e' = expr scope builder e in

@@ -649,21 +649,22 @@ let check (globals, functions) =
         )
     | Unop(op, e) ->
         let env, (t, e') = check_expr env e in
-        let ty, ex' =
+        (
           match op with
-          | Neg when t = Int || t = Float -> (t, SUnop(op, (t, e')))
+          | Neg when t = Int || t = Float -> (env, (t, SUnop(op, (t, e'))))
           | Neg when t = Matrix Int || t = Matrix Float ->
               let neg_one =
-                if typ_of_container t = Int then (Int, SInt_Lit (-1))
-                else (Float, SFloat_Lit "-1.")
+                if typ_of_container t = Int then Int_Lit (-1)
+                else Float_Lit "-1."
               in
-              (t, SBinop(neg_one, Mult, (t, e')))
-          | Not when t = Bool -> (t, SUnop(op, (t, e')))
-          | _ -> make_err ("illegal unary operator " ^
+              let e = Binop(neg_one, Mult, e) in
+              check_expr env e
+          | Not when t = Bool -> (env, (t, SUnop(op, (t, e'))))
+          | _ ->
+              make_err ("illegal unary operator " ^
               string_of_uop op ^ string_of_typ t ^
               " in " ^ expr_s)
-        in
-        (env, (ty, ex'))
+        )
     | Binop(e1, op, e2) ->
         let env, (t1, e1') = check_expr env e1 in
         let env, (t2, e2') =
@@ -685,39 +686,53 @@ let check (globals, functions) =
           string_of_typ t1 ^ " " ^ string_of_op op ^ " " ^
           string_of_typ t2 ^ " in " ^ expr_s
         in
-        (* Checks that the basic data type of an operand is valid
-          * for performing arithmetic; returns the base data type *)
-        let check_arith_operand t =
-          match t with
-          | Int | Float -> t
-          | Matrix t -> t
-          | _ -> make_err err
-        in
-        (* We check if one of the operands is a matrix; if so, the result
-          * will also be a matrix due to broadcasting *)
-        let env, res_is_matrix =
-          match t1, t2 with
-          | Matrix _, Matrix _ -> (add_helper_use env "_mat_binop", true)
-          (* In this case, this means we perform broadcasting; check_arith_operand
-           * will ensure that the base types are equal. We need to add _free_matrix
-           * as a built-in use; while the user program won't directly call it,
-           * we will be generating a temporary matrix for the scalar and therefore
-           * need to free it directly after computation, so the generated LLVM will be
-           * calling it. *)
-          | Matrix t, _ | _, Matrix t ->
-              let env, _ = get_native_of_builtin env "free" [Matrix t] in
-              (add_helper_use env "_mat_binop", true)
-          | _ -> (env, false)
+        let check_mat_op env is_arith (t1, e1') (t2, e2') =
+          (* Check is expression is unreachable after operation; we'll want to free these *)
+          let is_unreachable_mat e =
+            match e with
+            | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
+            | _ -> false
+          in
+          let base_type t =
+            match t with
+            | Matrix t ->
+                if t = Int || t = Float then t else make_err err
+            | _ ->
+                if is_arith then
+                  if t = Int || t = Float then t
+                  else make_err err
+                else t
+          in
+          (* Since we're implementing broadcasting, we just need to
+           * check that the base types are the same *)
+          let base_t1 = base_type t1 in
+          let base_t2 = base_type t2 in
+          let _ = if base_t1 <> base_t2 then make_err err in
+          let env, (t1, e1'), (t2, e2') =
+            match t1, t2 with
+            | Matrix _, Matrix _ -> env, (t1, e1'), (t2, e2')
+            | Matrix _, t ->
+                let env, _ = get_native_of_builtin env "free" [Matrix t] in
+                env, (t1, e1'), (Matrix t2, SMatrix_Lit [| [| (t2, e2') |] |])
+            | t, Matrix _ ->
+                let env, _ = get_native_of_builtin env "free" [Matrix t] in
+                env, (Matrix t1, SMatrix_Lit [| [| (t1, e1') |] |]), (t2, e2')
+            | _, _ -> env, (t1, e1'), (t2, e2')
+          in
+          let env =
+            if is_matrix t1 then
+              let env = add_helper_use env "_mat_binop" in
+              if is_unreachable_mat e1' || is_unreachable_mat e2' then
+                fst (get_native_of_builtin env "free" [t1])
+              else env
+            else env
+          in
+          (env, (t1, e1'), (t2, e2'))
         in
         (* Determine expression type based on operator and operand types *)
-        let env, ty =
+        let env, ty, (t1, e1'), (t2, e2') =
           match op with
           | Add | Sub | Mult | Div | Mod | Exp ->
-              (* Since we're implementing broadcasting, we just need to
-                * check that the base types are the same *)
-              let base_t1 = check_arith_operand t1 in
-              let base_t2 = check_arith_operand t2 in
-              let _ = if base_t1 <> base_t2 then make_err err in
               let env =
                 match op with
                 | Div | Mod | Exp when t1 = t2 -> add_helper_use env "_check"
@@ -732,27 +747,33 @@ let check (globals, functions) =
                   else env
                 else env
               in
-              (env, if res_is_matrix then Matrix base_t1 else base_t1)
+              let env, (t1, e1'), (t2, e2') =
+                check_mat_op env true (t1, e1') (t2, e2')
+              in
+              (env, t1, (t1, e1'), (t2, e2'))
           | Equal | Neq ->
-              if not res_is_matrix && t1 = t2 then (env, Bool)
               (* Instead of returning matrix of bools, we return a
-              * matrix of 0s and 1s *)
-              else if res_is_matrix then
-                let base_t1 = check_arith_operand t1 in
-                let base_t2 = check_arith_operand t2 in
-                let _ = if base_t1 <> base_t2 then make_err err in
-                (env, Matrix base_t1)
-              else make_err err
+               * matrix of 0s and 1s *)
+              let env, (t1, e1'), (t2, e2') =
+                check_mat_op env false (t1, e1') (t2, e2')
+              in
+              if is_matrix t1 then (env, t1, (t1, e1'), (t2, e2'))
+              else (env, Bool, (t1, e1'), (t2, e2'))
           | Less | Leq | Greater | Geq ->
-              let base_t1 = check_arith_operand t1 in
-              let base_t2 = check_arith_operand t2 in
-              let _ = if base_t1 <> base_t2 then make_err err in
               (* Instead of returning matrix of bools, we return a
-              * matrix of 0s and 1s *)
-              (env, if res_is_matrix then Matrix base_t1 else Bool)
-          | And | Or when t1 = t2 && t1 = Bool -> (env, Bool)
-          | MatMult when t1 = t2 && res_is_matrix ->
-              (add_helper_use env "_matmult", t1)
+               * matrix of 0s and 1s *)
+              let env, (t1, e1'), (t2, e2') =
+                check_mat_op env true (t1, e1') (t2, e2')
+              in
+              if is_matrix t1 then (env, t1, (t1, e1'), (t2, e2'))
+              else (env, Bool, (t1, e1'), (t2, e2'))
+          | And | Or when t1 = t2 && t1 = Bool -> (env, t1, (t1, e1'), (t2, e2'))
+          | MatMult when t1 = t2 ->
+              let env = add_helper_use env "_matmult" in
+              let env, (t1, e1'), (t2, e2') =
+                check_mat_op env true (t1, e1') (t2, e2')
+              in
+              (env, t1, (t1, e1'), (t2, e2'))
           | _ -> make_err err
         in
         (env, (ty, SBinop((t1, e1'), op, (t2, e2'))))
