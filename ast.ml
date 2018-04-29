@@ -22,7 +22,10 @@ type expr =
   | Empty_Matrix of typ * expr * expr
   | Index_Expr of index_expr
   | Slice_Expr of slice_expr
-  | Binop of expr * op * expr
+  (* Bool is a flag indicating whether this is actually an update; i.e.
+   * an alias for something like a[0] += [[1, 2]]; mainly for memory cleaning
+   * purposes for matrix update operations *)
+  | Binop of expr * op * expr * bool
   | Unop of uop * expr
   | Assign of expr * expr
   | Call of expr * expr list
@@ -135,15 +138,31 @@ let rec string_of_typ = function
   | BuiltInFunc -> "func<built-in>"
   | Notyp -> ""
 
-let abbrev_of_typ typ =
-    match typ with
-    (* No need to include int/float; our native matrix structs already
-      * embed type information, meaning our native functions for matrices
-      * already account for the two different types at the same time,
-      * that's why we have _print_matrix and _free_matrix rather than
-      * _print_matrix<int> or _free_matrix<int> *)
-    | Matrix _ -> "matrix"
-    | _ -> string_of_typ typ
+(* Output should be valid output of string_of_typ *)
+let rec typ_of_string s =
+  match s with
+  | "int" -> Int
+  | "bool" -> Bool
+  | "float" -> Float
+  | "string" -> String
+  | "void" -> Void
+  | "exc" -> Exc
+  | "func<built-in>" -> BuiltInFunc
+  | "" -> Notyp
+  | _ ->
+      let array_regexp = Str.regexp "array<\\(.*\\)>" in
+      let matrix_regexp = Str.regexp "matrix<\\(.*\\)>" in
+      let func_regexp = Str.regexp "func<(\\(.*\\)):\\(.*\\)>" in
+      if Str.string_match array_regexp s 0 then
+        Array (typ_of_string (Str.matched_group 1 s))
+      else if Str.string_match matrix_regexp s 0 then
+        Matrix (typ_of_string (Str.matched_group 1 s))
+      else if Str.string_match func_regexp s 0 then
+        let args = Str.matched_group 1 s in
+        let ret = Str.matched_group 2 s in
+        let args = Str.split (Str.regexp ", ") args in
+        Func(List.map typ_of_string args, typ_of_string ret)
+      else raise (Failure ("internal error: typ_of_string given invalid type string " ^ s))
 
 let rec string_of_expr expr =
   let string_of_islice = function
@@ -188,7 +207,7 @@ let rec string_of_expr expr =
   | Index_Expr e -> string_of_index_expr e
   | Slice_Expr e -> string_of_slice_expr e
   | Id s -> s
-  | Binop(e1, o, e2) ->
+  | Binop(e1, o, e2, _) ->
       string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
   | Unop(o, e) -> string_of_uop o ^ string_of_expr e
   | Assign(e1, e2) -> string_of_expr e1 ^ " = " ^ string_of_expr e2
@@ -201,12 +220,12 @@ let rec string_of_expr expr =
 
 let string_of_vdecl (kw, t, id, expr) =
   match kw, t, expr with
-  | (Nokw, _, Noexpr) -> string_of_typ t ^ " " ^ id
-  | (_, Exc, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
-  | (_, Notyp, Noexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
-  | (_, _, Noexpr) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
-  | (_, Notyp, _) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
-  | (_, _, _) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
+  | Nokw, _, Noexpr -> string_of_typ t ^ " " ^ id
+  | _, Exc, Noexpr -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | _, Notyp, Noexpr -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | _, _, Noexpr -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
+  | _, Notyp, _ -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
+  | _ -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
       string_of_expr expr ^ ";\n"
 
 let rec string_of_stmt = function

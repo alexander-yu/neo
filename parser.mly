@@ -182,19 +182,19 @@ postfix_expr:
   | postfix_expr LBRACKET index RBRACKET
                               {
                                 match $3 with
-                                    Index _ -> Index_Expr(Sgl_Index($1, $3))
+                                  | Index _ -> Index_Expr(Sgl_Index($1, $3))
                                   | Slice _ -> Slice_Expr(Sgl_Slice($1, $3))
                               }
   | postfix_expr LBRACKET index COMMA index RBRACKET
                               {
                                 match ($3, $5) with
-                                    (Index _, Index _) ->
+                                  | Index _, Index _ ->
                                       Index_Expr(Dbl_Index($1, $3, $5))
-                                  | (Slice _, Index _) ->
+                                  | Slice _, Index _ ->
                                       Slice_Expr(Dbl_Slice($1, $3, index_to_slice($5)))
-                                  | (Index _, Slice _) ->
+                                  | Index _, Slice _ ->
                                       Slice_Expr(Dbl_Slice($1, index_to_slice($3), $5))
-                                  | (Slice _, Slice _) ->
+                                  | Slice _, Slice _ ->
                                       Slice_Expr(Dbl_Slice($1, $3, $5))
                               }
   /* Function Call */
@@ -211,33 +211,33 @@ expr:
     prefix_expr              { $1 }
 
   /* Binary ops */
-  | expr PLUS   expr         { Binop($1, Add, $3) }
-  | expr MINUS  expr         { Binop($1, Sub, $3) }
-  | expr TIMES  expr         { Binop($1, Mult, $3) }
-  | expr DIVIDE expr         { Binop($1, Div, $3) }
-  | expr MATTIMES expr       { Binop($1, MatMult, $3) }
-  | expr MOD expr            { Binop($1, Mod, $3) }
-  | expr EXP expr            { Binop($1, Exp, $3) }
-  | expr EQ     expr         { Binop($1, Equal, $3) }
-  | expr NEQ    expr         { Binop($1, Neq, $3) }
-  | expr LANGLE expr         { Binop($1, Less, $3) }
-  | expr LEQ    expr         { Binop($1, Leq, $3) }
-  | expr RANGLE expr         { Binop($1, Greater, $3) }
-  | expr GEQ    expr         { Binop($1, Geq, $3) }
-  | expr AND    expr         { Binop($1, And, $3) }
-  | expr OR     expr         { Binop($1, Or, $3) }
+  | expr PLUS   expr         { Binop($1, Add, $3, false) }
+  | expr MINUS  expr         { Binop($1, Sub, $3, false) }
+  | expr TIMES  expr         { Binop($1, Mult, $3, false) }
+  | expr DIVIDE expr         { Binop($1, Div, $3, false) }
+  | expr MATTIMES expr       { Binop($1, MatMult, $3, false) }
+  | expr MOD expr            { Binop($1, Mod, $3, false) }
+  | expr EXP expr            { Binop($1, Exp, $3, false) }
+  | expr EQ     expr         { Binop($1, Equal, $3, false) }
+  | expr NEQ    expr         { Binop($1, Neq, $3, false) }
+  | expr LANGLE expr         { Binop($1, Less, $3, false) }
+  | expr LEQ    expr         { Binop($1, Leq, $3, false) }
+  | expr RANGLE expr         { Binop($1, Greater, $3, false) }
+  | expr GEQ    expr         { Binop($1, Geq, $3, false) }
+  | expr AND    expr         { Binop($1, And, $3, false) }
+  | expr OR     expr         { Binop($1, Or, $3, false) }
 
   /* Assignment ops */
   | expr ASSIGN expr         { Assign($1, $3) }
-  | expr PLUSASSIGN expr     { Assign($1, Binop($1, Add, $3)) }
-  | expr MINUSASSIGN expr    { Assign($1, Binop($1, Sub, $3)) }
-  | expr TIMESASSIGN expr    { Assign($1, Binop($1, Mult, $3)) }
-  | expr DIVIDEASSIGN expr   { Assign($1, Binop($1, Div, $3)) }
-  | expr MATTIMESASSIGN expr { Assign($1, Binop($1, MatMult, $3)) }
-  | expr MODASSIGN expr      { Assign($1, Binop($1, Mod, $3)) }
-  | expr EXPASSIGN expr      { Assign($1, Binop($1, Exp, $3)) }
-  | expr INC                 { Assign($1, Binop($1, Add, One)) }
-  | expr DEC                 { Assign($1, Binop($1, Sub, One)) }
+  | expr PLUSASSIGN expr     { Assign($1, Binop($1, Add, $3, true)) }
+  | expr MINUSASSIGN expr    { Assign($1, Binop($1, Sub, $3, true)) }
+  | expr TIMESASSIGN expr    { Assign($1, Binop($1, Mult, $3, true)) }
+  | expr DIVIDEASSIGN expr   { Assign($1, Binop($1, Div, $3, true)) }
+  | expr MATTIMESASSIGN expr { Assign($1, Binop($1, MatMult, $3, true)) }
+  | expr MODASSIGN expr      { Assign($1, Binop($1, Mod, $3, true)) }
+  | expr EXPASSIGN expr      { Assign($1, Binop($1, Exp, $3, true)) }
+  | expr INC                 { Assign($1, Binop($1, Add, One, true)) }
+  | expr DEC                 { Assign($1, Binop($1, Sub, One, true)) }
   /* Semantics: check that only IDs/index exprs can be assigned values */
 
 index:

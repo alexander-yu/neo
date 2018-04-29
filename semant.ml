@@ -19,11 +19,8 @@ type symbol_table = {
 type translation_environment = {
     scope : symbol_table;
     (* Store any uses of native built-in functions; we'll be doing the same
-     * with helper functions and declared functions. This will be a shallow
-     * variant of global dead code elimination; we're not doing any of the
-     * fancy dependency graph stuff, this is just to help de-clustter some
-     * of the LLVM generation. *)
-    builtin_uses : typ list StringMap.t;
+     * with helper functions and declared functions. *)
+    builtin_uses : StringSet.t;
     (* Store any uses of miscellaneous external helper functions,
      * such as get_matrix or set_matrix, which are not exposed as
      * built-in functions but are needed regardless for various operations *)
@@ -33,6 +30,51 @@ type translation_environment = {
   }
 
 let make_err err = raise (Failure err)
+
+let helpers_of_native fname =
+  let rec typ_contains_class typ typ_class =
+    match typ, typ_class with
+    | Matrix _, "matrix" -> true
+    | Func(_, _), "function" -> true
+    | Array _, "array" -> true
+    | Array t, _ -> typ_contains_class t typ_class
+    | _ -> string_of_typ typ = typ_class
+  in
+  let fname_fragments = Str.split (Str.regexp "_") fname in
+  match fname_fragments with
+  | ["print"; arg_type] | ["println"; arg_type] ->
+      let arg_type = typ_of_string arg_type in
+      (
+        match arg_type with
+        | Array t when typ_contains_class t "matrix" -> ["_print_array"; "_print_flat_matrix"]
+        | Array t when typ_contains_class t "function" -> ["_print_array"; "_print_function"]
+        | Array _ -> ["_print_array"]
+        | _ -> []
+      )
+  (* Note we don't perform validation that we're being handed an array; validation on
+  * argument types is already done elsewhere *)
+  | ["deep"; "free"; _] -> ["_deep_free_array"]
+  | [("insert" as fname); arg_type] | [("append" as fname); arg_type] ->
+      let arg_type = typ_of_string arg_type in
+      if is_array arg_type then ["_" ^ fname ^ "_array"] else []
+  | _ -> []
+
+(* Checks if the result of a matrix assign operation is unreachable if not immediately
+ * referenced by a variable; these expressions create new matrices *)
+let is_unreachable_mat_assign a =
+    let a, ae =
+      match a with
+      | SAssign(a, ae) -> (snd a, snd ae)
+      | _ -> make_err ("internal error: is_unreachable_mat_assign given non-SAssign")
+    in
+    let is_slice =
+      match a with
+      | SSlice_Expr _ -> true
+      | _ -> false
+    in
+    match ae with
+    | SSlice_Expr _ | SBinop(_, _, _, _) -> is_slice
+    | _ -> false
 
 let check (globals, functions) =
   (* add built-in functions *)
@@ -176,63 +218,20 @@ let check (globals, functions) =
   in
 
   let get_native_of_builtin env fname arg_types =
-    let type_tag =
-      match fname, List.hd arg_types with
-      (* These functions don't need to know the array's element type *)
-      | ("free", Array _) | ("delete", Array _) -> "array"
-      | ("insert", _) | ("delete", _) | ("append", _) ->
-          abbrev_of_typ (List.hd arg_types)
-      | (_, _) -> String.concat "_" (List.map abbrev_of_typ arg_types)
-    in
-    let native_fname =
-      match fname with
-      (* These functions already only a defined signature (in LLVM), so no need for a suffix *)
-      | "length" | "rows" | "cols" | "die" -> fname
-      (* For these, if it's a matrix then we only need one native function to
-        * achieve both, since we're really just flipping the matrix type *)
-      | "to_int" | "to_float" ->
-          (* Otherwise, the type tag is a prefix; _float_to_int makes more sense
-            * then _to_int_float *)
-          if is_matrix (List.hd arg_types) then "_flip_matrix_type"
-          else "_" ^ type_tag ^ "_" ^ fname
-      (* Otherwise, the type tag is a suffix *)
-      | _ -> "_" ^ fname ^ "_" ^ type_tag
-    in
+    (* Our built-in functions are written in a way such that
+     * the first argument is all the information required to determine
+     * which actual native function to call *)
+    let type_tag = string_of_typ (List.hd arg_types) in
+    let native_fname = "_" ^ fname ^ "_" ^ type_tag in
     let env =
       if (fname = "print" || fname = "println") && List.hd arg_types = BuiltInFunc then
-        { env with builtin_uses = StringMap.add "_print_string" [String] env.builtin_uses }
+        { env with builtin_uses = StringSet.add "_print_string" env.builtin_uses }
       else
-        let rec typ_contains_class typ typ_class =
-          match typ, typ_class with
-          | (Matrix _, "matrix") -> true
-          | (Func(_, _), "function") -> true
-          | (Array _, "array") -> true
-          | (Array t, _) -> typ_contains_class t typ_class
-          | (_, _) -> string_of_typ typ = typ_class
-        in
         let env =
-          { env with
-              builtin_uses = StringMap.add native_fname arg_types env.builtin_uses
-          }
+          { env with builtin_uses = StringSet.add native_fname env.builtin_uses }
         in
-        let helper_fnames =
-          match fname with
-          | "print" | "println" ->
-              (
-                match List.hd arg_types with
-                | Array t when typ_contains_class t "matrix" -> ["print_array"; "print_matrix"]
-                | Array t when typ_contains_class t "function" -> ["print_array"; "print_function"]
-                | Array _ -> ["print_array"]
-                | _ -> []
-              )
-          (* Note we don't perform validation that we're being handed an array; validation on
-          * argument types is already done elsewhere *)
-          | "deep_free" -> ["deep_free_array"]
-          | "insert" | "append" ->
-              if is_array (List.hd arg_types) then [fname ^ "_array"] else []
-          | _ -> []
-        in
-        List.fold_left add_helper_use env helper_fnames
+        let helpers = helpers_of_native native_fname in
+        List.fold_left add_helper_use env helpers
     in
     (env, native_fname)
   in
@@ -246,7 +245,7 @@ let check (globals, functions) =
     else
       let is_builtin_assign lvaluet rvaluet =
         match lvaluet, rvaluet with
-        | (Func(_, _), BuiltInFunc) -> true
+        | Func(_, _), BuiltInFunc -> true
         | _ -> false
       in
       if is_builtin_assign lvaluet rvaluet then
@@ -271,12 +270,12 @@ let check (globals, functions) =
       else make_err err
   in
 
-  let rec lookup name scope =
+  let rec lookup scope name =
     try StringMap.find name scope.variables with
     | Not_found ->
         match scope.parent with
         | None -> make_err ("undeclared identifier " ^ name)
-        | Some parent -> lookup name parent
+        | Some parent -> lookup parent name
   in
 
   (* Return a semantically-checked expression *)
@@ -359,20 +358,24 @@ let check (globals, functions) =
     let check_index_expr env i is_assign =
       match i with
       | Sgl_Index(e, i) ->
-          let env =
-            if is_assign then add_helper_use env "set_array"
-            else add_helper_use env "get_array"
-          in
           let env, (t, e') = check_expr env e in
           (
             match t with
             | Array _ ->
+                let env =
+                  if is_assign then add_helper_use env "_set_array"
+                  else add_helper_use env "_get_array"
+                in
                 let env, si = check_islice env i in
                 let sindex = SIndex_Expr(SSgl_Index((t, e'), si)) in
                 (* Strip the container type *)
                 (env, (typ_of_container t, sindex))
             | Matrix _ ->
                 (* m[i] is semantically equivalent to m[i:i+1][:] *)
+                let env =
+                  if is_assign then add_helper_use env "_set_slice_matrix"
+                  else add_helper_use env "_slice_matrix"
+                in
                 let env, ss1 = check_islice env (index_to_slice i) in
                 let ss2 = SSlice((Int, SInt_Lit 0), (Int, SEnd)) in
                 let sslice = SSlice_Expr(SDbl_Slice((t, e'), ss1, ss2)) in
@@ -382,8 +385,8 @@ let check (globals, functions) =
           )
       | Dbl_Index(e, i1, i2) ->
           let env =
-            if is_assign then add_helper_use env "set_matrix"
-            else add_helper_use env "get_matrix"
+            if is_assign then add_helper_use env "_set_matrix"
+            else add_helper_use env "_get_matrix"
           in
           let env, (t, e') = check_expr env e in
           let _ =
@@ -402,19 +405,23 @@ let check (globals, functions) =
     let check_slice_expr env i is_assign =
       match i with
       | Sgl_Slice(e, s) ->
-          let env =
-            if is_assign then add_helper_use env "set_slice_array"
-            else add_helper_use env "slice_array"
-          in
           let env, (t, e') = check_expr env e in
           (
             match t with
             | Array _ ->
+                let env =
+                  if is_assign then add_helper_use env "_set_slice_array"
+                  else add_helper_use env "_slice_array"
+                in
                 let env, ss = check_islice env s in
                 let sslice = SSlice_Expr(SSgl_Slice((t, e'), ss)) in
                 (env, (t, sslice))
             | Matrix _ ->
                 (* m[i:j] is semantically equivalent to m[i:j][:] *)
+                let env =
+                  if is_assign then add_helper_use env "_set_slice_matrix"
+                  else add_helper_use env "_slice_matrix"
+                in
                 let env, ss1 = check_islice env s in
                 let ss2 = SSlice((Int, SInt_Lit 0), (Int, SEnd)) in
                 let sslice = SSlice_Expr(SDbl_Slice((t, e'), ss1, ss2)) in
@@ -424,8 +431,8 @@ let check (globals, functions) =
           )
       | Dbl_Slice(e, s1, s2) ->
           let env =
-            if is_assign then add_helper_use env "set_slice_matrix"
-            else add_helper_use env "slice_matrix"
+            if is_assign then add_helper_use env "_set_slice_matrix"
+            else add_helper_use env "_slice_matrix"
           in
           let env, (t, e') = check_expr env e in
           let _ =
@@ -598,34 +605,34 @@ let check (globals, functions) =
     | Bool_Lit l -> (env, (Bool, SBool_Lit l))
     | Noexpr -> (env, (Void, SNoexpr))
     | Id s ->
-        let t = lookup s env.scope in
+        let t = lookup env.scope s in
         let env =
           match t with
-          | Array _ | Matrix _ -> add_helper_use env "check"
+          | Array _ | Matrix _ -> add_helper_use env "_check"
           | Func(_, _) ->
               let env = { env with func_uses = StringSet.add s env.func_uses } in
-              add_helper_use env "check"
+              add_helper_use env "_check"
           | _ -> env
         in
         (env, (t, SId s))
     | String_Lit s -> (env, (String, SString_Lit s))
     | Array_Lit _ as a ->
-        let env = add_helper_use env "malloc_array" in
-        let env = add_helper_use env "set_array" in
+        let env = add_helper_use env "_malloc_array" in
+        let env = add_helper_use env "_set_array" in
         check_container_lit env a
     | Empty_Array(t, n) ->
-        let env = add_helper_use env "malloc_array" in
-        let env = add_helper_use env "init_array" in
+        let env = add_helper_use env "_malloc_array" in
+        let env = add_helper_use env "_init_array" in
         let env, (nt, n') = check_expr env n in
         if nt <> Int then make_err ("non-integer length specified in " ^ expr_s)
         else (env, (Array t, SEmpty_Array(t, (nt, n'))))
     | Matrix_Lit _ as m ->
-        let env = add_helper_use env "malloc_matrix" in
-        let env = add_helper_use env "set_matrix" in
+        let env = add_helper_use env "_malloc_matrix" in
+        let env = add_helper_use env "_set_matrix" in
         check_container_lit env m
     | Empty_Matrix(t, r, c) ->
-        let env = add_helper_use env "malloc_matrix" in
-        let env = add_helper_use env "init_matrix" in
+        let env = add_helper_use env "_malloc_matrix" in
+        let env = add_helper_use env "_init_matrix" in
         let env, (rt, r') = check_expr env r in
         let env, (ct, c') = check_expr env c in
         if rt <> Int || ct <> Int
@@ -637,7 +644,7 @@ let check (globals, functions) =
         (
           match e1 with
           | Id s ->
-              let lt = lookup s env.scope in
+              let lt = lookup env.scope s in
               let env, (rt, e') = check_expr env e2 in
               let err =
                 "illegal assignment " ^ string_of_typ lt ^ " = " ^
@@ -667,16 +674,23 @@ let check (globals, functions) =
         )
     | Unop(op, e) ->
         let env, (t, e') = check_expr env e in
-        let ty =
+        (
           match op with
-          | Neg when t = Int || t = Float -> t
-          | Not when t = Bool -> Bool
-          | _ -> make_err ("illegal unary operator " ^
+          | Neg when t = Int || t = Float -> (env, (t, SUnop(op, (t, e'))))
+          | Neg when t = Matrix Int || t = Matrix Float ->
+              let neg_one =
+                if typ_of_container t = Int then Int_Lit (-1)
+                else Float_Lit "-1."
+              in
+              let e = Binop(neg_one, Mult, e, false) in
+              check_expr env e
+          | Not when t = Bool -> (env, (t, SUnop(op, (t, e'))))
+          | _ ->
+              make_err ("illegal unary operator " ^
               string_of_uop op ^ string_of_typ t ^
               " in " ^ expr_s)
-        in
-        (env, (ty, SUnop(op, (t, e'))))
-    | Binop(e1, op, e2) ->
+        )
+    | Binop(e1, op, e2, is_update) ->
         let env, (t1, e1') = check_expr env e1 in
         let env, (t2, e2') =
           match e2 with
@@ -697,82 +711,98 @@ let check (globals, functions) =
           string_of_typ t1 ^ " " ^ string_of_op op ^ " " ^
           string_of_typ t2 ^ " in " ^ expr_s
         in
-        (* Checks that the basic data type of an operand is valid
-          * for performing arithmetic; returns the base data type *)
-        let check_arith_operand t =
-          match t with
-          | Int | Float -> t
-          | Matrix t -> t
-          | _ -> make_err err
-        in
-        (* We check if one of the operands is a matrix; if so, the result
-          * will also be a matrix due to broadcasting *)
-        let env, res_is_matrix =
-          match t1, t2 with
-          | (Matrix _, Matrix _) -> (add_helper_use env "mat_binop", true)
-          (* In this case, this means we perform broadcasting; check_arith_operand
-           * will ensure that the base types are equal. We also need to add
-           * _free_matrix as a built-in use; while the user program won't directly call it,
-           * we will be generating a temporary matrix for the scalar and therefore
-           * need to free it directly after computation, so the generated LLVM will be
-           * calling it. *)
-          | (Matrix t, _) | (_, Matrix t) ->
-              let env =
-                {
-                  env with builtin_uses =
-                    StringMap.add "_free_matrix" [Matrix t] env.builtin_uses
-                }
-              in
-              (add_helper_use env "mat_binop", true)
-          | (_, _) -> (env, false)
+        let check_mat_op env is_arith (t1, e1') (t2, e2') =
+          (* Check is expression is unreachable after binary operation; we'll want to free these *)
+          let is_unreachable_mat e =
+            match e with
+            | SMatrix_Lit _ | SSlice_Expr _ | SBinop(_, _, _, _) -> true
+            | SAssign(_, e) -> is_unreachable_mat_assign (snd e)
+            | _ -> false
+          in
+          let base_type t =
+            match t with
+            | Matrix t ->
+                if t = Int || t = Float then t else make_err err
+            | _ ->
+                if is_arith then
+                  if t = Int || t = Float then t
+                  else make_err err
+                else t
+          in
+          (* Since we're implementing broadcasting, we just need to
+           * check that the base types are the same *)
+          let base_t1 = base_type t1 in
+          let base_t2 = base_type t2 in
+          let _ = if base_t1 <> base_t2 then make_err err in
+          let env, (t1, e1'), (t2, e2') =
+            match t1, t2 with
+            | Matrix _, Matrix _ -> env, (t1, e1'), (t2, e2')
+            | Matrix _, t ->
+                let env, _ = get_native_of_builtin env "free" [Matrix t] in
+                env, (t1, e1'), (Matrix t2, SMatrix_Lit [| [| (t2, e2') |] |])
+            | t, Matrix _ ->
+                let env, _ = get_native_of_builtin env "free" [Matrix t] in
+                env, (Matrix t1, SMatrix_Lit [| [| (t1, e1') |] |]), (t2, e2')
+            | _, _ -> env, (t1, e1'), (t2, e2')
+          in
+          let env =
+            if is_matrix t1 then
+              let env = add_helper_use env "_mat_binop" in
+              if is_unreachable_mat e1' || is_unreachable_mat e2' || is_update then
+                fst (get_native_of_builtin env "free" [t1])
+              else env
+            else env
+          in
+          (env, (t1, e1'), (t2, e2'))
         in
         (* Determine expression type based on operator and operand types *)
-        let env, ty =
+        let env, ty, (t1, e1'), (t2, e2') =
           match op with
           | Add | Sub | Mult | Div | Mod | Exp ->
-              (* Since we're implementing broadcasting, we just need to
-                * check that the base types are the same *)
-              let base_t1 = check_arith_operand t1 in
-              let base_t2 = check_arith_operand t2 in
-              let _ = if base_t1 <> base_t2 then make_err err in
               let env =
                 match op with
-                | Div | Mod | Exp when t1 = t2 -> add_helper_use env "check"
+                | Div | Mod | Exp when t1 = t2 -> add_helper_use env "_check"
                 | _ -> env
               in
               let env =
                 if op = Exp && t1 = t2 then
                   if t1 = Float then
                     let env = add_helper_use env "llvm.floor.f64" in
-                    add_helper_use env "fexp"
-                  else if t1 = Int then add_helper_use env "iexp"
+                    add_helper_use env "_fexp"
+                  else if t1 = Int then add_helper_use env "_iexp"
                   else env
                 else env
               in
-              (env, if res_is_matrix then Matrix base_t1 else base_t1)
+              let env, (t1, e1'), (t2, e2') =
+                check_mat_op env true (t1, e1') (t2, e2')
+              in
+              (env, t1, (t1, e1'), (t2, e2'))
           | Equal | Neq ->
-              if not res_is_matrix && t1 = t2 then (env, Bool)
               (* Instead of returning matrix of bools, we return a
-              * matrix of 0s and 1s *)
-              else if res_is_matrix then
-                let base_t1 = check_arith_operand t1 in
-                let base_t2 = check_arith_operand t2 in
-                let _ = if base_t1 <> base_t2 then make_err err in
-                (env, Matrix base_t1)
-              else make_err err
+               * matrix of 0s and 1s *)
+              let env, (t1, e1'), (t2, e2') =
+                check_mat_op env false (t1, e1') (t2, e2')
+              in
+              if is_matrix t1 then (env, t1, (t1, e1'), (t2, e2'))
+              else (env, Bool, (t1, e1'), (t2, e2'))
           | Less | Leq | Greater | Geq ->
-              let base_t1 = check_arith_operand t1 in
-              let base_t2 = check_arith_operand t2 in
-              let _ = if base_t1 <> base_t2 then make_err err in
               (* Instead of returning matrix of bools, we return a
-              * matrix of 0s and 1s *)
-              (env, if res_is_matrix then Matrix base_t1 else Bool)
-          | And | Or when t1 = t2 && t1 = Bool -> (env, Bool)
-          | MatMult when t1 = t2 && res_is_matrix ->
-              (add_helper_use env "matmult", t1)
+               * matrix of 0s and 1s *)
+              let env, (t1, e1'), (t2, e2') =
+                check_mat_op env true (t1, e1') (t2, e2')
+              in
+              if is_matrix t1 then (env, t1, (t1, e1'), (t2, e2'))
+              else (env, Bool, (t1, e1'), (t2, e2'))
+          | And | Or when t1 = t2 && t1 = Bool -> (env, t1, (t1, e1'), (t2, e2'))
+          | MatMult when t1 = t2 ->
+              let env = add_helper_use env "_matmult" in
+              let env, (t1, e1'), (t2, e2') =
+                check_mat_op env true (t1, e1') (t2, e2')
+              in
+              (env, t1, (t1, e1'), (t2, e2'))
           | _ -> make_err err
         in
-        (env, (ty, SBinop((t1, e1'), op, (t2, e2'))))
+        (env, (ty, SBinop((t1, e1'), op, (t2, e2'), is_update)))
       | Call(f, args) ->
           let env, (t, f') = check_expr env f in
 
@@ -941,6 +971,14 @@ let check (globals, functions) =
       match stmt with
       | Expr e ->
           let env, sexpr = check_expr env e in
+          let env =
+            match sexpr with
+            | Matrix t, (SAssign(_, _) as a) ->
+                if is_unreachable_mat_assign a then
+                  fst (get_native_of_builtin env "free" [Matrix t])
+                else env
+            | _ -> env
+          in
           (env, SExpr(sexpr), false)
       | If(p, b1, b2) ->
           let env, p' = check_bool_expr env p in
@@ -1042,7 +1080,7 @@ let check (globals, functions) =
     {
       scope = global_scope;
       func_uses = StringSet.empty;
-      builtin_uses = StringMap.empty;
+      builtin_uses = StringSet.empty;
       helper_uses = StringSet.empty;
     }
   in
@@ -1053,7 +1091,7 @@ let check (globals, functions) =
   let _ =
     let main_err = "must have a main function of type func<():void>" in
     try
-      let typ = lookup prog_main env.scope in
+      let typ = lookup env.scope prog_main in
       match typ with
       | Func([], Void) -> ()
       | _ -> make_err main_err

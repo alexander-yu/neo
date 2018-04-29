@@ -2,7 +2,7 @@ void main() {
     create matrix<int> a = [[1, 2], [3, 4]];
     create matrix<int> b = [[1, 2], [3, 4]];
     println(a + b);
-    println(2 * a);
+    println(-2 * -a);
     create matrix<float> c = [[1., 2.], [3., 4.]];
     println(0.5 ^ c);
     println(c <= 2.);

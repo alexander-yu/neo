@@ -5,13 +5,13 @@ void check(bool cond, string err) {
 }
 
 matrix<int> itranspose(matrix<int> mat) {
-    var int r = rows(mat);
-    var int c = cols(mat);
+    auto r = rows(mat);
+    auto c = cols(mat);
 
     create matrix<int> res[c][r];
 
-    for (var int i = 0; i < c; i++) {
-        for (var int j = 0; j < r; j++) {
+    for (auto i = 0; i < c; i++) {
+        for (auto j = 0; j < r; j++) {
             res[i, j] = mat[j, i];
         }
     }
@@ -20,16 +20,194 @@ matrix<int> itranspose(matrix<int> mat) {
 }
 
 matrix<float> ftranspose(matrix<float> mat) {
-    var int r = rows(mat);
-    var int c = cols(mat);
+    auto r = rows(mat);
+    auto c = cols(mat);
 
     create matrix<float> res[c][r];
 
-    for (var int i = 0; i < c; i++) {
-        for (var int j = 0; j < r; j++) {
+    for (auto i = 0; i < c; i++) {
+        for (auto j = 0; j < r; j++) {
             res[i, j] = mat[j, i];
         }
     }
 
+    return res;
+}
+
+float fabs(float x) {
+    if (x >= 0.) {
+        return x;
+    } else {
+        return -x;
+    }
+}
+
+void fswap_rows(matrix<float> m, int i1, int i2) {
+    for (auto j = 0; j < cols(m); j++) {
+        auto temp = m[i1, j];
+        m[i1, j] = m[i2, j];
+        m[i2, j] = temp;
+    }
+}
+
+matrix<float> feye(int n) {
+    create matrix<float> m[n][n];
+    for (auto i = 0; i < n; i++) {
+        m[i, i] = 1.;
+    }
+    return m;
+}
+
+array<matrix<float>> pivot(matrix<float> m) {
+    /* Check m is square */
+    check(rows(m) == cols(m), "Dimension error: attempted to get pivot permutation matrix of non-square matrix");
+
+    auto n = rows(m);
+    auto sign = 1.;
+
+    auto res = feye(n);
+
+    for (auto j = 0; j < n; j++) {
+        auto max_row_i = j;
+        for (auto i = j; i < n; i++) {
+            if (fabs(m[i, j]) > fabs(m[max_row_i, j])) {
+                max_row_i = i;
+            }
+        }
+        if (j != max_row_i) {
+            sign *= -1.;
+            fswap_rows(res, max_row_i, j);
+        }
+    }
+
+    return {| res, [[sign]] |};
+}
+
+array<matrix<float>> lu_factor(matrix<float> m) {
+    /* Check m is square */
+    check(rows(m) == cols(m), "Dimension error: attempted to perform LU decomposition on a non-square matrix");
+
+    auto n = rows(m);
+    auto pivot_res = pivot(m);
+    auto pivot = pivot_res[0];
+    auto pivot_sign = pivot_res[1];
+    free(pivot_res);
+
+    auto pm = pivot @ m;
+    auto l = feye(n);
+    create matrix<float> u[n][n];
+    for (auto j = 0; j < n; j++) {
+        for (auto i = 0; i <= j; i++) {
+            auto sum = 0.;
+            for (auto k = 0; k < i; k++) {
+                sum += l[i, k] * u[k, j];
+            }
+            u[i, j] = pm[i, j] - sum;
+        }
+
+        for (auto i = j; i < n; i++) {
+            auto sum = 0.;
+            for (auto k = 0; k < j; k++) {
+                sum += l[i, k] * u[k, j];
+            }
+            l[i, j] = (pm[i, j] - sum) / u[j, j];
+        }
+    }
+
+    free(pm);
+    return {| pivot, pivot_sign, l, u |};
+}
+
+matrix<float> lu_solve(matrix<float> l, matrix<float> u, matrix<float> b) {
+    /* Check l and u are square */
+    check(rows(l) == cols(l), "Dimension error: lu_solve requires l to be square");
+    check(rows(u) == cols(u), "Dimension error: lu_solve requires u to be square");
+    check(rows(l) == rows(u), "Dimension error: lu_solve requires l and u to have the same rows");
+    check(cols(l) == cols(u), "Dimension error: lu_solve requires l and u to have the same cols");
+    /* Check that b has compatible dimensions */
+    check(rows(l) == rows(b), "Dimension error: lu_solve requires l and b to have the same rows");
+
+    auto n = rows(l);
+
+    /* We first solve ly = b */
+    create matrix<float> y[n][cols(b)];
+    for (auto i = 0; i < n; i++) {
+        create matrix<float> sum[1][cols(b)];
+        for (auto j = 0; j < i; j++) {
+            sum += l[i, j] * y[j];
+        }
+        y[i] = b[i] - sum;
+        free(sum);
+    }
+
+    /* Next, we solve ux = y */
+    create matrix<float> x[n][cols(y)];
+    for (auto i = n - 1; i >= 0; i--) {
+        create matrix<float> sum[1][cols(y)];
+        for (auto j = n - 1; j > i; j--) {
+            sum += u[i, j] * x[j];
+        }
+        x[i] = (y[i] - sum) / u[i, i];
+        free(sum);
+    }
+
+    free(y);
+    return x;
+}
+
+float det(matrix<float> m) {
+    /* Check m is square */
+    check(rows(m) == cols(m), "Dimension error: attempted to get determinant of non-square matrix");
+
+    auto n = rows(m);
+
+    auto lu_result = lu_factor(m);
+    auto pivot = lu_result[0];
+    auto pivot_sign = lu_result[1];
+    auto l = lu_result[2];
+    auto u = lu_result[3];
+
+    auto l_det = 1.;
+    auto u_det = 1.;
+
+    for (auto i = 0; i < n; i++) {
+        l_det *= l[i, i];
+        u_det *= u[i, i];
+    }
+
+    auto det = pivot_sign[0, 0] * l_det * u_det;
+
+    deep_free(lu_result);
+    return det;
+}
+
+matrix<float> inv(matrix<float> m) {
+    /* Check m is square */
+    check(rows(m) == cols(m), "Dimension error: attempted to invert non-square matrix");
+
+    auto n = rows(m);
+
+    auto lu_result = lu_factor(m);
+    auto pivot = lu_result[0];
+    auto pivot_sign = lu_result[1];
+    auto l = lu_result[2];
+    auto u = lu_result[3];
+
+    auto l_det = 1.;
+    auto u_det = 1.;
+
+    for (auto i = 0; i < n; i++) {
+        l_det *= l[i, i];
+        u_det *= u[i, i];
+    }
+
+    check(l_det * u_det != 0., "Singular matrix error: attempted to invert singular matrix");
+
+    auto id = feye(n);
+    auto res = lu_solve(l, u, id);
+    res @= pivot;
+
+    deep_free(lu_result);
+    free(id);
     return res;
 }
