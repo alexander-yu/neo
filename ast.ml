@@ -22,7 +22,10 @@ type expr =
   | Empty_Matrix of typ * expr * expr
   | Index_Expr of index_expr
   | Slice_Expr of slice_expr
-  | Binop of expr * op * expr
+  (* Bool is a flag indicating whether this is actually an update; i.e.
+   * an alias for something like a[0] += [[1, 2]]; mainly for memory cleaning
+   * purposes for matrix update operations *)
+  | Binop of expr * op * expr * bool
   | Unop of uop * expr
   | Assign of expr * expr
   | Call of expr * expr list
@@ -204,7 +207,7 @@ let rec string_of_expr expr =
   | Index_Expr e -> string_of_index_expr e
   | Slice_Expr e -> string_of_slice_expr e
   | Id s -> s
-  | Binop(e1, o, e2) ->
+  | Binop(e1, o, e2, _) ->
       string_of_expr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_expr e2
   | Unop(o, e) -> string_of_uop o ^ string_of_expr e
   | Assign(e1, e2) -> string_of_expr e1 ^ " = " ^ string_of_expr e2

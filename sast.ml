@@ -15,7 +15,8 @@ and sx =
   | SEmpty_Matrix of typ * sexpr * sexpr
   | SIndex_Expr of sindex_expr
   | SSlice_Expr of sslice_expr
-  | SBinop of sexpr * op * sexpr
+  (* See ast.ml for explanation of the bool field *)
+  | SBinop of sexpr * op * sexpr * bool
   | SUnop of uop * sexpr
   | SAssign of sexpr * sexpr
   | SCall of sexpr * sexpr list
@@ -95,7 +96,7 @@ let rec string_of_sexpr (t, e) =
         string_of_sexpr r ^ " x " ^ string_of_sexpr c ^ "]"
     | SIndex_Expr e -> string_of_sindex_expr e
     | SSlice_Expr e -> string_of_sslice_expr e
-    | SBinop(e1, o, e2) ->
+    | SBinop(e1, o, e2, _) ->
         string_of_sexpr e1 ^ " " ^ string_of_op o ^ " " ^ string_of_sexpr e2
     | SUnop(o, e) -> string_of_uop o ^ string_of_sexpr e
     | SAssign(e1, e2) -> string_of_sexpr e1 ^ " = " ^ string_of_sexpr e2

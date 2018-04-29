@@ -975,7 +975,7 @@ let translate (env, program) =
             | _ -> make_err "internal error: semant should have rejected invalid assignment"
           in
           e2'
-      | SBinop(e1, op, e2) ->
+      | SBinop(e1, op, e2, is_update) ->
           let err =
             "internal error: semant should have rejected " ^
             A.string_of_op op ^ " on " ^ A.string_of_typ t
@@ -1034,13 +1034,18 @@ let translate (env, program) =
             (* If we're using expressions that return a new matrix and
              * are unreachable after computation, free those *)
             let free_e1 =
+              (* If binop is actually an update operation, then our expression is of the form
+               * mat = mat op e; we need to now free mat after computation *)
+              is_update ||
               match snd e1 with
-              | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
+              | SMatrix_Lit _ | SSlice_Expr _ | SBinop(_, _, _, _) -> true
+              | SAssign(_, _) -> S.is_unreachable_mat_assign (snd e1)
               | _ -> false
             in
             let free_e2 =
               match snd e2 with
-              | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
+              | SMatrix_Lit _ | SSlice_Expr _ | SBinop(_, _, _, _) -> true
+              | SAssign(_, _) -> S.is_unreachable_mat_assign (snd e2)
               | _ -> false
             in
             let res =
@@ -1112,7 +1117,18 @@ let translate (env, program) =
           (* Return to parent scope *)
           (parent_scope, builder)
         (* Generate code for this expression, return resulting builder *)
-      | SExpr e -> let _ = expr scope builder e in (scope, builder)
+      | SExpr e ->
+          let e' = expr scope builder e in
+          let _ =
+            match e with
+            | A.Matrix _, (SAssign(_, _) as a) ->
+                if S.is_unreachable_mat_assign a then
+                let free_matrix_func = StringMap.find "_free_matrix" builtin_funcs in
+                let _ = L.build_call free_matrix_func [| e' |] "" builder in
+                ()
+            | _ -> ()
+          in
+          (scope, builder)
       | SReturn e ->
           let _ =
             match fdecl.styp with

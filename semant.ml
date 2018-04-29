@@ -59,6 +59,23 @@ let helpers_of_native fname =
       if is_array arg_type then ["_" ^ fname ^ "_array"] else []
   | _ -> []
 
+(* Checks if the result of a matrix assign operation is unreachable if not immediately
+ * referenced by a variable; these expressions create new matrices *)
+let is_unreachable_mat_assign a =
+    let a, ae =
+      match a with
+      | SAssign(a, ae) -> (snd a, snd ae)
+      | _ -> make_err ("internal error: is_unreachable_mat_assign given non-SAssign")
+    in
+    let is_slice =
+      match a with
+      | SSlice_Expr _ -> true
+      | _ -> false
+    in
+    match ae with
+    | SSlice_Expr _ | SBinop(_, _, _, _) -> is_slice
+    | _ -> false
+
 let check (globals, functions) =
   (* add built-in functions *)
   let built_in_funcs =
@@ -341,20 +358,24 @@ let check (globals, functions) =
     let check_index_expr env i is_assign =
       match i with
       | Sgl_Index(e, i) ->
-          let env =
-            if is_assign then add_helper_use env "_set_array"
-            else add_helper_use env "_get_array"
-          in
           let env, (t, e') = check_expr env e in
           (
             match t with
             | Array _ ->
+                let env =
+                  if is_assign then add_helper_use env "_set_array"
+                  else add_helper_use env "_get_array"
+                in
                 let env, si = check_islice env i in
                 let sindex = SIndex_Expr(SSgl_Index((t, e'), si)) in
                 (* Strip the container type *)
                 (env, (typ_of_container t, sindex))
             | Matrix _ ->
                 (* m[i] is semantically equivalent to m[i:i+1][:] *)
+                let env =
+                  if is_assign then add_helper_use env "_set_slice_matrix"
+                  else add_helper_use env "_slice_matrix"
+                in
                 let env, ss1 = check_islice env (index_to_slice i) in
                 let ss2 = SSlice((Int, SInt_Lit 0), (Int, SEnd)) in
                 let sslice = SSlice_Expr(SDbl_Slice((t, e'), ss1, ss2)) in
@@ -384,19 +405,23 @@ let check (globals, functions) =
     let check_slice_expr env i is_assign =
       match i with
       | Sgl_Slice(e, s) ->
-          let env =
-            if is_assign then add_helper_use env "_set_slice_array"
-            else add_helper_use env "_slice_array"
-          in
           let env, (t, e') = check_expr env e in
           (
             match t with
             | Array _ ->
+                let env =
+                  if is_assign then add_helper_use env "_set_slice_array"
+                  else add_helper_use env "_slice_array"
+                in
                 let env, ss = check_islice env s in
                 let sslice = SSlice_Expr(SSgl_Slice((t, e'), ss)) in
                 (env, (t, sslice))
             | Matrix _ ->
                 (* m[i:j] is semantically equivalent to m[i:j][:] *)
+                let env =
+                  if is_assign then add_helper_use env "_set_slice_matrix"
+                  else add_helper_use env "_slice_matrix"
+                in
                 let env, ss1 = check_islice env s in
                 let ss2 = SSlice((Int, SInt_Lit 0), (Int, SEnd)) in
                 let sslice = SSlice_Expr(SDbl_Slice((t, e'), ss1, ss2)) in
@@ -657,7 +682,7 @@ let check (globals, functions) =
                 if typ_of_container t = Int then Int_Lit (-1)
                 else Float_Lit "-1."
               in
-              let e = Binop(neg_one, Mult, e) in
+              let e = Binop(neg_one, Mult, e, false) in
               check_expr env e
           | Not when t = Bool -> (env, (t, SUnop(op, (t, e'))))
           | _ ->
@@ -665,7 +690,7 @@ let check (globals, functions) =
               string_of_uop op ^ string_of_typ t ^
               " in " ^ expr_s)
         )
-    | Binop(e1, op, e2) ->
+    | Binop(e1, op, e2, is_update) ->
         let env, (t1, e1') = check_expr env e1 in
         let env, (t2, e2') =
           match e2 with
@@ -687,10 +712,11 @@ let check (globals, functions) =
           string_of_typ t2 ^ " in " ^ expr_s
         in
         let check_mat_op env is_arith (t1, e1') (t2, e2') =
-          (* Check is expression is unreachable after operation; we'll want to free these *)
+          (* Check is expression is unreachable after binary operation; we'll want to free these *)
           let is_unreachable_mat e =
             match e with
-            | SMatrix_Lit _ | SIndex_Expr _ | SSlice_Expr _ | SBinop(_, _, _) -> true
+            | SMatrix_Lit _ | SSlice_Expr _ | SBinop(_, _, _, _) -> true
+            | SAssign(_, e) -> is_unreachable_mat_assign (snd e)
             | _ -> false
           in
           let base_type t =
@@ -722,7 +748,7 @@ let check (globals, functions) =
           let env =
             if is_matrix t1 then
               let env = add_helper_use env "_mat_binop" in
-              if is_unreachable_mat e1' || is_unreachable_mat e2' then
+              if is_unreachable_mat e1' || is_unreachable_mat e2' || is_update then
                 fst (get_native_of_builtin env "free" [t1])
               else env
             else env
@@ -776,7 +802,7 @@ let check (globals, functions) =
               (env, t1, (t1, e1'), (t2, e2'))
           | _ -> make_err err
         in
-        (env, (ty, SBinop((t1, e1'), op, (t2, e2'))))
+        (env, (ty, SBinop((t1, e1'), op, (t2, e2'), is_update)))
       | Call(f, args) ->
           let env, (t, f') = check_expr env f in
 
@@ -945,6 +971,14 @@ let check (globals, functions) =
       match stmt with
       | Expr e ->
           let env, sexpr = check_expr env e in
+          let env =
+            match sexpr with
+            | Matrix t, (SAssign(_, _) as a) ->
+                if is_unreachable_mat_assign a then
+                  fst (get_native_of_builtin env "free" [Matrix t])
+                else env
+            | _ -> env
+          in
           (env, SExpr(sexpr), false)
       | If(p, b1, b2) ->
           let env, p' = check_bool_expr env p in
