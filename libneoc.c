@@ -3,7 +3,7 @@
 #include <string.h>
 #include <errno.h>
 #include <math.h>
-#include "native.h"
+#include "libneoc.h"
 
 /* Some versions of stdlib.h may have max/min macros,
  * like Visual C++'s version. If they exist, undefine them

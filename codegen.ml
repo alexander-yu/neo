@@ -1263,13 +1263,13 @@ let translate (env, program) =
   in
 
   let global_scope = { variables = StringMap.empty ; parent = None } in
-  (* Add pointers to native functions to scope *)
+  (* Add pointers to internal functions to scope *)
   let global_scope =
-    let add_native_funcs fname f scope =
+    let add_internal_funcs fname f scope =
       let f_ptr = L.define_global (fname ^ "_ptr") f the_module in
       { scope with variables = StringMap.add fname f_ptr scope.variables }
     in
-    StringMap.fold add_native_funcs builtin_funcs global_scope
+    StringMap.fold add_internal_funcs builtin_funcs global_scope
   in
   (* Add global variables to scope *)
   let global_scope =

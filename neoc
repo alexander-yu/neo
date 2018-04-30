@@ -47,7 +47,7 @@ Compile() {
     generatedfiles="${basename}.ll ${basename}.s" &&
     Run "$NEO" "$1" ">" "${basename}.ll" &&
     Run "$LLC" "${basename}.ll" ">" "${basename}.s" &&
-    Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" "-lm"
+    Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "libneoc.o" "-lm"
 
     if [ $error -eq 0 ]; then
         if [ $keep -eq 0 ]; then
@@ -70,9 +70,9 @@ done
 
 shift `expr $OPTIND - 1`
 
-if [ ! -f native.o ]; then
-    echo "Could not find native.o"
-    echo "Try \"make native.o\""
+if [ ! -f libneoc.o ]; then
+    echo "Could not find libneoc.o"
+    echo "Try \"make libneoc.o\""
     exit 1
 fi
 

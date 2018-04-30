@@ -18,7 +18,7 @@ type symbol_table = {
 
 type translation_environment = {
     scope : symbol_table;
-    (* Store any uses of native built-in functions; we'll be doing the same
+    (* Store any uses of internal built-in functions; we'll be doing the same
      * with helper functions and declared functions. *)
     builtin_uses : StringSet.t;
     (* Store any uses of miscellaneous external helper functions,
@@ -31,7 +31,7 @@ type translation_environment = {
 
 let make_err err = raise (Failure err)
 
-let helpers_of_native fname =
+let helpers_of_internal fname =
   let rec typ_contains_class typ typ_class =
     match typ, typ_class with
     | Matrix _, "matrix" -> true
@@ -217,23 +217,23 @@ let check (globals, functions) =
     { env with helper_uses = StringSet.add fname env.helper_uses }
   in
 
-  let get_native_of_builtin env fname arg_types =
+  let get_internal_of_builtin env fname arg_types =
     (* Our built-in functions are written in a way such that
      * the first argument is all the information required to determine
-     * which actual native function to call *)
+     * which actual internal function to call *)
     let type_tag = string_of_typ (List.hd arg_types) in
-    let native_fname = "_" ^ fname ^ "_" ^ type_tag in
+    let internal_fname = "_" ^ fname ^ "_" ^ type_tag in
     let env =
       if (fname = "print" || fname = "println") && List.hd arg_types = BuiltInFunc then
         { env with builtin_uses = StringSet.add "_print_string" env.builtin_uses }
       else
         let env =
-          { env with builtin_uses = StringSet.add native_fname env.builtin_uses }
+          { env with builtin_uses = StringSet.add internal_fname env.builtin_uses }
         in
-        let helpers = helpers_of_native native_fname in
+        let helpers = helpers_of_internal internal_fname in
         List.fold_left add_helper_use env helpers
     in
-    (env, native_fname)
+    (env, internal_fname)
   in
 
   (* Raise an exception if the given rvalue type cannot be assigned to
@@ -254,7 +254,7 @@ let check (globals, functions) =
         match rexpr with
         | SId fname ->
             let _ = check_builtin_restrict lvaluet err fname in
-            (* Replace built-in function with the underlying native function *)
+            (* Replace built-in function with the underlying internal function *)
             let arg_types =
               match lvaluet with
               | Func(arg_types, _) -> arg_types
@@ -263,8 +263,8 @@ let check (globals, functions) =
                   " = " ^ string_of_typ rvaluet ^ " should have been rejected" ^
                   " by check_builtin_restrict")
             in
-            let env, native_fname = get_native_of_builtin env fname arg_types in
-            (env, (lvaluet, SId native_fname))
+            let env, internal_fname = get_internal_of_builtin env fname arg_types in
+            (env, (lvaluet, SId internal_fname))
         | _ -> make_err ("internal error: only direct references to " ^
             "built-in functions should have type BuiltInFunc")
       else make_err err
@@ -462,7 +462,7 @@ let check (globals, functions) =
       let env, args' = List.fold_left check_arg (env, []) args in
       let args' = List.rev args' in
       let arg_types = List.map fst args' in
-      let env, native_fname = get_native_of_builtin env fname arg_types in
+      let env, internal_fname = get_internal_of_builtin env fname arg_types in
       match fname with
       | "print" | "println" ->
           let _ = check_n_args 1 n_args expr_s in
@@ -481,17 +481,17 @@ let check (globals, functions) =
                       "should be direct reference to built-in"
                 in
                 let str = "built-in function " ^ arg_name in
-                let env, native_fname = get_native_of_builtin env fname [String] in
-                (env, (Void, SCall((Func([String], Void), SId native_fname),
+                let env, internal_fname = get_internal_of_builtin env fname [String] in
+                (env, (Void, SCall((Func([String], Void), SId internal_fname),
                   [(String, SString_Lit str)])))
-            | _ -> (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+            | _ -> (env, (Void, SCall((Func(arg_types, Void), SId internal_fname), args')))
           )
       | "deep_free" ->
           let _ = check_n_args 1 n_args expr_s in
           (
             match arg_types with
             | [Array _] ->
-                (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+                (env, (Void, SCall((Func(arg_types, Void), SId internal_fname), args')))
             | _ -> make_err ("non-array argument in " ^ expr_s)
           )
       | "free" ->
@@ -499,7 +499,7 @@ let check (globals, functions) =
           (
             match arg_types with
             | [Matrix _] | [Array _] ->
-                (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+                (env, (Void, SCall((Func(arg_types, Void), SId internal_fname), args')))
             | _ -> make_err ("non-container argument in " ^ expr_s)
           )
       | "length" ->
@@ -507,7 +507,7 @@ let check (globals, functions) =
           (
             match arg_types with
             | [Array _] ->
-                (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                (env, (Int, SCall((Func(arg_types, Int), SId internal_fname), args')))
             | _ -> make_err ("non-array argument in " ^ expr_s)
           )
       | "rows" | "cols" ->
@@ -515,7 +515,7 @@ let check (globals, functions) =
           (
             match arg_types with
             | [Matrix _] ->
-                (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                (env, (Int, SCall((Func(arg_types, Int), SId internal_fname), args')))
             | _ -> make_err ("non-matrix argument in " ^ expr_s)
           )
       | "to_int" ->
@@ -523,9 +523,9 @@ let check (globals, functions) =
           (
             match arg_types with
             | [Float] ->
-                (env, (Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                (env, (Int, SCall((Func(arg_types, Int), SId internal_fname), args')))
             | [Matrix Float] ->
-                (env, (Matrix Int, SCall((Func(arg_types, Int), SId native_fname), args')))
+                (env, (Matrix Int, SCall((Func(arg_types, Int), SId internal_fname), args')))
             | _ -> make_err ("non-float argument in " ^ expr_s)
           )
       | "to_float" ->
@@ -533,9 +533,9 @@ let check (globals, functions) =
           (
             match arg_types with
             | [Int] ->
-                (env, (Float, SCall((Func(arg_types, Float), SId native_fname), args')))
+                (env, (Float, SCall((Func(arg_types, Float), SId internal_fname), args')))
             | [Matrix Int] ->
-                (env, (Matrix Float, SCall((Func(arg_types, Matrix Float), SId native_fname), args')))
+                (env, (Matrix Float, SCall((Func(arg_types, Matrix Float), SId internal_fname), args')))
             | _ -> make_err ("non-int argument in " ^ expr_s)
           )
       | "insert" ->
@@ -552,11 +552,11 @@ let check (globals, functions) =
                 let arg_types = Array.of_list arg_types in
                 let _ = Array.set arg_types 2 (fst e') in
                 let arg_types = Array.to_list arg_types in
-                let env, native_fname = get_native_of_builtin env fname arg_types in
-                (env, (Array t, SCall((Func(arg_types, Array t), SId native_fname), args')))
+                let env, internal_fname = get_internal_of_builtin env fname arg_types in
+                (env, (Array t, SCall((Func(arg_types, Array t), SId internal_fname), args')))
             | [Matrix t; Int; Matrix _] ->
                 let env, _ = check_assign env (Matrix t) e' err in
-                (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
+                (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId internal_fname), args')))
             | _ -> make_err ("non-container argument in " ^ expr_s)
           )
       | "delete" ->
@@ -564,9 +564,9 @@ let check (globals, functions) =
           (
             match arg_types with
             | [Array t; Int] ->
-                (env, (Array t, SCall((Func(arg_types, Array t), SId native_fname), args')))
+                (env, (Array t, SCall((Func(arg_types, Array t), SId internal_fname), args')))
             | [Matrix t; Int] ->
-                (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
+                (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId internal_fname), args')))
             | _ -> make_err ("non-container argument in " ^ expr_s)
           )
       | "append" ->
@@ -583,17 +583,17 @@ let check (globals, functions) =
                 let arg_types = Array.of_list arg_types in
                 let _ = Array.set arg_types 1 (fst e') in
                 let arg_types = Array.to_list arg_types in
-                let env, native_fname = get_native_of_builtin env fname arg_types in
-                (env, (Array t, SCall((Func(arg_types, Array t), SId native_fname), args')))
+                let env, internal_fname = get_internal_of_builtin env fname arg_types in
+                (env, (Array t, SCall((Func(arg_types, Array t), SId internal_fname), args')))
             | [Matrix t; Matrix _] ->
                 let env, _ = check_assign env (Matrix t) e' err in
-                (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId native_fname), args')))
+                (env, (Matrix t, SCall((Func(arg_types, Matrix t), SId internal_fname), args')))
             | _ -> make_err ("non-container argument in " ^ expr_s)
           )
       | "die" ->
           let _ = check_n_args 1 n_args expr_s in
           if arg_types = [String] then
-            (env, (Void, SCall((Func(arg_types, Void), SId native_fname), args')))
+            (env, (Void, SCall((Func(arg_types, Void), SId internal_fname), args')))
           else make_err ("non-string argument in " ^ expr_s)
       | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
     in
@@ -738,10 +738,10 @@ let check (globals, functions) =
             match t1, t2 with
             | Matrix _, Matrix _ -> env, (t1, e1'), (t2, e2')
             | Matrix _, t ->
-                let env, _ = get_native_of_builtin env "free" [Matrix t] in
+                let env, _ = get_internal_of_builtin env "free" [Matrix t] in
                 env, (t1, e1'), (Matrix t2, SMatrix_Lit [| [| (t2, e2') |] |])
             | t, Matrix _ ->
-                let env, _ = get_native_of_builtin env "free" [Matrix t] in
+                let env, _ = get_internal_of_builtin env "free" [Matrix t] in
                 env, (Matrix t1, SMatrix_Lit [| [| (t1, e1') |] |]), (t2, e2')
             | _, _ -> env, (t1, e1'), (t2, e2')
           in
@@ -749,7 +749,7 @@ let check (globals, functions) =
             if is_matrix t1 then
               let env = add_helper_use env "_mat_binop" in
               if is_unreachable_mat e1' || is_unreachable_mat e2' || is_update then
-                fst (get_native_of_builtin env "free" [t1])
+                fst (get_internal_of_builtin env "free" [t1])
               else env
             else env
           in
@@ -974,7 +974,7 @@ let check (globals, functions) =
             match sexpr with
             | Matrix t, (SAssign(_, _) as a) ->
                 if is_unreachable_mat_assign a then
-                  fst (get_native_of_builtin env "free" [Matrix t])
+                  fst (get_internal_of_builtin env "free" [Matrix t])
                 else env
             | _ -> env
           in

@@ -99,7 +99,7 @@ Check() {
     generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out" &&
     Run "$NEO" "$1" ">" "${basename}.ll" &&
     Run "$LLC" "${basename}.ll" ">" "${basename}.s" &&
-    Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" "-lm" &&
+    Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "libneoc.o" "-lm" &&
     Run "./${basename}.exe" > "${basename}.out" &&
     Compare ${basename}.out ${reffile}.out ${basename}.diff
 
@@ -140,7 +140,7 @@ CheckFail() {
         generatedfiles="$generatedfiles ${basename}.ll ${basename}.s ${basename}.exe ${basename}.out ${basename}.err"
         Run "$NEO" "$1" ">" "${basename}.ll" &&
         Run "$LLC" "${basename}.ll" ">" "${basename}.s" &&
-        Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "native.o" "-lm" &&
+        Run "$CC" "$CFLAGS" "-o" "${basename}.exe" "${basename}.s" "libneoc.o" "-lm" &&
         RunFail "./${basename}.exe" "2>" "${basename}.err" ">" "${basename}.out"
         Compare ${basename}.err ${reffile}.err ${basename}-err.diff
         Compare ${basename}.out ${reffile}.out ${basename}-out.diff
@@ -182,9 +182,9 @@ LLIFail() {
 
 which "$LLI" >> $globallog || LLIFail
 
-if [ ! -f native.o ]; then
-    echo "Could not find native.o"
-    echo "Try \"make native.o\""
+if [ ! -f libneoc.o ]; then
+    echo "Could not find libneoc.o"
+    echo "Try \"make libneoc.o\""
     exit 1
 fi
 
