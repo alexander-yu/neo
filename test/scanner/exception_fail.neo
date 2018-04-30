@@ -1,9 +1,0 @@
-void main() {
-    exception BadException;
-
-    try {
-        protest("Wah!");
-    } catch BadException() {
-        print("Hi");
-    }
-}

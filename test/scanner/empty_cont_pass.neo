@@ -1,7 +1,0 @@
-create array<int> a[3];
-create matrix<float> m[3][5];
-create matrix<int> l[1];  /* Neo doesn't know the difference until SAST check */
-
-var int i = 1;
-create array<int> b[i + 1];
-create matrix<int> n[i][i++];
