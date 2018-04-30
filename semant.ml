@@ -897,7 +897,6 @@ let check (globals, functions) =
     let expr_kw =
       match t with
       | Int | Bool | Float | String | Func(_, _) -> Var
-      | Exc -> Exception
       | Array _ | Matrix _ -> Create
       | Notyp -> Auto
       | _ -> make_err "internal error: check_v_decl_type should have rejected"
@@ -1021,7 +1020,6 @@ let check (globals, functions) =
           let env, checked = check_v_decl (env, []) d in
           let sdecl = List.hd checked in
           (env, SDecl sdecl, false)
-      | _ -> make_err "not supported yet in check_stmt"
     in
 
     (* Rename main function to prog_main *)

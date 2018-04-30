@@ -108,7 +108,6 @@ let rec string_of_sexpr (t, e) =
   ) ^ ")"
 
 let string_of_svdecl (kw, t, id, sexpr) = match t, sexpr with
-  | Exc, (_, SNoexpr) -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
   | _, (_, SNoexpr) -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
   | _ -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ " = " ^
       string_of_sexpr sexpr ^ ";\n"

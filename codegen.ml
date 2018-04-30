@@ -92,7 +92,8 @@ let translate (env, program) =
     | A.BuiltInFunc ->
         make_err ("internal error: BuiltInFunc should not have made " ^
         "it past semant (ltype_of_typ)")
-    | _ -> make_err "not supported yet in ltype_of_typ"
+    | A.Notyp -> make_err ("internal error: Notyp should not have made " ^
+        "it past semant (ltype_of_typ)")
   in
 
   (* We wrap the program's main function call inside of another
@@ -300,9 +301,11 @@ let translate (env, program) =
               builtin_funcs
           | A.BuiltInFunc ->
               make_err ("internal error: BuiltInFunc should have not made it " ^
-              "past semant (build print)")
-          | A.Void -> make_err "internal error: semant should have rejected void data (build print)"
-          | _ -> make_err "not supported yet in print"
+              "past semant (build print_element)")
+          | A.Void -> make_err "internal error: semant should have rejected void (build print_element)"
+          | A.Notyp ->
+              make_err("internal error: Notyp should have not made it " ^
+              "past semant (build print_element)")
         in
         let _ = L.build_ret_void builder in
         StringMap.add fname print_func builtin_funcs
@@ -591,7 +594,9 @@ let translate (env, program) =
         make_err ("internal error: BuiltInFunc should have not made it " ^
         "past semant (init)")
     | A.Void -> make_err "internal error: semant should have rejected void data (init)"
-    | _ -> make_err "not supported yet in init"
+    | A.Notyp ->
+        make_err ("internal error: Notyp should have not made it " ^
+        "past semant (init)")
   in
 
   (* Returns value of an identifier *)

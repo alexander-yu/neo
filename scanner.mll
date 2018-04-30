@@ -72,15 +72,10 @@ rule token = parse
 | "for"     { FOR }
 | "while"   { WHILE }
 | "return"  { RETURN }
-| "try"     { TRY }
-| "catch"   { CATCH }
-| "protest" { PROTEST }
-| "with"    { WITH }
 
 (* Declaration *)
 | "var"       { VAR }
 | "create"    { CREATE }
-| "exception" { EXCEPTION }
 | "auto"      { AUTO }
 
 (* Types *)
@@ -92,7 +87,6 @@ rule token = parse
 | "array"  { ARRAY }
 | "matrix" { MATRIX }
 | "func"   { FUNC }
-| "exc"    { EXC }
 
 (* Literals *)
 | "True"   { BOOL_LIT(true)  }
