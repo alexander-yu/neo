@@ -14,7 +14,7 @@ all : neo.native libneoc.o
 neo.native :
 	rm -f *.o
 	ocamlbuild -use-ocamlfind \
-		-pkgs llvm,llvm.analysis,llvm.ipo,str \
+		-pkgs llvm,llvm.analysis,str \
 		-cflags -w,+a-4 \
 		neo.native
 

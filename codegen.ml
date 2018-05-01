@@ -13,6 +13,7 @@ http://llvm.moe/ocaml/
 *)
 
 (* We'll refer to Llvm and Ast constructs with module names *)
+module O = Optimize
 module S = Semant
 module L = Llvm
 module A = Ast
@@ -30,10 +31,8 @@ let make_err err = raise (Failure err)
 
 (* Code Generation from the SAST. Returns an LLVM module if successful,
    throws an exception if something is wrong. *)
-let translate (env, program) =
-  let builtin_uses = env.S.builtin_uses in
-  let helper_uses = env.S.helper_uses in
-  let func_uses = env.S.func_uses in
+let translate (uses, program) =
+  let internal_uses, func_uses = uses in
   let globals, functions = program in
   let context    = L.global_context () in
   (* Create an LLVM module -- this is a "container" into which we'll
@@ -215,6 +214,13 @@ let translate (env, program) =
       ("llvm.floor.f64", float_t, [| float_t |]);
     ]
   in
+
+  let add_used_helper fname _ uses =
+    if StringSet.mem fname internal_uses then StringSet.add fname uses
+    else uses
+  in
+  let helper_uses = StringMap.fold add_used_helper external_helper_types StringSet.empty in
+  let builtin_uses = StringSet.diff internal_uses helper_uses in
 
   let helper_funcs =
     let helper_has_use fname _ = StringSet.mem fname helper_uses in
@@ -1044,13 +1050,13 @@ let translate (env, program) =
               is_update ||
               match snd e1 with
               | SMatrix_Lit _ | SSlice_Expr _ | SBinop(_, _, _, _) -> true
-              | SAssign(_, _) -> S.is_unreachable_mat_assign (snd e1)
+              | SAssign(_, _) -> O.is_unreachable_mat_assign (snd e1)
               | _ -> false
             in
             let free_e2 =
               match snd e2 with
               | SMatrix_Lit _ | SSlice_Expr _ | SBinop(_, _, _, _) -> true
-              | SAssign(_, _) -> S.is_unreachable_mat_assign (snd e2)
+              | SAssign(_, _) -> O.is_unreachable_mat_assign (snd e2)
               | _ -> false
             in
             let res =
@@ -1127,7 +1133,7 @@ let translate (env, program) =
           let _ =
             match e with
             | A.Matrix _, (SAssign(_, _) as a) ->
-                if S.is_unreachable_mat_assign a then
+                if O.is_unreachable_mat_assign a then
                 let free_matrix_func = StringMap.find "_free_matrix" builtin_funcs in
                 let _ = L.build_call free_matrix_func [| e' |] "" builder in
                 ()
