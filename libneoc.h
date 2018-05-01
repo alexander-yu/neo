@@ -79,6 +79,10 @@ double _fexp(const double, const double);
 matrix_t* _matmult(const matrix_t*, const matrix_t*);
 matrix_t* _mat_binop(const matrix_t*, const enum mat_op, const matrix_t*);
 
+/* File I/O functions */
+matrix_t* _read_mat(const char*, const enum mat_type);
+void _write_mat(matrix_t*, const char*);
+
 /* Miscellaneous helpers/built-ins */
 void _init_array(array_t*, const void*);
 void _init_matrix(matrix_t*);

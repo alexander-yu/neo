@@ -95,6 +95,12 @@ let translate (uses, program) =
         "it past semant (ltype_of_typ)")
   in
 
+  let mat_type_of_typ = function
+    | A.Int -> L.const_int i32_t 0
+    (* Otherwise, it's A.Float *)
+    | _ -> L.const_int i32_t 1
+  in
+
   (* We wrap the program's main function call inside of another
    * true system main function; we rename the program's main function
    * as "prog_main" when generating the LLVM code. The system main
@@ -151,6 +157,8 @@ let translate (uses, program) =
       ("_insert_matrix", pointer_t matrix_t, [| pointer_t matrix_t; i32_t; pointer_t matrix_t |]);
       ("_delete_matrix", pointer_t matrix_t, [| pointer_t matrix_t; i32_t |]);
       ("_append_matrix", pointer_t matrix_t, [| pointer_t matrix_t; pointer_t matrix_t |]);
+      (* File I/O fuctions *)
+      ("_write_mat", void_t, [| pointer_t matrix_t; pointer_t i8_t |]);
       (* Miscellaneous built-ins *)
       ("_length", i32_t, [| pointer_t array_t |]);
       ("_rows", i32_t, [| pointer_t matrix_t |]);
@@ -207,6 +215,8 @@ let translate (uses, program) =
       ("_fexp", float_t, [| float_t; float_t |]);
       ("_matmult", pointer_t matrix_t, [| pointer_t matrix_t; pointer_t matrix_t |]);
       ("_mat_binop", pointer_t matrix_t, [| pointer_t matrix_t; i32_t; pointer_t matrix_t |]);
+      (* File I/O functions *)
+      ("_read_mat", pointer_t matrix_t, [| pointer_t i8_t; i32_t |]);
       (* Miscellaneous helper/built-ins *)
       ("_init_array", void_t, [| pointer_t array_t; pointer_t i8_t |]);
       ("_init_matrix", void_t, [| pointer_t matrix_t |]);
@@ -507,6 +517,25 @@ let translate (uses, program) =
       StringMap.add fname append_func builtin_funcs
     in
 
+    (* Build any necessary matrix reading functions *)
+    let build_read_matrix_func matrix_type builtin_funcs =
+      let fname =
+        if matrix_type = A.Matrix A.Float then "_read_fmat_string" else "_read_imat_string"
+      in
+      let read_t = L.function_type (pointer_t matrix_t) [| pointer_t i8_t |] in
+      let read_func = L.define_function fname read_t the_module in
+      let builder = L.builder_at_end context (L.entry_block read_func) in
+
+      (* Get params *)
+      let filename = (L.params read_func).(0) in
+      let mat_type = mat_type_of_typ (A.typ_of_container matrix_type) in
+
+      (* Call _read_mat *)
+      let res = call_helper "_read_mat" [| filename; mat_type |] "res" builder in
+      let _ = L.build_ret res builder in
+      StringMap.add fname read_func builtin_funcs
+    in
+
     let fname_fragments = Str.split (Str.regexp "_") fname in
     match fname_fragments with
     | ["print"; arg_type] ->
@@ -581,7 +610,10 @@ let translate (uses, program) =
                 build_external_builtin ~alias:(Some fname) "_flip_matrix_type" builtin_funcs
             | _ -> make_err ("internal error: " ^ fname ^ " is invalid cast")
           )
-    | _ -> build_external_builtin fname builtin_funcs
+      | ["read"; "fmat"; _] -> build_read_matrix_func (A.Matrix A.Float) builtin_funcs
+      | ["read"; "imat"; _] -> build_read_matrix_func (A.Matrix A.Int) builtin_funcs
+      | ["write"; "mat"; _] -> build_external_builtin ~alias:(Some fname) "_write_mat" builtin_funcs
+    | _ -> make_err ("internal error: unknown builtin function " ^ fname)
   in
 
   let builtin_funcs = StringSet.fold build_builtin builtin_uses StringMap.empty in
@@ -723,12 +755,6 @@ let translate (uses, program) =
         in
         let _ = Array.iteri set_element raw_elements in
         arr_ptr
-      in
-
-      let mat_type_of_typ = function
-        | A.Int -> L.const_int i32_t 0
-        (* Otherwise, it's A.Float *)
-        | _ -> L.const_int i32_t 1
       in
 
       let build_matrix_lit typ raw_elements builder =
