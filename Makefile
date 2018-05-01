@@ -8,13 +8,13 @@ CC = gcc
 CFLAGS = -g -Wall
 
 .PHONY : all
-all : neo.native native.o
+all : neo.native libneoc.o
 
 .PHONY : neo.native
 neo.native :
 	rm -f *.o
 	ocamlbuild -use-ocamlfind \
-		-pkgs llvm,llvm.analysis,llvm.ipo,str \
+		-pkgs llvm,llvm.analysis,str \
 		-cflags -w,+a-4 \
 		neo.native
 
@@ -24,7 +24,7 @@ neo.native :
 clean :
 	ocamlbuild -clean
 	rm -rf testall.log *.diff neo scanner.ml parser.ml parser.mli
-	rm -rf native
+	rm -rf libneoc
 	rm -rf *.cmx *.cmi *.cmo *.cmx *.o *.s *.ll *.out *.exe *.err
 
 # More detailed: build using ocamlc/ocamlopt + ocamlfind to locate LLVM
@@ -40,8 +40,8 @@ scanner.ml : scanner.mll
 parser.ml parser.mli : parser.mly
 	ocamlyacc parser.mly
 
-native.o :
-	$(CC) $(CFLAGS) -c native.c
+libneoc.o :
+	$(CC) $(CFLAGS) -c libneoc.c
 
 %.cmo : %.ml
 	ocamlc -c $<

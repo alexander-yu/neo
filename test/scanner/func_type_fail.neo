@@ -1,3 +1,0 @@
-int foo(func<(int):> f) {
-    print(f(0));
-}

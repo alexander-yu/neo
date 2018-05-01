@@ -1,2 +1,0 @@
-/* Cannot do empty initialization and literal initialization simultaneously */
-create matrix<int> a[3][3] = [[1, 2, 3]];

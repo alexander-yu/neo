@@ -20,13 +20,13 @@ open Ast
 %token NOT AND OR
 
 /* Control flow */
-%token RETURN IF ELSE FOR WHILE TRY CATCH PROTEST WITH
+%token RETURN IF ELSE FOR WHILE
 
 /* Declaration */
-%token VAR CREATE EXCEPTION
+%token VAR CREATE
 
 /* Types */
-%token INT BOOL FLOAT VOID STRING ARRAY MATRIX FUNC AUTO EXC
+%token INT BOOL FLOAT VOID STRING ARRAY MATRIX FUNC AUTO
 
 /* Literals */
 %token <int> INT_LIT
@@ -87,7 +87,6 @@ typ:
   | MATRIX LANGLE typ RANGLE { Matrix $3 }
   | FUNC LANGLE LPAREN typ_opt RPAREN COLON typ RANGLE
                              { Func($4, $7) }
-  | EXC                      { Exc }
 
 typ_opt:
     /* nothing */ { [] }
@@ -130,14 +129,6 @@ nondecl_stmt:
                                             { If($3, $5, $7) }
   | for_loop                                { $1 }
   | WHILE LPAREN expr RPAREN stmt           { While($3, $5) }
-  | TRY LBRACE stmts_opt RBRACE CATCH ID LPAREN ID RPAREN LBRACE stmts_opt RBRACE
-                                            { Try_Catch({
-                                              try_block = $3;
-                                              exc_type = $6;
-                                              exc_var = $8;
-                                              catch_block = $11;
-                                            }) }
-  | PROTEST expr WITH expr SEMI  { Protest($2, $4) }
 
 stmt:
     nondecl_stmt { $1 }
@@ -154,7 +145,6 @@ decl:
                                          { (Create, $2, $3,
                                             Empty_Matrix(typ_of_container $2, $5, $8)) }
   | AUTO ID ASSIGN expr                  { (Auto, Notyp, $2, $4) }
-  | EXCEPTION ID                         { (Exception, Exc, $2, Noexpr) }
 
 expr_opt:
     /* nothing */ { Noexpr }

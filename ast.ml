@@ -5,10 +5,10 @@ type op = Add | Sub | Mult | Div | Equal | Neq | Less | Leq | Greater | Geq
 
 type uop = Neg | Not
 
-type typ = Int | Bool | Float | String | Void | Exc | Array of typ
+type typ = Int | Bool | Float | String | Void | Array of typ
   | Matrix of typ | Func of typ list * typ | BuiltInFunc | Notyp
 
-type decl_kw = Var | Create | Exception | Nokw | Auto
+type decl_kw = Var | Create | Nokw | Auto
 
 type expr =
   | Id of string
@@ -51,15 +51,6 @@ type stmt =
   | If of expr * stmt * stmt
   | While of expr * stmt
   | Decl of decl
-  | Try_Catch of try_catch
-  | Protest of expr * expr
-
-and try_catch = {
-  try_block : stmt list;
-  exc_type : string;
-  exc_var : string;
-  catch_block : stmt list;
-}
 
 type func_decl = {
     typ : typ;
@@ -120,7 +111,6 @@ let string_of_uop = function
 let string_of_decl_kw = function
   | Var -> "var"
   | Create -> "create"
-  | Exception -> "exception"
   | Nokw -> ""
   | Auto -> "auto"
 
@@ -130,7 +120,6 @@ let rec string_of_typ = function
   | Float -> "float"
   | String -> "string"
   | Void -> "void"
-  | Exc -> "exc"
   | Array t -> "array<" ^ string_of_typ t ^ ">"
   | Matrix t -> "matrix<"  ^ string_of_typ t ^ ">"
   | Func(args, ret) -> "func<(" ^ String.concat ", " (List.map string_of_typ args) ^
@@ -146,7 +135,6 @@ let rec typ_of_string s =
   | "float" -> Float
   | "string" -> String
   | "void" -> Void
-  | "exc" -> Exc
   | "func<built-in>" -> BuiltInFunc
   | "" -> Notyp
   | _ ->
@@ -221,7 +209,6 @@ let rec string_of_expr expr =
 let string_of_vdecl (kw, t, id, expr) =
   match kw, t, expr with
   | Nokw, _, Noexpr -> string_of_typ t ^ " " ^ id
-  | _, Exc, Noexpr -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
   | _, Notyp, Noexpr -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
   | _, _, Noexpr -> string_of_decl_kw kw ^ " " ^ string_of_typ t ^ " " ^ id ^ ";\n"
   | _, Notyp, _ -> string_of_decl_kw kw ^ " " ^ id ^ ";\n"
@@ -240,10 +227,6 @@ let rec string_of_stmt = function
       string_of_stmt s1 ^ "else\n" ^ string_of_stmt s2
   | While(e, s) -> "while (" ^ string_of_expr e ^ ")\n" ^ string_of_stmt s
   | Decl decl -> string_of_vdecl decl
-  | Try_Catch tc -> "try {\n" ^ String.concat "" (List.map string_of_stmt tc.try_block) ^
-    "} catch " ^ tc.exc_type ^ "(" ^ tc.exc_var ^ ") {\n" ^
-    String.concat "" (List.map string_of_stmt tc.catch_block) ^ "}\n"
-  | Protest(t, e) -> "protest " ^ string_of_expr t ^ "(" ^ string_of_expr e ^ ");\n"
 
 let string_of_fdecl fdecl =
   string_of_typ fdecl.typ ^ " " ^

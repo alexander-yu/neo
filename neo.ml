@@ -2,7 +2,7 @@
  * check the resulting AST and generate an SAST from it, generate LLVM IR,
  * and dump the module *)
 
-type action = Ast | Sast | LLVM_IR | Compile
+type action = Ast | Sast | Optimize | LLVM_IR | Compile
 
 let make_err err = raise (Failure err)
 
@@ -46,6 +46,7 @@ let () =
   let speclist = [
     ("-a", Arg.Unit (set_action Ast), "Print the AST");
     ("-s", Arg.Unit (set_action Sast), "Print the SAST");
+    ("-o", Arg.Unit (set_action Optimize), "Print the optimized SAST");
     ("-l", Arg.Unit (set_action LLVM_IR), "Print the generated LLVM IR");
     ("-c", Arg.Unit (set_action Compile),
       "Check and print the generated LLVM IR (default)");
@@ -73,19 +74,16 @@ let () =
       let sast = Semant.check ast in
       match !action with
       | Ast -> ()
-      | Sast -> print_string (Sast.string_of_sprogram (snd sast))
+      | Sast -> print_string (Sast.string_of_sprogram sast)
+      | Optimize ->
+          let sast = Optimize.prune_uses sast in
+          print_string (Sast.string_of_sprogram (snd sast))
       | LLVM_IR ->
+          let sast = Optimize.prune_uses sast in
           let m = Codegen.translate sast in
-          let pm = Llvm.PassManager.create () in
-          let _ = Llvm_ipo.add_global_dce pm in
-          let _ = Llvm_ipo.add_strip_dead_prototypes pm in
-          let _ = Llvm.PassManager.run_module m pm in
           print_string (Llvm.string_of_llmodule m)
       | Compile ->
+          let sast = Optimize.prune_uses sast in
           let m = Codegen.translate sast in
-          let pm = Llvm.PassManager.create () in
-          let _ = Llvm_ipo.add_global_dce pm in
-          let _ = Llvm_ipo.add_strip_dead_prototypes pm in
-          let _ = Llvm.PassManager.run_module m pm in
           let _ = Llvm_analysis.assert_valid_module m in
           print_string (Llvm.string_of_llmodule m)

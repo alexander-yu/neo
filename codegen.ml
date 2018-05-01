@@ -13,6 +13,7 @@ http://llvm.moe/ocaml/
 *)
 
 (* We'll refer to Llvm and Ast constructs with module names *)
+module O = Optimize
 module S = Semant
 module L = Llvm
 module A = Ast
@@ -30,10 +31,8 @@ let make_err err = raise (Failure err)
 
 (* Code Generation from the SAST. Returns an LLVM module if successful,
    throws an exception if something is wrong. *)
-let translate (env, program) =
-  let builtin_uses = env.S.builtin_uses in
-  let helper_uses = env.S.helper_uses in
-  let func_uses = env.S.func_uses in
+let translate (uses, program) =
+  let internal_uses, func_uses = uses in
   let globals, functions = program in
   let context    = L.global_context () in
   (* Create an LLVM module -- this is a "container" into which we'll
@@ -92,7 +91,8 @@ let translate (env, program) =
     | A.BuiltInFunc ->
         make_err ("internal error: BuiltInFunc should not have made " ^
         "it past semant (ltype_of_typ)")
-    | _ -> make_err "not supported yet in ltype_of_typ"
+    | A.Notyp -> make_err ("internal error: Notyp should not have made " ^
+        "it past semant (ltype_of_typ)")
   in
 
   (* We wrap the program's main function call inside of another
@@ -215,6 +215,13 @@ let translate (env, program) =
     ]
   in
 
+  let add_used_helper fname _ uses =
+    if StringSet.mem fname internal_uses then StringSet.add fname uses
+    else uses
+  in
+  let helper_uses = StringMap.fold add_used_helper external_helper_types StringSet.empty in
+  let builtin_uses = StringSet.diff internal_uses helper_uses in
+
   let helper_funcs =
     let helper_has_use fname _ = StringSet.mem fname helper_uses in
     let external_helper_types = StringMap.filter helper_has_use external_helper_types in
@@ -300,9 +307,11 @@ let translate (env, program) =
               builtin_funcs
           | A.BuiltInFunc ->
               make_err ("internal error: BuiltInFunc should have not made it " ^
-              "past semant (build print)")
-          | A.Void -> make_err "internal error: semant should have rejected void data (build print)"
-          | _ -> make_err "not supported yet in print"
+              "past semant (build print_element)")
+          | A.Void -> make_err "internal error: semant should have rejected void (build print_element)"
+          | A.Notyp ->
+              make_err("internal error: Notyp should have not made it " ^
+              "past semant (build print_element)")
         in
         let _ = L.build_ret_void builder in
         StringMap.add fname print_func builtin_funcs
@@ -591,7 +600,9 @@ let translate (env, program) =
         make_err ("internal error: BuiltInFunc should have not made it " ^
         "past semant (init)")
     | A.Void -> make_err "internal error: semant should have rejected void data (init)"
-    | _ -> make_err "not supported yet in init"
+    | A.Notyp ->
+        make_err ("internal error: Notyp should have not made it " ^
+        "past semant (init)")
   in
 
   (* Returns value of an identifier *)
@@ -1039,13 +1050,13 @@ let translate (env, program) =
               is_update ||
               match snd e1 with
               | SMatrix_Lit _ | SSlice_Expr _ | SBinop(_, _, _, _) -> true
-              | SAssign(_, _) -> S.is_unreachable_mat_assign (snd e1)
+              | SAssign(_, _) -> O.is_unreachable_mat_assign (snd e1)
               | _ -> false
             in
             let free_e2 =
               match snd e2 with
               | SMatrix_Lit _ | SSlice_Expr _ | SBinop(_, _, _, _) -> true
-              | SAssign(_, _) -> S.is_unreachable_mat_assign (snd e2)
+              | SAssign(_, _) -> O.is_unreachable_mat_assign (snd e2)
               | _ -> false
             in
             let res =
@@ -1122,7 +1133,7 @@ let translate (env, program) =
           let _ =
             match e with
             | A.Matrix _, (SAssign(_, _) as a) ->
-                if S.is_unreachable_mat_assign a then
+                if O.is_unreachable_mat_assign a then
                 let free_matrix_func = StringMap.find "_free_matrix" builtin_funcs in
                 let _ = L.build_call free_matrix_func [| e' |] "" builder in
                 ()
@@ -1258,13 +1269,13 @@ let translate (env, program) =
   in
 
   let global_scope = { variables = StringMap.empty ; parent = None } in
-  (* Add pointers to native functions to scope *)
+  (* Add pointers to internal functions to scope *)
   let global_scope =
-    let add_native_funcs fname f scope =
+    let add_internal_funcs fname f scope =
       let f_ptr = L.define_global (fname ^ "_ptr") f the_module in
       { scope with variables = StringMap.add fname f_ptr scope.variables }
     in
-    StringMap.fold add_native_funcs builtin_funcs global_scope
+    StringMap.fold add_internal_funcs builtin_funcs global_scope
   in
   (* Add global variables to scope *)
   let global_scope =
