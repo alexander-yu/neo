@@ -38,6 +38,9 @@ let check (globals, functions) =
       "delete";
       "append";
       "die";
+      "read_fmat";
+      "read_imat";
+      "write_mat";
     ]
   in
 
@@ -150,6 +153,26 @@ let check (globals, functions) =
           arg_types = [String] && ret_type = Void
         in
         if n_args = 1 && check_types arg_types ret_type then ()
+        else make_err err
+    | "read_fmat" ->
+        let check_types arg_types ret_type =
+          arg_types = [String] && ret_type = Matrix Float
+        in
+        if n_args = 1 && check_types arg_types ret_type then ()
+        else make_err err
+    | "read_imat" ->
+        let check_types arg_types ret_type =
+          arg_types = [String] && ret_type = Matrix Int
+        in
+        if n_args = 1 && check_types arg_types ret_type then ()
+        else make_err err
+    | "write_mat" ->
+        let check_types arg_types ret_type =
+          is_matrix (List.hd arg_types)
+          && List.nth arg_types 1 = String
+          && ret_type = Void
+        in
+        if n_args = 2 && check_types arg_types ret_type then ()
         else make_err err
     | _ -> make_err err
   in
@@ -498,6 +521,24 @@ let check (globals, functions) =
           if arg_types = [String] then
             (scope, (Void, SCall((Func(arg_types, Void), SId internal_fname), args')))
           else make_err ("non-string argument in " ^ expr_s)
+      | "read_fmat" ->
+          let _ = check_n_args 1 n_args expr_s in
+          if arg_types = [String] then
+            (scope, (Matrix Float, SCall((Func(arg_types, Matrix Float), SId internal_fname), args')))
+          else make_err ("non-string argument in " ^ expr_s)
+      | "read_imat" ->
+          let _ = check_n_args 1 n_args expr_s in
+          if arg_types = [String] then
+            (scope, (Matrix Int, SCall((Func(arg_types, Matrix Int), SId internal_fname), args')))
+          else make_err ("non-string argument in " ^ expr_s)
+      | "write_mat" ->
+          let _ = check_n_args 2 n_args expr_s in
+          (
+            match arg_types with
+            | [Matrix _; String] ->
+                (scope, (Void, SCall((Func(arg_types, Void), SId internal_fname), args')))
+            | _ -> make_err ("illegal arguments in " ^ expr_s)
+          )
       | _ -> make_err ("internal error: " ^ fname ^ " is not a built-in function")
     in
 
