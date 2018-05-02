@@ -164,18 +164,16 @@ float fdet(matrix<float> m) {
     auto lu_result = lu_factor(m);
     auto pivot = lu_result[0];
     auto pivot_sign = lu_result[1];
-    auto l = lu_result[2];
+    /* We don't need l, as its determinant is 1 */
     auto u = lu_result[3];
 
-    auto l_det = 1.;
     auto u_det = 1.;
 
     for (auto i = 0; i < n; i++) {
-        l_det *= l[i, i];
         u_det *= u[i, i];
     }
 
-    auto det = pivot_sign[0, 0] * l_det * u_det;
+    auto det = pivot_sign[0, 0] * u_det;
 
     deep_free(lu_result);
     return det;
@@ -200,15 +198,13 @@ matrix<float> inv(matrix<float> m) {
     auto l = lu_result[2];
     auto u = lu_result[3];
 
-    auto l_det = 1.;
     auto u_det = 1.;
 
     for (auto i = 0; i < n; i++) {
-        l_det *= l[i, i];
         u_det *= u[i, i];
     }
 
-    check(l_det * u_det != 0., "Singular matrix error: attempted to invert singular matrix");
+    check(u_det != 0., "Singular matrix error: attempted to invert singular matrix");
 
     auto id = feye(n);
     auto res = lu_solve(l, u, id);
