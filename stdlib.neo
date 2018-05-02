@@ -155,7 +155,7 @@ matrix<float> lu_solve(matrix<float> l, matrix<float> u, matrix<float> b) {
     return x;
 }
 
-float det(matrix<float> m) {
+float fdet(matrix<float> m) {
     /* Check m is square */
     check(rows(m) == cols(m), "Dimension error: attempted to get determinant of non-square matrix");
 
@@ -179,6 +179,13 @@ float det(matrix<float> m) {
 
     deep_free(lu_result);
     return det;
+}
+
+int idet(matrix<int> m) {
+    auto fm = to_float(m);
+    auto det = fdet(fm);
+    free(fm);
+    return to_int(fm);
 }
 
 matrix<float> inv(matrix<float> m) {
