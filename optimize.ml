@@ -327,5 +327,4 @@ let prune_uses program =
   let program = (globals, functions) in
 
   let internal_uses = StringSet.filter is_used_internal used in
-  let func_uses = StringSet.of_list (List.map (fun f -> f.sfname) functions) in
-  ((internal_uses, func_uses), program)
+  (internal_uses, program)

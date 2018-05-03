@@ -31,8 +31,7 @@ let make_err err = raise (Failure err)
 
 (* Code Generation from the SAST. Returns an LLVM module if successful,
    throws an exception if something is wrong. *)
-let translate (uses, program) =
-  let internal_uses, func_uses = uses in
+let translate (internal_uses, program) =
   let globals, functions = program in
   let context    = L.global_context () in
   (* Create an LLVM module -- this is a "container" into which we'll
@@ -1312,13 +1311,6 @@ let translate (uses, program) =
       { scope with variables = StringMap.add s global scope.variables }
     in
     List.fold_left add_global_decl global_scope globals
-  in
-  (* Filter out any unused declared functions (user-defined or standard library) *)
-  let functions =
-    let function_has_use fdecl =
-      StringSet.mem fdecl.sfname func_uses
-    in
-    List.filter function_has_use functions
   in
   (* Add function declarations to scope and to function map; this map keeps track
    * of the actual function pointers, whereas the scope stores pointers to these pointers *)
