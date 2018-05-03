@@ -34,11 +34,27 @@ matrix<float> ftranspose(matrix<float> mat) {
     return res;
 }
 
+int iabs(int x) {
+    if (x >= 0) {
+        return x;
+    } else {
+        return -x;
+    }
+}
+
 float fabs(float x) {
     if (x >= 0.) {
         return x;
     } else {
         return -x;
+    }
+}
+
+void iswap_rows(matrix<int> m, int i1, int i2) {
+    for (auto j = 0; j < cols(m); j++) {
+        auto temp = m[i1, j];
+        m[i1, j] = m[i2, j];
+        m[i2, j] = temp;
     }
 }
 
@@ -48,6 +64,14 @@ void fswap_rows(matrix<float> m, int i1, int i2) {
         m[i1, j] = m[i2, j];
         m[i2, j] = temp;
     }
+}
+
+matrix<int> ieye(int n) {
+    create matrix<int> m[n][n];
+    for (auto i = 0; i < n; i++) {
+        m[i, i] = 1;
+    }
+    return m;
 }
 
 matrix<float> feye(int n) {
@@ -183,7 +207,7 @@ int idet(matrix<int> m) {
     auto fm = to_float(m);
     auto det = fdet(fm);
     free(fm);
-    return to_int(fm);
+    return to_int(det);
 }
 
 matrix<float> inv(matrix<float> m) {
