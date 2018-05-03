@@ -66,6 +66,22 @@ void fswap_rows(matrix<float> m, int i1, int i2) {
     }
 }
 
+void iswap_cols(matrix<int> m, int j1, int j2) {
+    for (auto i = 0; i < rows(m); i++) {
+        auto temp = m[i, j1];
+        m[i, j1] = m[i, j2];
+        m[i, j2] = temp;
+    }
+}
+
+void fswap_cols(matrix<float> m, int j1, int j2) {
+    for (auto i = 0; i < rows(m); i++) {
+        auto temp = m[i, j1];
+        m[i, j1] = m[i, j2];
+        m[i, j2] = temp;
+    }
+}
+
 matrix<int> ieye(int n) {
     create matrix<int> m[n][n];
     for (auto i = 0; i < n; i++) {
