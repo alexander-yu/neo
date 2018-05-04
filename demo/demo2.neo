@@ -54,6 +54,7 @@ void main() {
     ones++;
     auto X = ihstack(ones, raw_X);
 
+    free(data);
     free(raw_X);
     free(ones);
 
