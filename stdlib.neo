@@ -202,7 +202,14 @@ array<matrix<float>> lu_factor(matrix<float> m) {
             for (auto k = 0; k < j; k++) {
                 sum += l[i, k] * u[k, j];
             }
-            l[i, j] = (pm[i, j] - sum) / u[j, j];
+
+            if (u[j, j] == 0.) {
+                /* In this case, the matrix is singular, meaning there is not a unique
+                 * decomposition; set l_ij to an arbitrary value */
+                l[i, j] = 1.;
+            } else {
+                l[i, j] = (pm[i, j] - sum) / u[j, j];
+            }
         }
     }
 

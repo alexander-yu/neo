@@ -1,0 +1,66 @@
+int sum(matrix<int> X) {
+    auto col_sum = isum(X, 0);
+    auto sum = isum(col_sum, 1);
+    auto res = sum[0, 0];
+
+    free(sum);
+    free(col_sum);
+
+    return res;
+}
+
+matrix<int> train(matrix<int> X, matrix<int> y) {
+    create matrix<int> weights[1][cols(X)];
+    auto has_errors = True;
+
+    while (has_errors) {
+        auto count = 0;
+        for (auto i = 0; i < rows(X); i++) {
+            auto x = X[i];
+            var int y_pred;
+            auto weight_sum = x * weights;
+
+            if (sum(weight_sum) > 0) {
+                y_pred = 1;
+            } else {
+                y_pred = -1;
+            }
+
+            auto is_error = y_pred * y[i, 0] <= 0;
+
+            if (is_error) {
+                weights += x * y[i, 0];
+                count++;
+            }
+
+            free(weight_sum);
+            free(x);
+        }
+
+        if (count == 0) {
+            has_errors = False;
+        }
+    }
+
+    return weights;
+}
+
+void main() {
+    auto data = iread_mat("./demo/data2.mat");
+    auto raw_X = data[:, :2];
+    auto y = data[:, 2];
+
+    create matrix<int> ones[rows(raw_X)][1];
+    ones++;
+    auto X = ihstack(ones, raw_X);
+
+    free(raw_X);
+    free(ones);
+
+    auto weights = train(X, y);
+    write_mat(weights, "./demo/weights2.mats");
+
+    free(weights);
+    free(X);
+    free(y);
+}
