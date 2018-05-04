@@ -281,6 +281,38 @@ matrix<float> fmap(func<(float):float> f, matrix<float> m) {
     return res;
 }
 
+matrix<int> imap2(func<(int,int):int> f, matrix<int> m1, matrix<int> m2) {
+    check(rows(m1) == rows(m2), "Dimension error: imap2 requires m1 and m2 to have the same rows");
+    check(cols(m1) == cols(m2), "Dimension error: imap2 requires m1 and m2 to have the same columns");
+
+    auto r = rows(m1);
+    auto c = cols(m1);
+    create matrix<int> res[r][c];
+
+    for (auto i = 0; i < r; i++) {
+        for (auto j = 0; j < c; j++) {
+            res[i,j] = f(m1[i,j], m2[i,j]);
+        }
+    }
+    return res;
+}
+
+matrix<float> fmap2(func<(float,float):float> f, matrix<float> m1, matrix<float> m2) {
+    check(rows(m1) == rows(m2), "Dimension error: imap2 requires m1 and m2 to have the same rows");
+    check(cols(m1) == cols(m2), "Dimension error: imap2 requires m1 and m2 to have the same columns");
+
+    auto r = rows(m1);
+    auto c = cols(m1);
+    create matrix<float> res[r][c];
+
+    for (auto i = 0; i < r; i++) {
+        for (auto j = 0; j < c; j++) {
+            res[i,j] = f(m1[i,j], m2[i,j]);
+        }
+    }
+    return res;
+}
+
 matrix<int> iinsert_col(matrix<int> m, int n, matrix<int> a){
     auto r = rows(m);
     auto c = cols(m);

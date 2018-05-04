@@ -1,0 +1,16 @@
+int multiply(int i, int j) {
+    return i*j;
+}
+
+float add(float i, float j) {
+    return i+j;
+}
+
+void main() {
+    create matrix<int> m1 = [[1,2],[2,3]];
+    create matrix<int> m2 = [[4,3],[4,1]];
+    println(imap2(multiply, m1, m2));
+    create matrix<float> m3 = [[1.1,4.3,2.8],[4.7,6.2,3.0]];
+    create matrix<float> m4 = [[3.2,2.5,4.0],[1.9,5.3,2.6]];
+    println(fmap2(add, m3, m4));
+}
