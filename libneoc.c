@@ -36,7 +36,7 @@ static const char* ROW_DIM_ERR = "Dimension error: attempted to insert/append ro
 static const char* MAT_MULT_ERR = "Dimension error: attempted to perform matrix multiplication with \
                                   incompatible dimensions";
 static const char* MAT_BINOP_ERR = "Dimension error: attempted to perform matrix binary operations with \
-                                   incompatible/non-broadcastable dimensions";
+                                   non-broadcastable dimensions";
 
 typedef union value {
     int i;

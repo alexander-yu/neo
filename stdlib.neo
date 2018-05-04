@@ -336,16 +336,21 @@ matrix<float> fmap(func<(float):float> f, matrix<float> m) {
 }
 
 matrix<int> imap2(func<(int,int):int> f, matrix<int> m1, matrix<int> m2) {
-    check(rows(m1) == rows(m2), "Dimension error: imap2 requires m1 and m2 to have the same rows");
-    check(cols(m1) == cols(m2), "Dimension error: imap2 requires m1 and m2 to have the same columns");
+    auto err = "Dimension error: fmap2 requires broadcastable dimensions";
+    check(rows(m1) == rows(m2) || imin(rows(m1), rows(m2)) == 1, err);
+    check(cols(m1) == cols(m2) || imin(cols(m1), cols(m2)) == 1, err);
 
-    auto r = rows(m1);
-    auto c = cols(m1);
+    auto r = imax(rows(m1), rows(m2));
+    auto c = imax(cols(m1), cols(m2));
     create matrix<int> res[r][c];
 
     for (auto i = 0; i < r; i++) {
         for (auto j = 0; j < c; j++) {
-            res[i, j] = f(m1[i, j], m2[i, j]);
+            auto i1 = imin(rows(m1) - 1, i);
+            auto j1 = imin(cols(m1) - 1, j);
+            auto i2 = imin(rows(m2) - 1, i);
+            auto j2 = imin(cols(m2) - 1, j);
+            res[i, j] = f(m1[i1, j1], m2[i2, j2]);
         }
     }
 
@@ -353,16 +358,21 @@ matrix<int> imap2(func<(int,int):int> f, matrix<int> m1, matrix<int> m2) {
 }
 
 matrix<float> fmap2(func<(float,float):float> f, matrix<float> m1, matrix<float> m2) {
-    check(rows(m1) == rows(m2), "Dimension error: imap2 requires m1 and m2 to have the same rows");
-    check(cols(m1) == cols(m2), "Dimension error: imap2 requires m1 and m2 to have the same columns");
+    auto err = "Dimension error: fmap2 requires broadcastable dimensions";
+    check(rows(m1) == rows(m2) || imin(rows(m1), rows(m2)) == 1, err);
+    check(cols(m1) == cols(m2) || imin(cols(m1), cols(m2)) == 1, err);
 
-    auto r = rows(m1);
-    auto c = cols(m1);
+    auto r = imax(rows(m1), rows(m2));
+    auto c = imax(cols(m1), cols(m2));
     create matrix<float> res[r][c];
 
     for (auto i = 0; i < r; i++) {
         for (auto j = 0; j < c; j++) {
-            res[i, j] = f(m1[i, j], m2[i, j]);
+            auto i1 = imin(rows(m1) - 1, i);
+            auto j1 = imin(cols(m1) - 1, j);
+            auto i2 = imin(rows(m2) - 1, i);
+            auto j2 = imin(cols(m2) - 1, j);
+            res[i, j] = f(m1[i1, j1], m2[i2, j2]);
         }
     }
 
@@ -370,8 +380,9 @@ matrix<float> fmap2(func<(float,float):float> f, matrix<float> m1, matrix<float>
 }
 
 matrix<int> iinsert_col(matrix<int> m, int i, matrix<int> col){
-    check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+    auto dim_err = "Dimension error: attempted to insert/append column with incompatible dimensions";
+    check(rows(m) == rows(col), dim_err);
+    check(cols(col) == 1, dim_err);
     check(i >= 0 && i <= cols(m), "Matrix index error: attempted to access an out of bounds index");
 
     auto r = rows(m);
@@ -392,8 +403,9 @@ matrix<int> iinsert_col(matrix<int> m, int i, matrix<int> col){
 }
 
 matrix<float> finsert_col(matrix<float> m, int i, matrix<float> col){
-    check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+    auto dim_err = "Dimension error: attempted to insert/append column with incompatible dimensions";
+    check(rows(m) == rows(col), dim_err);
+    check(cols(col) == 1, dim_err);
     check(i >= 0 && i <= cols(m), "Matrix index error: attempted to access an out of bounds index");
 
     auto r = rows(m);
