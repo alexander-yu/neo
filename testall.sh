@@ -32,6 +32,9 @@ globalerror=0
 
 keep=0
 
+pass=0
+fail=0
+
 Usage() {
     echo "Usage: testall.sh [options] [.neo files]"
     echo "-k    Keep intermediate files"
@@ -111,10 +114,12 @@ Check() {
         fi
         echo "OK"
         echo "###### SUCCESS" 1>&2
+        ((pass=pass+1))
     else
         echo "FAILED"
         echo "###### FAILED" 1>&2
         globalerror=$error
+        ((fail=fail+1))
     fi
 }
 
@@ -154,10 +159,12 @@ CheckFail() {
         fi
         echo "OK"
         echo "###### SUCCESS" 1>&2
+        ((pass=pass+1))
     else
         echo "FAILED"
         echo "###### FAILED" 1>&2
         globalerror=$error
+        ((fail=fail+1))
     fi
 }
 
@@ -212,5 +219,7 @@ do
 	    ;;
     esac
 done
+
+echo "Passed: $pass, Failed: $fail"
 
 exit $globalerror

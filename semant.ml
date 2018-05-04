@@ -844,13 +844,18 @@ let check (globals, functions) =
       let typ = typ_of_func f in
       add_decl scope f.fname typ
     in
-    let check_formal_type fname formal =
-      let _, t, _, _ = formal in
-      let err =
-        "illegal argument type " ^ string_of_typ t ^ " in " ^
-        string_of_vdecl formal ^ " for the function " ^ fname
+    let check_formal fname formals formal =
+      let _, t, s, _ = formal in
+      let typ_err =
+        "illegal argument type " ^ string_of_vdecl formal ^
+        " for the function " ^ fname
       in
-      if t = Void || not (check_type t) then make_err err
+      let dup_err =
+        "duplicate formal " ^ s ^ " for the function " ^ fname
+      in
+      if t = Void || not (check_type t) then make_err typ_err
+      else if StringSet.mem s formals then make_err dup_err
+      else StringSet.add s formals
     in
     (* Return a semantically-checked statement, along with a bool
      * indicating if there was at least one return statement
@@ -914,8 +919,8 @@ let check (globals, functions) =
     let fname = if old_fname = sys_main then prog_main else old_fname in
     let func = { func with fname } in
 
-    (* Check formals have valid type *)
-    let _ = List.iter (check_formal_type old_fname) func.formals in
+    (* Check formals have valid type and are not duplicates *)
+    let _ = List.fold_left (check_formal old_fname) StringSet.empty func.formals in
 
     (* Check return type is valid *)
     let err =

@@ -1,0 +1,12 @@
+int foo(int a, bool b, int c) {
+    return 0;
+}
+
+void bar(int a, void b, int c) {
+    return;
+} /* Error: illegal void formal b */
+
+void main()
+{
+  return;
+}

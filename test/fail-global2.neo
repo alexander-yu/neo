@@ -1,0 +1,9 @@
+var int b;
+var bool c;
+var int a;
+var int b; /* Duplicate global variable */
+
+void main()
+{
+  return;
+}
