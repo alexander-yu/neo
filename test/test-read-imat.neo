@@ -1,5 +1,0 @@
-void main() {
-    auto m = read_imat("./test/test-read-imat.mat");
-    println(m);
-    free(m);
-}

@@ -2,7 +2,7 @@ void main() {
     auto m = [[1., 2.7]];
     write_mat(m, "./test/test-write-mat.mat");
     free(m);
-    auto m1 = read_fmat("./test/test-write-mat.mat");
+    auto m1 = fread_mat("./test/test-write-mat.mat");
     println(m1);
     free(m1);
 }

@@ -1,0 +1,5 @@
+void main() {
+    auto m = fread_mat("./test/test-fread-mat.mat");
+    println(m);
+    free(m);
+}

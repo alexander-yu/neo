@@ -1,0 +1,5 @@
+void main() {
+    auto m = iread_mat("./test/test-iread-mat.mat");
+    println(m);
+    free(m);
+}
