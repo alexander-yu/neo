@@ -1,0 +1,5 @@
+void main(){
+    create matrix<int> a = [[1,2],[3,4],[5,6]];
+    create matrix<int> a1 = [[10,20,50,2],[30,40,40,1]];
+    println(ihstack(a, a1));
+}
