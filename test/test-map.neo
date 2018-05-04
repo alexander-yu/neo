@@ -1,0 +1,14 @@
+int double(int n) {
+    return n*2;
+}
+
+float triple(float n) {
+    return n*3.0;
+}
+
+void main() {
+    create matrix<int> m1 = [[1,1],[2,3]];
+    create matrix<float> m2 = [[1.1,2.6,3.2],[4.9,0.7,5.0]];
+    println(imap(double, m1));
+    println(fmap(triple, m2));
+}

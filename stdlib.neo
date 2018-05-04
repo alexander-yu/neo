@@ -255,6 +255,32 @@ matrix<float> inv(matrix<float> m) {
     return res;
 }
 
+matrix<int> imap(func<(int):int> f, matrix<int> m) {
+    auto r = rows(m);
+    auto c = cols(m);
+    create matrix<int> res[r][c];
+
+    for (auto i = 0; i < r; i++) {
+        for (auto j = 0; j < c; j++) {
+            res[i,j] = f(m[i,j]);
+        }
+    }
+    return res;
+}
+
+matrix<float> fmap(func<(float):float> f, matrix<float> m) {
+    auto r = rows(m);
+    auto c = cols(m);
+    create matrix<float> res[r][c];
+
+    for (auto i = 0; i < r; i++) {
+        for (auto j = 0; j < c; j++) {
+            res[i,j] = f(m[i,j]);
+        }
+    }
+    return res;
+}
+
 matrix<int> idelete_col(matrix<int> m, int n){
     auto r = rows(m);
     auto c = cols(m);
