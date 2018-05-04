@@ -1,0 +1,11 @@
+void myvoid()
+{
+  return;
+}
+
+void main()
+{
+  var int i;
+
+  i = myvoid(); /* Fail: assigning a void to an integer */
+}

@@ -1146,9 +1146,17 @@ let translate (internal_uses, program) =
       | SBlock sl ->
           let parent_scope = scope in
           let scope = { variables = StringMap.empty; parent = Some parent_scope } in
-          let _, builder = List.fold_left stmt (scope, builder) sl in
+          let block_bb = L.append_block context "block" the_function in
+          let resume_bb = L.append_block context "resume" the_function in
+          let block_br = L.build_br block_bb in
+          let resume_br = L.build_br resume_bb in
+          let block_builder = L.builder_at_end context block_bb in
+          let resume_builder = L.builder_at_end context resume_bb in
+          let _, block_builder = List.fold_left stmt (scope, block_builder) sl in
+          let _ = add_terminal builder block_br in
+          let _ = add_terminal block_builder resume_br in
           (* Return to parent scope *)
-          (parent_scope, builder)
+          (parent_scope, resume_builder)
         (* Generate code for this expression, return resulting builder *)
       | SExpr e ->
           let e' = expr scope builder e in
@@ -1190,13 +1198,13 @@ let translate (internal_uses, program) =
           in
           (* Add a branch to the "then" block (to the merge block)
             if a terminator doesn't already exist for the "then" block *)
-          let () = add_terminal then_builder branch_instr in
+          let _ = add_terminal then_builder branch_instr in
           (* Identical to stuff we did for "then" *)
           let else_bb = L.append_block context "else" the_function in
           let scope, else_builder =
             stmt (scope, (L.builder_at_end context else_bb)) else_stmt
           in
-          let () = add_terminal else_builder branch_instr in
+          let _ = add_terminal else_builder branch_instr in
           (* Generate initial branch instruction perform the selection of "then"
           or "else". Note we're using the builder we had access to at the start
           of this alternative. *)
@@ -1216,7 +1224,7 @@ let translate (internal_uses, program) =
           let scope, while_builder =
             stmt (scope, (L.builder_at_end context body_bb)) body
           in
-          let () = add_terminal while_builder (L.build_br pred_bb) in
+          let _ = add_terminal while_builder (L.build_br pred_bb) in
           (* Generate the predicate code in the predicate block *)
           let pred_builder = L.builder_at_end context pred_bb in
           let bool_val = expr scope pred_builder predicate in

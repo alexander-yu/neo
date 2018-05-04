@@ -1,0 +1,11 @@
+void main()
+{
+  var int i;
+  var bool b;
+
+  i = 42;
+  i = 10;
+  b = True;
+  b = False;
+  i = False; /* Fail: assigning a bool to an integer */
+}

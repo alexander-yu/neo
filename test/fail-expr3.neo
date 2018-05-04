@@ -1,0 +1,14 @@
+var int a;
+var float b;
+
+void foo(int c, float d)
+{
+  var int d;
+  var float e;
+  b + a; /* Error: float + int */
+}
+
+void main()
+{
+  return;
+}

@@ -1,0 +1,10 @@
+void main()
+{
+  var int i;
+
+  {
+    i = 15;
+    return;
+  }
+  println(32); /* Nested block is its own basic block */
+}

@@ -1,0 +1,10 @@
+void foo()
+{
+  if (True) return 42; /* Should return void */
+  else return;
+}
+
+void main()
+{
+  return;
+}
