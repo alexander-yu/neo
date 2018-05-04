@@ -1,0 +1,18 @@
+void main(){
+
+    create matrix<int> a = [[1,2],[3,4],[5,6]];
+    create matrix<int> a1 = [[10,20,50,2],[30,40,40,1],[50,60,20,3]];
+    println(ihstack(a, a1));
+
+    create matrix<float> b = [[1.1,2.3],[3.1,4.0],[5.2,6.0]];
+    create matrix<float> b1 = [[10.13,-20.5,50.1,2.1],[30.9,40.8,40.8,1.1],[50.1,60.2,20.4,3.0]];
+    println(fhstack(b, b1));
+
+    create matrix<int> c = [[1,2],[3,4],[5,6]];
+    create matrix<int> c1 = [[10,20], [50,2], [30,40], [40,1], [50,60], [20,3]];
+    println(ivstack(c, c1));
+
+    create matrix<float> d = [[1.1,2.4,3.1],[4.3,5.0,6.1]];
+    create matrix<float> d1 = [[10.1,20.3,50.2]];
+    println(fvstack(d, d1));
+}

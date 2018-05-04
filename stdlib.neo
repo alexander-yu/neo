@@ -337,3 +337,119 @@ matrix<float> fdelete_col(matrix<float> m, int n){
     }
     return res;
 }
+
+matrix<int> iappend_col(matrix<int> m, array<int> a){
+    auto r = rows(m);
+    auto c = cols(m);
+    create matrix<int> res[r][c+1];
+
+    for (auto i = 0; i < r; i++) {
+        auto j1 = 0;
+        auto j2 = 0;
+        while (j2 < c) {
+            res[i, j2] = m[i, j1];
+            j1 = j1 + 1;
+            j2 = j2 + 1;
+        }
+        res[i, j2] = a[i];
+    }
+    return res;
+}
+
+matrix<float> fappend_col(matrix<float> m, array<float> a){
+    auto r = rows(m);
+    auto c = cols(m);
+    create matrix<float> res[r][c+1];
+
+    for (auto i = 0; i < r; i++) {
+        auto j1 = 0;
+        auto j2 = 0;
+        while (j2 < c) {
+            res[i, j2] = m[i, j1];
+            j1 = j1 + 1;
+            j2 = j2 + 1;
+        }
+        res[i, j2] = a[i];
+    }
+    return res;
+}
+
+matrix<int> ihstack(matrix<int> m1, matrix<int> m2){
+    check(rows(m1) == rows(m2), "Dimension error: attempted to hstack two matrices with different number of rows");
+    auto r = rows(m1);
+    auto c1 = cols(m1);
+    auto c2 = cols(m2);
+    create matrix<int> res[r][c1+c2];
+
+    for (auto i = 0; i < r; i++){
+        for (auto j = 0; j < c1; j++){
+            res[i,j] = m1[i,j];
+        }
+    }
+    for (auto i1 = 0; i1 < r; i1++){
+        for (auto j1 = 0; j1 < c2; j1++){
+            res[i1,c1+j1] = m2[i1,j1];
+        }
+    }
+    return res;
+}
+
+matrix<float> fhstack(matrix<float> m1, matrix<float> m2){
+    check(rows(m1) == rows(m2), "Dimension error: attempted to hstack two matrices with different number of rows");
+    auto r = rows(m1);
+    auto c1 = cols(m1);
+    auto c2 = cols(m2);
+    create matrix<float> res[r][c1+c2];
+
+    for (auto i = 0; i < r; i++){
+        for (auto j = 0; j < c1; j++){
+            res[i,j] = m1[i,j];
+        }
+    }
+    for (auto i1 = 0; i1 < r; i1++){
+        for (auto j1 = 0; j1 < c2; j1++){
+            res[i1,c1+j1] = m2[i1,j1];
+        }
+    }
+    return res;
+}
+
+matrix<int> ivstack(matrix<int> m1, matrix<int> m2){
+    check(cols(m1) == cols(m2), "Dimension error: attempted to hstack two matrices with different number of columns");
+    auto r1 = rows(m1);
+    auto r2 = rows(m2);
+    auto c = cols(m1);
+    create matrix<int> res[r1+r2][c];
+
+    for (auto i = 0; i < r1; i++){
+        for (auto j = 0; j < c; j++){
+            res[i,j] = m1[i,j];
+        }
+    }
+    for (auto i1 = 0; i1 < r2; i1++){
+        for (auto j1 = 0; j1 < c; j1++){
+            res[r1+i1,j1] = m2[i1,j1];
+        }
+    }
+    return res;
+}
+
+matrix<float> fvstack(matrix<float> m1, matrix<float> m2){
+    check(cols(m1) == cols(m2), "Dimension error: attempted to hstack two matrices with different number of columns");
+    auto r1 = rows(m1);
+    auto r2 = rows(m2);
+    auto c = cols(m1);
+    create matrix<float> res[r1+r2][c];
+
+    for (auto i = 0; i < r1; i++){
+        for (auto j = 0; j < c; j++){
+            res[i,j] = m1[i,j];
+        }
+    }
+    for (auto i1 = 0; i1 < r2; i1++){
+        for (auto j1 = 0; j1 < c; j1++){
+            res[r1+i1,j1] = m2[i1,j1];
+        }
+    }
+    return res;
+}
