@@ -23,14 +23,14 @@ static const char* NULL_VALUE_ERR = "Null value error: attempted to read null va
 static const char* DIV_ZERO_ERR = "Zero division error: attmpted to perform division or modulo by 0";
 static const char* EXP_ZERO_ERR = "Zero division error: attempted to raise 0 to a negative power";
 static const char* EXP_NEG_ERR = "Arithmetic error: attempted to raise negative number to a non-integer power";
-static const char* MAT_IDX_ERR = "Matrix index error: attempted to access an out of bounds index for a matrix";
-static const char* ARR_IDX_ERR = "Array index error: attempted to access an out of bounds index for an array";
+static const char* MAT_IDX_ERR = "Matrix index error: attempted to access an out of bounds index";
+static const char* ARR_IDX_ERR = "Array index error: attempted to access an out of bounds index";
 static const char* SLICE_ERR = "Slice error: attempted to perform slice that would return zero elements \
                                (reversed or equal bounds)";
 static const char* ARR_LEN_ERR = "Length error: attempted to create array of nonpositive length";
 static const char* MAT_ROWS_ERR = "Dimension error: attempted to create matrix with nonpositive rows";
 static const char* MAT_COLS_ERR = "Dimension error: attempted to create matrix with nonpositive columns";
-static const char* ROW_DIM_ERR = "Dimension error: attempted to insert/append row with invalid dimensions";
+static const char* ROW_DIM_ERR = "Dimension error: attempted to insert/append row with incompatible dimensions";
 static const char* MAT_MULT_ERR = "Dimension error: attempted to perform matrix multiplication with \
                                   incompatible dimensions";
 static const char* MAT_BINOP_ERR = "Dimension error: attempted to perform matrix binary operations with \

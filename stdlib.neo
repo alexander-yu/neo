@@ -50,7 +50,43 @@ float fabs(float x) {
     }
 }
 
+int imax(int a, int b) {
+    if (a > b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+float fmax(float a, float b) {
+    if (a > b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+int imin(int a, int b) {
+    if (a > b) {
+        return b;
+    } else {
+        return a;
+    }
+}
+
+float fmin(float a, float b) {
+    if (a > b) {
+        return b;
+    } else {
+        return a;
+    }
+}
+
 void iswap_rows(matrix<int> m, int i1, int i2) {
+    /* Check rows are in-bounds */
+    check(i1 >= 0 && i1 < rows(m), "Matrix index error: attempted to swap an out of bounds row");
+    check(i2 >= 0 && i2 < rows(m), "Matrix index error: attempted to swap an out of bounds row");
+
     for (auto j = 0; j < cols(m); j++) {
         auto temp = m[i1, j];
         m[i1, j] = m[i2, j];
@@ -59,6 +95,10 @@ void iswap_rows(matrix<int> m, int i1, int i2) {
 }
 
 void fswap_rows(matrix<float> m, int i1, int i2) {
+    /* Check rows are in-bounds */
+    check(i1 >= 0 && i1 < rows(m), "Matrix index error: attempted to swap an out of bounds row");
+    check(i2 >= 0 && i2 < rows(m), "Matrix index error: attempted to swap an out of bounds row");
+
     for (auto j = 0; j < cols(m); j++) {
         auto temp = m[i1, j];
         m[i1, j] = m[i2, j];
@@ -67,6 +107,10 @@ void fswap_rows(matrix<float> m, int i1, int i2) {
 }
 
 void iswap_cols(matrix<int> m, int j1, int j2) {
+    /* Check columns are in-bounds */
+    check(j1 >= 0 && j1 < cols(m), "Matrix index error: attempted to swap an out of bounds column");
+    check(j2 >= 0 && j2 < cols(m), "Matrix index error: attempted to swap an out of bounds column");
+
     for (auto i = 0; i < rows(m); i++) {
         auto temp = m[i, j1];
         m[i, j1] = m[i, j2];
@@ -75,6 +119,10 @@ void iswap_cols(matrix<int> m, int j1, int j2) {
 }
 
 void fswap_cols(matrix<float> m, int j1, int j2) {
+    /* Check columns are in-bounds */
+    check(j1 >= 0 && j1 < cols(m), "Matrix index error: attempted to swap an out of bounds column");
+    check(j2 >= 0 && j2 < cols(m), "Matrix index error: attempted to swap an out of bounds column");
+
     for (auto i = 0; i < rows(m); i++) {
         auto temp = m[i, j1];
         m[i, j1] = m[i, j2];
@@ -83,6 +131,8 @@ void fswap_cols(matrix<float> m, int j1, int j2) {
 }
 
 matrix<int> ieye(int n) {
+    check(n > 0, "Dimension error: identity matrix must have positive dimensions");
+
     create matrix<int> m[n][n];
     for (auto i = 0; i < n; i++) {
         m[i, i] = 1;
@@ -91,6 +141,8 @@ matrix<int> ieye(int n) {
 }
 
 matrix<float> feye(int n) {
+    check(n > 0, "Dimension error: identity matrix must have positive dimensions");
+
     create matrix<float> m[n][n];
     for (auto i = 0; i < n; i++) {
         m[i, i] = 1.;
@@ -202,7 +254,7 @@ float fdet(matrix<float> m) {
     auto n = rows(m);
 
     auto lu_result = lu_factor(m);
-    auto pivot = lu_result[0];
+    /* We only need the pivot's determinant */
     auto pivot_sign = lu_result[1];
     /* We don't need l, as its determinant is 1 */
     auto u = lu_result[3];
@@ -262,9 +314,10 @@ matrix<int> imap(func<(int):int> f, matrix<int> m) {
 
     for (auto i = 0; i < r; i++) {
         for (auto j = 0; j < c; j++) {
-            res[i,j] = f(m[i,j]);
+            res[i, j] = f(m[i, j]);
         }
     }
+
     return res;
 }
 
@@ -275,9 +328,10 @@ matrix<float> fmap(func<(float):float> f, matrix<float> m) {
 
     for (auto i = 0; i < r; i++) {
         for (auto j = 0; j < c; j++) {
-            res[i,j] = f(m[i,j]);
+            res[i, j] = f(m[i, j]);
         }
     }
+
     return res;
 }
 
@@ -291,9 +345,10 @@ matrix<int> imap2(func<(int,int):int> f, matrix<int> m1, matrix<int> m2) {
 
     for (auto i = 0; i < r; i++) {
         for (auto j = 0; j < c; j++) {
-            res[i,j] = f(m1[i,j], m2[i,j]);
+            res[i, j] = f(m1[i, j], m2[i, j]);
         }
     }
+
     return res;
 }
 
@@ -307,13 +362,17 @@ matrix<float> fmap2(func<(float,float):float> f, matrix<float> m1, matrix<float>
 
     for (auto i = 0; i < r; i++) {
         for (auto j = 0; j < c; j++) {
-            res[i,j] = f(m1[i,j], m2[i,j]);
+            res[i, j] = f(m1[i, j], m2[i, j]);
         }
     }
+
     return res;
 }
 
 matrix<int> iinsert_col(matrix<int> m, int n, matrix<int> a){
+    check(rows(m) == rows(a), "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(cols(a) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+
     auto r = rows(m);
     auto c = cols(m);
     create matrix<int> res[r][c+1];
@@ -336,6 +395,9 @@ matrix<int> iinsert_col(matrix<int> m, int n, matrix<int> a){
 }
 
 matrix<float> finsert_col(matrix<float> m, int n, matrix<float> a){
+    check(rows(m) == rows(a), "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(cols(a) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+
     auto r = rows(m);
     auto c = cols(m);
     create matrix<float> res[r][c+1];
@@ -396,6 +458,9 @@ matrix<float> fdelete_col(matrix<float> m, int n){
 }
 
 matrix<int> iappend_col(matrix<int> m, matrix<int> a){
+    check(rows(m) == rows(a), "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(cols(a) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+
     auto r = rows(m);
     auto c = cols(m);
     create matrix<int> res[r][c+1];
@@ -414,6 +479,9 @@ matrix<int> iappend_col(matrix<int> m, matrix<int> a){
 }
 
 matrix<float> fappend_col(matrix<float> m, matrix<float> a){
+    check(rows(m) == rows(a), "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(cols(a) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+
     auto r = rows(m);
     auto c = cols(m);
     create matrix<float> res[r][c+1];
@@ -432,7 +500,8 @@ matrix<float> fappend_col(matrix<float> m, matrix<float> a){
 }
 
 matrix<int> ihstack(matrix<int> m1, matrix<int> m2){
-    check(rows(m1) == rows(m2), "Dimension error: attempted to hstack two matrices with different number of rows");
+    check(rows(m1) == rows(m2), "Dimension error: attempted to hstack matrices with incompatible dimensions");
+
     auto r = rows(m1);
     auto c1 = cols(m1);
     auto c2 = cols(m2);
@@ -452,7 +521,8 @@ matrix<int> ihstack(matrix<int> m1, matrix<int> m2){
 }
 
 matrix<float> fhstack(matrix<float> m1, matrix<float> m2){
-    check(rows(m1) == rows(m2), "Dimension error: attempted to hstack two matrices with different number of rows");
+    check(rows(m1) == rows(m2), "Dimension error: attempted to hstack matrices with incompatible dimensions");
+
     auto r = rows(m1);
     auto c1 = cols(m1);
     auto c2 = cols(m2);
@@ -472,7 +542,8 @@ matrix<float> fhstack(matrix<float> m1, matrix<float> m2){
 }
 
 matrix<int> ivstack(matrix<int> m1, matrix<int> m2){
-    check(cols(m1) == cols(m2), "Dimension error: attempted to hstack two matrices with different number of columns");
+    check(cols(m1) == cols(m2), "Dimension error: attempted to vstack matrices with incompatible dimensions");
+
     auto r1 = rows(m1);
     auto r2 = rows(m2);
     auto c = cols(m1);
@@ -492,7 +563,8 @@ matrix<int> ivstack(matrix<int> m1, matrix<int> m2){
 }
 
 matrix<float> fvstack(matrix<float> m1, matrix<float> m2){
-    check(cols(m1) == cols(m2), "Dimension error: attempted to hstack two matrices with different number of columns");
+    check(cols(m1) == cols(m2), "Dimension error: attempted to vstack matrices with incompatible dimensions");
+
     auto r1 = rows(m1);
     auto r2 = rows(m2);
     auto c = cols(m1);
