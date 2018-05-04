@@ -1,0 +1,4 @@
+void main(){
+    create matrix<float> a1 = [[8.2],[9.3],[10.1]];
+    println(inv(a1));
+}
