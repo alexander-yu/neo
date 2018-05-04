@@ -1,0 +1,15 @@
+void hailstone(int n) {
+  while (n != 1) {
+    println(n);
+    if (n != n / 2 * 2){
+      n = 3 * n + 1;
+    }
+    else{
+      n = n / 2;
+    }
+  }
+}
+
+void main() {
+  hailstone(27);
+}

@@ -1,0 +1,17 @@
+void main()
+{
+  println(True);
+  println(False);
+  println(True && True);
+  println(True && False);
+  println(False && True);
+  println(False && False);
+  println(True || True);
+  println(True || False);
+  println(False || True);
+  println(False || False);
+  println(!False);
+  println(!True);
+  println(-10);
+  println(-(-42));
+}
