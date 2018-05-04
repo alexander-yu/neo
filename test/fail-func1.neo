@@ -1,0 +1,20 @@
+int foo() {
+    return 0;
+}
+
+int bar() {
+    return 0;
+}
+
+int baz() {
+    return 0;
+}
+
+void bar() {
+    return;
+} /* Error: duplicate function bar */
+
+void main()
+{
+  return;
+}

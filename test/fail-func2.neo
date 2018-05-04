@@ -1,0 +1,12 @@
+int foo(int a, bool b, int c) {
+    return 0;
+}
+
+void bar(int a, bool b, int a) {
+    return;
+} /* Error: duplicate formal a in bar */
+
+void main()
+{
+  return;
+}

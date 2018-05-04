@@ -1,0 +1,9 @@
+var int c;
+var bool b;
+var void a; /* global variables should not be void */
+
+
+void main()
+{
+  return;
+}
