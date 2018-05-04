@@ -1,0 +1,7 @@
+void main()
+{
+  if (True){
+    println(42);
+  }
+  println(17);
+}
