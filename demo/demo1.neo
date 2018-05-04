@@ -7,8 +7,7 @@ auto LEARNING_RATES = {|
     0.5,
     1.,
     5.,
-    10.,
-    1.01
+    10.
 |};
 
 matrix<float> train(matrix<float> X, matrix<float> y,
@@ -30,8 +29,20 @@ matrix<float> train(matrix<float> X, matrix<float> y,
     return weights;
 }
 
+matrix<float> solve(matrix<float> X, matrix<float> y) {
+    auto X_t = ftranspose(X);
+    auto gramian = X_t @ X;
+    auto inv = inv(gramian);
+    auto res = inv @ X_t @ y;
+
+    free(X_t);
+    free(gramian);
+    free(inv);
+    return res;
+}
+
 void main() {
-    auto data = fread_mat("./demo/data.mat");
+    auto data = fread_mat("./demo/data1.mat");
     auto raw_X = data[:, :2];
     auto y = data[:, 2];
 
@@ -52,17 +63,11 @@ void main() {
     free(raw_X);
     free(ones);
 
-    create matrix<float> weights[length(LEARNING_RATES)][cols(X) + 2];
+    create matrix<float> weights[length(LEARNING_RATES) + 1][cols(X) + 2];
 
     for (auto i = 0; i < length(LEARNING_RATES); i++) {
         auto learning_rate = LEARNING_RATES[i];
-        var int iters;
-
-        if (i == length(LEARNING_RATES) - 1) {
-            iters = 125;
-        } else {
-            iters = 100;
-        }
+        auto iters = 100;
 
         auto w_i = train(X, y, iters, learning_rate);
         weights[i, 0] = learning_rate;
@@ -71,8 +76,14 @@ void main() {
         free(w_i);
     }
 
-    write_mat(weights, "./demo/weights.mat");
+    auto w = solve(X, y);
+    weights[length(LEARNING_RATES), 0] = 0.;
+    weights[length(LEARNING_RATES), 1] = 0.;
+    weights[length(LEARNING_RATES), 2:] = w;
 
+    write_mat(weights, "./demo/weights1.mat");
+
+    free(w);
     free(X);
     free(y);
     free(weights);
