@@ -977,7 +977,7 @@ let check (globals, functions) =
       match typ with
       | Func([], Void) -> ()
       | _ -> make_err main_err
-    with Not_found -> make_err main_err
+    with Failure _ -> make_err main_err
   in
 
   (List.rev globals', List.rev functions')

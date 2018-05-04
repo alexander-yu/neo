@@ -1,0 +1,18 @@
+var int a;
+var bool b;
+
+void foo(int c, bool d)
+{
+  var int dd;
+  var bool e;
+  a + c;
+  c - a;
+  a * 3;
+  c / 2;
+  d + a; /* Error: bool + int */
+}
+
+void main()
+{
+  return;
+}

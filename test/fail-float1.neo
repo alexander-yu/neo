@@ -1,0 +1,5 @@
+void main()
+{
+  -3.5 && 1; /* Float with AND? */
+  return;
+}

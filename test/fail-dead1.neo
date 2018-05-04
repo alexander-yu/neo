@@ -1,0 +1,8 @@
+void main()
+{
+  var int i;
+
+  i = 15;
+  return;
+  i = 32; /* Error: code after a return */
+}
