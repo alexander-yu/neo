@@ -372,18 +372,21 @@ matrix<float> fmap2(func<(float,float):float> f, matrix<float> m1, matrix<float>
 matrix<int> iinsert_col(matrix<int> m, int i, matrix<int> col){
     check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
     check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(i >= 0 && i < cols(m), "Matrix index error: attempted to access an out of bounds index");
+    check(i >= 0 && i <= cols(m), "Matrix index error: attempted to access an out of bounds index");
 
     auto r = rows(m);
-    auto c = cols(m);
-    create matrix<int> res[r][c + 1];
+    auto c = cols(m) + 1;
+    create matrix<int> res[r][c];
 
     if (i > 0) {
         res[:, :i] = m[:, :i];
     }
 
     res[:, i] = col;
-    res[:, (i + 1):] = m[:, i:];
+
+    if (i + 1 < c) {
+        res[:, (i + 1):] = m[:, i:];
+    }
 
     return res;
 }
@@ -391,18 +394,21 @@ matrix<int> iinsert_col(matrix<int> m, int i, matrix<int> col){
 matrix<float> finsert_col(matrix<float> m, int i, matrix<float> col){
     check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
     check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(i >= 0 && i < cols(m), "Matrix index error: attempted to access an out of bounds index");
+    check(i >= 0 && i <= cols(m), "Matrix index error: attempted to access an out of bounds index");
 
     auto r = rows(m);
-    auto c = cols(m);
-    create matrix<float> res[r][c + 1];
+    auto c = cols(m) + 1;
+    create matrix<float> res[r][c];
 
     if (i > 0) {
         res[:, :i] = m[:, :i];
     }
 
     res[:, i] = col;
-    res[:, (i + 1):] = m[:, i:];
+
+    if (i + 1 < c) {
+        res[:, (i + 1):] = m[:, i:];
+    }
 
     return res;
 }
@@ -411,14 +417,14 @@ matrix<int> idelete_col(matrix<int> m, int i){
     check(i >= 0 && i < cols(m), "Matrix index error: attempted to access an out of bounds index");
 
     auto r = rows(m);
-    auto c = cols(m);
-    create matrix<int> res[r][c - 1];
+    auto c = cols(m) - 1;
+    create matrix<int> res[r][c];
 
     if (i > 0) {
         res[:, :i] = m[:, :i];
     }
 
-    if (i < c - 1) {
+    if (i < c) {
         res[:, i:] = m[:, (i + 1):];
     }
 
@@ -429,14 +435,14 @@ matrix<float> fdelete_col(matrix<float> m, int i){
     check(i >= 0 && i < cols(m), "Matrix index error: attempted to access an out of bounds index");
 
     auto r = rows(m);
-    auto c = cols(m);
-    create matrix<float> res[r][c-1];
+    auto c = cols(m) - 1;
+    create matrix<float> res[r][c];
 
     if (i > 0) {
         res[:, :i] = m[:, :i];
     }
 
-    if (i < c - 1) {
+    if (i < c) {
         res[:, i:] = m[:, (i + 1):];
     }
 
@@ -444,31 +450,11 @@ matrix<float> fdelete_col(matrix<float> m, int i){
 }
 
 matrix<int> iappend_col(matrix<int> m, matrix<int> col){
-    check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
-
-    auto r = rows(m);
-    auto c = cols(m);
-    create matrix<int> res[r][c + 1];
-
-    res[:, :c] = m;
-    res[:, c] = col;
-
-    return res;
+    return iinsert_col(m, cols(m), col);
 }
 
 matrix<float> fappend_col(matrix<float> m, matrix<float> col){
-    check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
-
-    auto r = rows(m);
-    auto c = cols(m);
-    create matrix<float> res[r][c + 1];
-
-    res[:, :c] = m;
-    res[:, c] = col;
-
-    return res;
+    return finsert_col(m, cols(m), col);
 }
 
 matrix<int> ihstack(matrix<int> m1, matrix<int> m2){
