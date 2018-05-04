@@ -1,0 +1,4 @@
+void main() {
+    auto fm = [[1., 2.], [3., 4.]];
+    println(std(fm, 3));
+}

@@ -1,0 +1,4 @@
+void main() {
+    auto im = [[1, 2], [3, 4]];
+    println(isum(im, 2));
+}
