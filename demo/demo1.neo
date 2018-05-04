@@ -1,0 +1,80 @@
+auto LEARNING_RATES = {|
+    0.001,
+    0.005,
+    0.01,
+    0.05,
+    0.1,
+    0.5,
+    1.,
+    5.,
+    10.,
+    1.01
+|};
+
+matrix<float> train(matrix<float> X, matrix<float> y,
+                    int iters, float learning_rate) {
+    create matrix<float> weights[cols(X)][1];
+    auto n = to_float(rows(X));
+    auto X_t = ftranspose(X);
+
+    for (auto i = 0; i < iters; i++) {
+        auto y_pred = X @ weights;
+        auto gradient = X_t @ (y_pred - y) / n;
+        weights -= learning_rate * gradient;
+
+        free(gradient);
+        free(y_pred);
+    }
+
+    free(X_t);
+    return weights;
+}
+
+void main() {
+    auto data = fread_mat("./demo/data.mat");
+    auto raw_X = data[:, :2];
+    auto y = data[:, 2];
+
+    free(data);
+
+    auto mu = mean(raw_X, 0);
+    auto sig = std(raw_X, 0);
+
+    raw_X -= mu;
+    raw_X /= sig;
+
+    create matrix<float> ones[rows(raw_X)][1];
+    ones++;
+    auto X = fhstack(ones, raw_X);
+
+    free(mu);
+    free(sig);
+    free(raw_X);
+    free(ones);
+
+    create matrix<float> weights[length(LEARNING_RATES)][cols(X) + 2];
+
+    for (auto i = 0; i < length(LEARNING_RATES); i++) {
+        auto learning_rate = LEARNING_RATES[i];
+        var int iters;
+
+        if (i == length(LEARNING_RATES) - 1) {
+            iters = 125;
+        } else {
+            iters = 100;
+        }
+
+        auto w_i = train(X, y, iters, learning_rate);
+        weights[i, 0] = learning_rate;
+        weights[i, 1] = to_float(iters);
+        weights[i, 2:] = w_i;
+        free(w_i);
+    }
+
+    write_mat(weights, "./demo/weights.mat");
+
+    free(X);
+    free(y);
+    free(weights);
+    free(LEARNING_RATES);
+}
