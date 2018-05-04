@@ -261,12 +261,33 @@ matrix<int> idelete_col(matrix<int> m, int n){
     create matrix<int> res[r][c-1];
 
     for (auto i = 0; i < r; i++) {
-        auto j = 0;
-        while (j < c-1) {
-            if (j != n){
-                res[i, j] = m[i, j];
-                j = j + 1;
+        auto j1 = 0;
+        auto j2 = 0;
+        while (j1 < c) {
+            if (j1 != n){
+                res[i, j2] = m[i, j1];
+                j2 = j2 + 1;
             }
+            j1 = j1 + 1;
+        }
+    }
+    return res;
+}
+
+matrix<float> fdelete_col(matrix<float> m, int n){
+    auto r = rows(m);
+    auto c = cols(m);
+    create matrix<float> res[r][c-1];
+
+    for (auto i = 0; i < r; i++) {
+        auto j1 = 0;
+        auto j2 = 0;
+        while (j1 < c) {
+            if (j1 != n){
+                res[i, j2] = m[i, j1];
+                j2 = j2 + 1;
+            }
+            j1 = j1 + 1;
         }
     }
     return res;
