@@ -247,7 +247,7 @@ matrix<float> lu_solve(matrix<float> l, matrix<float> u, matrix<float> b) {
     return x;
 }
 
-float fdet(matrix<float> m) {
+float det(matrix<float> m) {
     /* Check m is square */
     check(rows(m) == cols(m), "Dimension error: attempted to get determinant of non-square matrix");
 
@@ -269,13 +269,6 @@ float fdet(matrix<float> m) {
 
     deep_free(lu_result);
     return det;
-}
-
-int idet(matrix<int> m) {
-    auto fm = to_float(m);
-    auto det = fdet(fm);
-    free(fm);
-    return to_int(det);
 }
 
 matrix<float> inv(matrix<float> m) {
@@ -523,4 +516,89 @@ matrix<float> fvstack(matrix<float> m1, matrix<float> m2){
     res[r1:, :] = m2;
 
     return res;
+}
+
+matrix<int> isum(matrix<int> m, int axis) {
+    check(axis == 0 || axis == 1, "Axis error: isum provided an axis that is neither 0 nor 1");
+
+    auto r = rows(m);
+    auto c = cols(m);
+
+    if (axis == 0) {
+        create matrix<int> sum[1][c];
+
+        for (auto i = 0; i < r; i++) {
+            sum += m[i];
+        }
+
+        return sum;
+    } else {
+        create matrix<int> sum[r][1];
+
+        for (auto i = 0; i < c; i++) {
+            sum += m[:, i];
+        }
+
+        return sum;
+    }
+}
+
+
+matrix<float> fsum(matrix<float> m, int axis) {
+    check(axis == 0 || axis == 1, "Axis error: fsum provided an axis that is neither 0 nor 1");
+
+    auto r = rows(m);
+    auto c = cols(m);
+
+    if (axis == 0) {
+        create matrix<float> sum[1][c];
+
+        for (auto i = 0; i < r; i++) {
+            sum += m[i];
+        }
+
+        return sum;
+    } else {
+        create matrix<float> sum[r][1];
+
+        for (auto i = 0; i < c; i++) {
+            sum += m[:, i];
+        }
+
+        return sum;
+    }
+}
+
+matrix<float> mean(matrix<float> m, int axis) {
+    check(axis == 0 || axis == 1, "Axis error: mean provided an axis that is neither 0 nor 1");
+
+    auto sum = fsum(m, axis);
+
+    if (axis == 0) {
+        sum /= to_float(rows(m));
+    } else {
+        sum /= to_float(cols(m));
+    }
+
+    return sum;
+}
+
+matrix<float> std(matrix<float> m, int axis) {
+    check(axis == 0 || axis == 1, "Axis error: std provided an axis that is neither 0 nor 1");
+
+    auto mu = mean(m, axis);
+    auto squared_residuals = (m - mu) ^ 2.;
+    auto sum = fsum(squared_residuals, axis);
+
+    if (axis == 0) {
+        sum /= to_float(rows(m) - 1);
+    } else {
+        sum /= to_float(cols(m) - 1);
+    }
+
+    sum ^= 0.5;
+
+    free(mu);
+    free(squared_residuals);
+    return sum;
 }
