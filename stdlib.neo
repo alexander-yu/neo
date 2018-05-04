@@ -369,133 +369,105 @@ matrix<float> fmap2(func<(float,float):float> f, matrix<float> m1, matrix<float>
     return res;
 }
 
-matrix<int> iinsert_col(matrix<int> m, int n, matrix<int> a){
-    check(rows(m) == rows(a), "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(cols(a) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+matrix<int> iinsert_col(matrix<int> m, int i, matrix<int> col){
+    check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(i >= 0 && i < cols(m), "Matrix index error: attempted to access an out of bounds index");
 
     auto r = rows(m);
     auto c = cols(m);
-    create matrix<int> res[r][c+1];
+    create matrix<int> res[r][c + 1];
 
-    for (auto i = 0; i < r; i++) {
-        auto j1 = 0;
-        auto j2 = 0;
-        while (j2 < c+1) {
-            if (j2 != n){
-                res[i, j2] = m[i, j1];
-                j1 = j1 + 1;
-            }
-            else {
-                res[i, j2] = a[i, 0];
-            }
-            j2 = j2 + 1;
-        }
+    if (i > 0) {
+        res[:, :i] = m[:, :i];
     }
+
+    res[:, i] = col;
+    res[:, (i + 1):] = m[:, i:];
+
     return res;
 }
 
-matrix<float> finsert_col(matrix<float> m, int n, matrix<float> a){
-    check(rows(m) == rows(a), "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(cols(a) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+matrix<float> finsert_col(matrix<float> m, int i, matrix<float> col){
+    check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(i >= 0 && i < cols(m), "Matrix index error: attempted to access an out of bounds index");
 
     auto r = rows(m);
     auto c = cols(m);
-    create matrix<float> res[r][c+1];
+    create matrix<float> res[r][c + 1];
 
-    for (auto i = 0; i < r; i++) {
-        auto j1 = 0;
-        auto j2 = 0;
-        while (j2 < c+1) {
-            if (j2 != n){
-                res[i, j2] = m[i, j1];
-                j1 = j1 + 1;
-            }
-            else {
-                res[i, j2] = a[i, 0];
-            }
-            j2 = j2 + 1;
-        }
+    if (i > 0) {
+        res[:, :i] = m[:, :i];
     }
+
+    res[:, i] = col;
+    res[:, (i + 1):] = m[:, i:];
+
     return res;
 }
 
-matrix<int> idelete_col(matrix<int> m, int n){
+matrix<int> idelete_col(matrix<int> m, int i){
+    check(i >= 0 && i < cols(m), "Matrix index error: attempted to access an out of bounds index");
+
     auto r = rows(m);
     auto c = cols(m);
-    create matrix<int> res[r][c-1];
+    create matrix<int> res[r][c - 1];
 
-    for (auto i = 0; i < r; i++) {
-        auto j1 = 0;
-        auto j2 = 0;
-        while (j1 < c) {
-            if (j1 != n){
-                res[i, j2] = m[i, j1];
-                j2 = j2 + 1;
-            }
-            j1 = j1 + 1;
-        }
+    if (i > 0) {
+        res[:, :i] = m[:, :i];
     }
+
+    if (i < c - 1) {
+        res[:, i:] = m[:, (i + 1):];
+    }
+
     return res;
 }
 
-matrix<float> fdelete_col(matrix<float> m, int n){
+matrix<float> fdelete_col(matrix<float> m, int i){
+    check(i >= 0 && i < cols(m), "Matrix index error: attempted to access an out of bounds index");
+
     auto r = rows(m);
     auto c = cols(m);
     create matrix<float> res[r][c-1];
 
-    for (auto i = 0; i < r; i++) {
-        auto j1 = 0;
-        auto j2 = 0;
-        while (j1 < c) {
-            if (j1 != n){
-                res[i, j2] = m[i, j1];
-                j2 = j2 + 1;
-            }
-            j1 = j1 + 1;
-        }
+    if (i > 0) {
+        res[:, :i] = m[:, :i];
     }
+
+    if (i < c - 1) {
+        res[:, i:] = m[:, (i + 1):];
+    }
+
     return res;
 }
 
-matrix<int> iappend_col(matrix<int> m, matrix<int> a){
-    check(rows(m) == rows(a), "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(cols(a) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+matrix<int> iappend_col(matrix<int> m, matrix<int> col){
+    check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
 
     auto r = rows(m);
     auto c = cols(m);
-    create matrix<int> res[r][c+1];
+    create matrix<int> res[r][c + 1];
 
-    for (auto i = 0; i < r; i++) {
-        auto j1 = 0;
-        auto j2 = 0;
-        while (j2 < c) {
-            res[i, j2] = m[i, j1];
-            j1 = j1 + 1;
-            j2 = j2 + 1;
-        }
-        res[i, j2] = a[i, 0];
-    }
+    res[:, :c] = m;
+    res[:, c] = col;
+
     return res;
 }
 
-matrix<float> fappend_col(matrix<float> m, matrix<float> a){
-    check(rows(m) == rows(a), "Dimension error: attempted to insert/append column with incompatible dimensions");
-    check(cols(a) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
+matrix<float> fappend_col(matrix<float> m, matrix<float> col){
+    check(rows(m) == rows(col), "Dimension error: attempted to insert/append column with incompatible dimensions");
+    check(cols(col) == 1, "Dimension error: attempted to insert/append column with incompatible dimensions");
 
     auto r = rows(m);
     auto c = cols(m);
-    create matrix<float> res[r][c+1];
+    create matrix<float> res[r][c + 1];
 
-    for (auto i = 0; i < r; i++) {
-        auto j1 = 0;
-        auto j2 = 0;
-        while (j2 < c) {
-            res[i, j2] = m[i, j1];
-            j1 = j1 + 1;
-            j2 = j2 + 1;
-        }
-        res[i, j2] = a[i, 0];
-    }
+    res[:, :c] = m;
+    res[:, c] = col;
+
     return res;
 }
 
@@ -505,18 +477,11 @@ matrix<int> ihstack(matrix<int> m1, matrix<int> m2){
     auto r = rows(m1);
     auto c1 = cols(m1);
     auto c2 = cols(m2);
-    create matrix<int> res[r][c1+c2];
+    create matrix<int> res[r][c1 + c2];
 
-    for (auto i = 0; i < r; i++){
-        for (auto j = 0; j < c1; j++){
-            res[i,j] = m1[i,j];
-        }
-    }
-    for (auto i1 = 0; i1 < r; i1++){
-        for (auto j1 = 0; j1 < c2; j1++){
-            res[i1,c1+j1] = m2[i1,j1];
-        }
-    }
+    res[:, :c1] = m1;
+    res[:, c1:] = m2;
+
     return res;
 }
 
@@ -526,18 +491,11 @@ matrix<float> fhstack(matrix<float> m1, matrix<float> m2){
     auto r = rows(m1);
     auto c1 = cols(m1);
     auto c2 = cols(m2);
-    create matrix<float> res[r][c1+c2];
+    create matrix<float> res[r][c1 + c2];
 
-    for (auto i = 0; i < r; i++){
-        for (auto j = 0; j < c1; j++){
-            res[i,j] = m1[i,j];
-        }
-    }
-    for (auto i1 = 0; i1 < r; i1++){
-        for (auto j1 = 0; j1 < c2; j1++){
-            res[i1,c1+j1] = m2[i1,j1];
-        }
-    }
+    res[:, :c1] = m1;
+    res[:, c1:] = m2;
+
     return res;
 }
 
@@ -547,18 +505,11 @@ matrix<int> ivstack(matrix<int> m1, matrix<int> m2){
     auto r1 = rows(m1);
     auto r2 = rows(m2);
     auto c = cols(m1);
-    create matrix<int> res[r1+r2][c];
+    create matrix<int> res[r1 + r2][c];
 
-    for (auto i = 0; i < r1; i++){
-        for (auto j = 0; j < c; j++){
-            res[i,j] = m1[i,j];
-        }
-    }
-    for (auto i1 = 0; i1 < r2; i1++){
-        for (auto j1 = 0; j1 < c; j1++){
-            res[r1+i1,j1] = m2[i1,j1];
-        }
-    }
+    res[:r1, :] = m1;
+    res[r1:, :] = m2;
+
     return res;
 }
 
@@ -568,17 +519,10 @@ matrix<float> fvstack(matrix<float> m1, matrix<float> m2){
     auto r1 = rows(m1);
     auto r2 = rows(m2);
     auto c = cols(m1);
-    create matrix<float> res[r1+r2][c];
+    create matrix<float> res[r1 + r2][c];
 
-    for (auto i = 0; i < r1; i++){
-        for (auto j = 0; j < c; j++){
-            res[i,j] = m1[i,j];
-        }
-    }
-    for (auto i1 = 0; i1 < r2; i1++){
-        for (auto j1 = 0; j1 < c; j1++){
-            res[r1+i1,j1] = m2[i1,j1];
-        }
-    }
+    res[:r1, :] = m1;
+    res[r1:, :] = m2;
+
     return res;
 }

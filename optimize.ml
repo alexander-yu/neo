@@ -175,9 +175,7 @@ let prune_uses program =
     | SId s ->
         let uses =
           match t with
-          | Func(_, _) ->
-              let uses = StringSet.add "_h_check" uses in
-              StringSet.add s uses
+          | Func(_, _) -> StringSet.add s uses
           | _ -> uses
         in
         let add_internal_uses uses internal_fname =
@@ -226,15 +224,11 @@ let prune_uses program =
         in
         (
           match op with
-          | Div | Mod when fst e1 = Int || fst e1 = Float ->
-              StringSet.add "_h_check" uses
           | Exp when fst e1 = Float ->
-              let uses = StringSet.add "_h_check" uses in
               let uses = StringSet.add "_h_llvm.floor.f64" uses in
               let uses = StringSet.add "_h_fexp" uses in
               uses
           | Exp when fst e1 = Int ->
-              let uses = StringSet.add "_h_check" uses in
               let uses = StringSet.add "_h_iexp" uses in
               uses
           | MatMult -> StringSet.add "_h_matmult" uses
@@ -310,6 +304,12 @@ let prune_uses program =
    * as well as initializing any global variables, so collect all uses
    * for these and register them under the system main. *)
   let main_uses = List.fold_left add_global_uses StringSet.empty globals in
+  (* The system main will also be performing an actual call of the program
+   * main, which means that codegen will be performing a null-check, even though
+   * semant has determined that the program main should exist; we could try and
+   * eliminate this extra case, but _check will likely be used by the program
+   * anyways, so we wmay as well include it as a use.  *)
+  let main_uses = StringSet.add "_h_check" main_uses in
   let main_uses = StringSet.add prog_main main_uses in
   let graph = add_uses StringMap.empty sys_main main_uses in
   let graph = List.fold_left add_function_uses graph functions in
