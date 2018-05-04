@@ -1,0 +1,6 @@
+void main()
+{
+  var int a = 42;
+  a = a + 5;
+  println(a);
+}
