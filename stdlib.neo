@@ -254,3 +254,20 @@ matrix<float> inv(matrix<float> m) {
     free(id);
     return res;
 }
+
+matrix<int> idelete_col(matrix<int> m, int n){
+    auto r = rows(m);
+    auto c = cols(m);
+    create matrix<int> res[r][c-1];
+
+    for (auto i = 0; i < r; i++) {
+        auto j = 0;
+        while (j < c-1) {
+            if (j != n){
+                res[i, j] = m[i, j];
+                j = j + 1;
+            }
+        }
+    }
+    return res;
+}
