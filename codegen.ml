@@ -793,11 +793,10 @@ let translate (internal_uses, program) =
             let i' = expr scope builder i in
             let j' =
               match snd j with
-              | SInt_Lit _ -> expr scope builder j
-              (* Otherwise, it's SEnd *)
-              | _ ->
-                    let length_ptr = L.build_struct_gep arr 1 "length_ptr" builder in
+              | SEnd ->
+                  let length_ptr = L.build_struct_gep arr 1 "length_ptr" builder in
                   L.build_load length_ptr "length" builder
+              | _ -> expr scope builder j
             in
             let _ = L.build_store i' slice_start builder in
             let _ = L.build_store j' slice_end builder in
@@ -826,18 +825,16 @@ let translate (internal_uses, program) =
             let i1' = expr scope builder i1 in
             let j1' =
               match snd j1 with
-              | SInt_Lit _ -> expr scope builder j1
               | SSlice_Inc -> L.build_add i1' (L.const_int i32_t 1) "row_slice_inc" builder
-              (* Otherwise, it's SEnd *)
-              | _ -> get_rows mat builder
+              | SEnd -> get_rows mat builder
+              | _ -> expr scope builder j1
             in
             let i2' = expr scope builder i2 in
             let j2' =
               match snd j2 with
-              | SInt_Lit _ -> expr scope builder j2
               | SSlice_Inc -> L.build_add i2' (L.const_int i32_t 1) "col_slice_inc" builder
-              (* Otherwise, it's SEnd *)
-              | _ -> get_cols mat builder
+              | SEnd -> get_cols mat builder
+              | _ -> expr scope builder j2
             in
             let _ = L.build_store i1' row_slice_start builder in
             let _ = L.build_store j1' row_slice_end builder in

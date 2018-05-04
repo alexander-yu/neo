@@ -23,18 +23,20 @@ static const char* NULL_VALUE_ERR = "Null value error: attempted to read null va
 static const char* DIV_ZERO_ERR = "Zero division error: attmpted to perform division or modulo by 0";
 static const char* EXP_ZERO_ERR = "Zero division error: attempted to raise 0 to a negative power";
 static const char* EXP_NEG_ERR = "Arithmetic error: attempted to raise negative number to a non-integer power";
-static const char* MAT_IDX_ERR = "Matrix index error: attempted to access an out of bounds index for a matrix";
-static const char* ARR_IDX_ERR = "Array index error: attempted to access an out of bounds index for an array";
+static const char* MAT_IDX_ERR = "Matrix index error: attempted to access an out of bounds index";
+static const char* MAT_INS_ERR = "Matrix index error: attempted to insert to an invalid index";
+static const char* ARR_IDX_ERR = "Array index error: attempted to access an out of bounds index";
+static const char* ARR_INS_ERR = "Array index error: attempted to insert to an invalid index";
 static const char* SLICE_ERR = "Slice error: attempted to perform slice that would return zero elements \
                                (reversed or equal bounds)";
 static const char* ARR_LEN_ERR = "Length error: attempted to create array of nonpositive length";
 static const char* MAT_ROWS_ERR = "Dimension error: attempted to create matrix with nonpositive rows";
 static const char* MAT_COLS_ERR = "Dimension error: attempted to create matrix with nonpositive columns";
-static const char* ROW_DIM_ERR = "Dimension error: attempted to insert/append row with invalid dimensions";
+static const char* ROW_DIM_ERR = "Dimension error: attempted to insert/append row with incompatible dimensions";
 static const char* MAT_MULT_ERR = "Dimension error: attempted to perform matrix multiplication with \
                                   incompatible dimensions";
 static const char* MAT_BINOP_ERR = "Dimension error: attempted to perform matrix binary operations with \
-                                   incompatible/non-broadcastable dimensions";
+                                   non-broadcastable dimensions";
 
 typedef union value {
     int i;
@@ -321,7 +323,7 @@ void _set_slice_array(array_t* arr, const slice_t* slice, const array_t* data) {
 }
 
 array_t* _insert_array(const array_t* arr, const int pos_i, const void* data) {
-    check_arr_index(arr, pos_i);
+    _check(pos_i >= 0 && pos_i <= _length(arr), ARR_INS_ERR);
     int length = arr->length + 1;
     array_t* res = _malloc_array(length, arr->size, arr->has_ptrs);
 
@@ -355,18 +357,7 @@ array_t* _delete_array(const array_t* arr, const int pos_i) {
 }
 
 array_t* _append_array(const array_t* arr, const void* data) {
-    int length = arr->length + 1;
-    array_t* res = _malloc_array(length, arr->size, arr->has_ptrs);
-
-    for (int i = 0; i < length; i++) {
-        if (i == length - 1) {
-            _set_array(res, i, data);
-        } else {
-            _set_array(res, i, arr->body[i]);
-        }
-    }
-
-    return res;
+    return _insert_array(arr, _length(arr), data);
 }
 
 /* Matrix index/slice functions */
@@ -444,7 +435,7 @@ void _set_slice_matrix(matrix_t* mat, const slice_t* row_slice,
 }
 
 matrix_t* _insert_matrix(const matrix_t* mat, const int row_i, const matrix_t* row) {
-    check_mat_index(mat, row_i, 0);
+    _check(row_i >= 0 && row_i <= _rows(mat), MAT_INS_ERR);
     check_row_dims(mat, row);
     int rows = mat->rows + 1;
     int cols = mat->cols;
@@ -502,29 +493,7 @@ matrix_t* _delete_matrix(const matrix_t* mat, const int row_i) {
 }
 
 matrix_t* _append_matrix(const matrix_t* mat, const matrix_t* row) {
-    check_row_dims(mat, row);
-    int rows = mat->rows + 1;
-    int cols = mat->cols;
-    enum mat_type type = mat->type;
-    matrix_t* res = _malloc_matrix(rows, cols, type);
-
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            if (i == rows - 1) {
-                switch (type) {
-                    case Int: res->body.ibody[i][j] = row->body.ibody[0][j]; break;
-                    case Float: res->body.fbody[i][j] = row->body.fbody[0][j]; break;
-                }
-            } else {
-                switch (type) {
-                    case Int: res->body.ibody[i][j] = mat->body.ibody[i][j]; break;
-                    case Float: res->body.fbody[i][j] = mat->body.fbody[i][j]; break;
-                }
-            }
-        }
-    }
-
-    return res;
+    return _insert_matrix(mat, _rows(mat), row);
 }
 
 /* Binary operations */

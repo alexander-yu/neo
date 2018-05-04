@@ -1,0 +1,8 @@
+void main() {
+    auto im = [[1, 2], [3, 4]];
+    auto fm = [[1., 2.], [3., 4.]];
+    println(isum(im, 0));
+    println(isum(im, 1));
+    println(fsum(fm, 0));
+    println(fsum(fm, 1));
+}
