@@ -255,7 +255,6 @@ matrix<float> inv(matrix<float> m) {
     return res;
 }
 
-<<<<<<< HEAD
 matrix<int> imap(func<(int):int> f, matrix<int> m) {
     auto r = rows(m);
     auto c = cols(m);
