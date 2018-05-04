@@ -1,0 +1,5 @@
+void main(){
+    create matrix<float> c = [[1.,2.,4.],[-3.,4.,2.],[5.,6.,3.]];
+    create matrix<float> c1 = [[10.,20.], [50.,2.], [30.,40.], [40.,1.], [50.,60.], [20.,3.]];
+    println(fvstack(c, c1));
+}
