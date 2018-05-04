@@ -1,5 +1,0 @@
-void main() {
-    auto m = read_fmat("./test/test-read-fmat.mat");
-    println(m);
-    free(m);
-}

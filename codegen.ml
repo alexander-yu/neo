@@ -519,7 +519,7 @@ let translate (internal_uses, program) =
     (* Build any necessary matrix reading functions *)
     let build_read_matrix_func matrix_type builtin_funcs =
       let fname =
-        if matrix_type = A.Matrix A.Float then "_read_fmat_string" else "_read_imat_string"
+        if matrix_type = A.Matrix A.Float then "_fread_mat_string" else "_iread_mat_string"
       in
       let read_t = L.function_type (pointer_t matrix_t) [| pointer_t i8_t |] in
       let read_func = L.define_function fname read_t the_module in
@@ -609,8 +609,8 @@ let translate (internal_uses, program) =
                 build_external_builtin ~alias:(Some fname) "_flip_matrix_type" builtin_funcs
             | _ -> make_err ("internal error: " ^ fname ^ " is invalid cast")
           )
-      | ["read"; "fmat"; _] -> build_read_matrix_func (A.Matrix A.Float) builtin_funcs
-      | ["read"; "imat"; _] -> build_read_matrix_func (A.Matrix A.Int) builtin_funcs
+      | ["fread"; "mat"; _] -> build_read_matrix_func (A.Matrix A.Float) builtin_funcs
+      | ["iread"; "mat"; _] -> build_read_matrix_func (A.Matrix A.Int) builtin_funcs
       | ["write"; "mat"; _] -> build_external_builtin ~alias:(Some fname) "_write_mat" builtin_funcs
     | _ -> make_err ("internal error: unknown builtin function " ^ fname)
   in

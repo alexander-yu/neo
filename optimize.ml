@@ -164,7 +164,7 @@ let prune_uses program =
       | [("insert" as fname); arg_type] | [("append" as fname); arg_type] ->
           let arg_type = typ_of_string arg_type in
           if is_array arg_type then ["_h_" ^ fname ^ "_array"] else []
-      | ["read"; "fmat"; _] | ["read"; "imat"; _] -> ["_h_read_mat"]
+      | ["fread"; "mat"; _] | ["iread"; "mat"; _] -> ["_h_read_mat"]
       | _ -> []
     in
 

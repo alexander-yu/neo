@@ -38,8 +38,8 @@ let check (globals, functions) =
       "delete";
       "append";
       "die";
-      "read_fmat";
-      "read_imat";
+      "fread_mat";
+      "iread_mat";
       "write_mat";
     ]
   in
@@ -154,13 +154,13 @@ let check (globals, functions) =
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
-    | "read_fmat" ->
+    | "fread_mat" ->
         let check_types arg_types ret_type =
           arg_types = [String] && ret_type = Matrix Float
         in
         if n_args = 1 && check_types arg_types ret_type then ()
         else make_err err
-    | "read_imat" ->
+    | "iread_mat" ->
         let check_types arg_types ret_type =
           arg_types = [String] && ret_type = Matrix Int
         in
@@ -521,12 +521,12 @@ let check (globals, functions) =
           if arg_types = [String] then
             (scope, (Void, SCall((Func(arg_types, Void), SId internal_fname), args')))
           else make_err ("non-string argument in " ^ expr_s)
-      | "read_fmat" ->
+      | "fread_mat" ->
           let _ = check_n_args 1 n_args expr_s in
           if arg_types = [String] then
             (scope, (Matrix Float, SCall((Func(arg_types, Matrix Float), SId internal_fname), args')))
           else make_err ("non-string argument in " ^ expr_s)
-      | "read_imat" ->
+      | "iread_mat" ->
           let _ = check_n_args 1 n_args expr_s in
           if arg_types = [String] then
             (scope, (Matrix Int, SCall((Func(arg_types, Matrix Int), SId internal_fname), args')))
