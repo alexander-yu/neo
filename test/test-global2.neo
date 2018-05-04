@@ -1,0 +1,9 @@
+var bool i;
+
+void main()
+{
+  var int i; /* Should hide the global i */
+
+  i = 42;
+  println(i + i);
+}
