@@ -1,5 +1,6 @@
 void main()
 {
+  println(23);
   var int i;
 
   {
