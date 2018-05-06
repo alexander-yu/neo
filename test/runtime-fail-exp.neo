@@ -1,3 +1,4 @@
 void main() {
+    println("");
     println(-3. ^ 1.2);
 }
