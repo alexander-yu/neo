@@ -1,0 +1,36 @@
+int gcd(int a, int b) {
+    if (a == b) {
+        return a;
+    } else {
+        return gcd(iabs(a - b), imin(a, b));
+    }
+}
+
+matrix<int> empty_ones(matrix<int> m) {
+    auto ones = m == 1;
+    auto res = m * (1 - ones);
+    free(ones);
+    return res;
+}
+
+void main() {
+    auto m1 = [
+        [2, 5, 6],
+        [7, 9, 27],
+        [14, 100, 3]
+    ];
+    auto m2 = [
+        [20, 5, 13],
+        [91, 30, 243],
+        [17, 101, 1]
+    ];
+
+    auto gcds = imap2(gcd, m1, m2);
+    auto emptied_gcds = empty_ones(gcds);
+    println(emptied_gcds);
+
+    free(m1);
+    free(m2);
+    free(gcds);
+    free(emptied_gcds);
+}
