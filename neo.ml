@@ -1,3 +1,4 @@
+(* Author(s): Alex *)
 (* Top-level of the Neo compiler: scan & parse the input,
  * check the resulting AST and generate an SAST from it, generate LLVM IR,
  * and dump the module *)

@@ -1,3 +1,6 @@
+/* Author(s): Alex */
+/* Neo's internal C library header */
+
 #include <stdbool.h>
 #include <stddef.h>
 

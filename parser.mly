@@ -1,3 +1,4 @@
+/* Author(s): the Neo team */
 /* Ocamlyacc parser for Neo */
 
 %{
