@@ -69,7 +69,7 @@ void main() {
     free(ones);
 
     auto weights = train(X, y);
-    write_mat(weights, "./demo/weights2.mats");
+    write_mat(weights, "./demo/weights2.mat");
 
     free(weights);
     free(X);
