@@ -1,4 +1,5 @@
 #!/bin/bash
+# Author(s): Alex
 
 # Path to the LLVM compiler
 LLC="llc"

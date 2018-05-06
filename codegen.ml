@@ -1,3 +1,4 @@
+(* Author(s): Alex and Dominique *)
 (* Code generation: translate takes a semantically checked AST and
 produces LLVM IR
 

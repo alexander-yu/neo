@@ -1,3 +1,4 @@
+(* Author(s): Alex *)
 (* Optimization pass for the Neo compiler; forms a dependency graph
  * of the SAST and removes any functions that would not be executed
  * during the program; see the decription above prune_uses *)

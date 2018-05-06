@@ -1,3 +1,6 @@
+/* Author(s): Alex, Dominique, and Andres */
+/* Neo's standard library */
+
 void check(bool cond, string err) {
     if (!cond) {
         die(err);

@@ -1,3 +1,4 @@
+(* Author(s): the Neo team *)
 (* Ocamllex scanner for Neo *)
 
 {

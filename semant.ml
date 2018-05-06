@@ -1,3 +1,4 @@
+(* Author(s): Alex and Dominique *)
 (* Semantic checking for the Neo compiler *)
 
 open Ast

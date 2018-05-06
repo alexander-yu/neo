@@ -1,4 +1,5 @@
 #!/bin/bash
+# Author(s): Alex
 
 # Regression testing script for Neo
 # Step through a list of files

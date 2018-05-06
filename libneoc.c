@@ -1,3 +1,6 @@
+/* Author(s): Alex */
+/* Neo's internal C library */
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
