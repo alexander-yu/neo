@@ -11,6 +11,7 @@ int sum(matrix<int> X) {
 
 matrix<int> train(matrix<int> X, matrix<int> y) {
     create matrix<int> weights[1][cols(X)];
+    auto iter_weights = weights[:, :];
     auto has_errors = True;
 
     while (has_errors) {
@@ -39,10 +40,19 @@ matrix<int> train(matrix<int> X, matrix<int> y) {
 
         if (count == 0) {
             has_errors = False;
+        } else {
+            auto weights_copy = weights[:, :];
+            auto new_iter_weights = append(iter_weights, weights_copy);
+
+            free(weights_copy);
+            free(iter_weights);
+
+            iter_weights = new_iter_weights;
         }
     }
 
-    return weights;
+    free(weights);
+    return iter_weights;
 }
 
 void main() {
