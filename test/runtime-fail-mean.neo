@@ -1,4 +1,5 @@
 void main() {
+    println("");
     auto fm = [[1., 2.], [3., 4.]];
     println(mean(fm, 2));
 }
