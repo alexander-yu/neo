@@ -1,4 +1,5 @@
 void main(){
+    println("");
     create matrix<float> a = [[1.,2.,5.],[3.,4.,4.]];
     println(det(a));
 }

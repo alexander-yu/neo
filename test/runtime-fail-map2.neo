@@ -2,6 +2,7 @@ int multiply(int i, int j) {
     return i * j;
 }
 void main() {
+    println("");
     create matrix<int> m1 = [[1,2,4],[2,3,4]];
     create matrix<int> m2 = [[4,3],[4,1]];
     println(imap2(multiply, m1, m2));
